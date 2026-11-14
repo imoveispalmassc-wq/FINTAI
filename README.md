@@ -1,12 +1,26 @@
 # FINTAI
 Fintai - Sua grana investida pela IA. App que analisa, sugere e investe por você.
 
-Painel de ações dos EUA e do Brasil: pontos de compra e venda pela média de 52 semanas,
-P/L, LPA, dividendos, ações em circulação e retornos de 1, 3 e 5 anos.
+Painel de ações do Brasil e dos EUA: estado do ativo (COMPRAR, AGUARDAR, CARO, VENDER) pelo
+percentil da faixa de 52 semanas, validado por teste histórico, com fundamentos, preço justo
+e comparação com o índice.
 
-Rodar localmente:
+## Rodar
 
     pip install -r requirements.txt
     streamlit run app.py
+
+## Estrutura
+
+- `app.py`: tela (Streamlit) e busca de dados no Yahoo Finance.
+- `utils/percentile.py`: percentil na faixa de 52 semanas e zonas de preço.
+- `utils/signals.py`: decisão de estado, selo do teste histórico, critérios de fundamentos.
+- `calculos.py`: médias, tendência, P/L médio, dividendos e preço justo.
+- `tests/`: testes unitários.
+
+## Testes
+
+    pip install -r requirements-dev.txt
+    python -m pytest
 
 Ferramenta de estudo, não é recomendação de investimento.

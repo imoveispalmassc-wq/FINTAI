@@ -7,6 +7,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from utils.percentile import percentil_na_faixa
+
 # PETR4, VALE3, BOVA11, TAEE11, SANB11 ... => ação/FII/ETF da B3
 _PADRAO_B3 = re.compile(r"^[A-Z]{4}\d{1,2}[A-Z]?$")
 
@@ -51,12 +53,8 @@ class Resultado:
     media_max_30d: float
     media_fech_30d: float
     medio_media_30d: float
-    # pontos de operação (base: médias de 52 semanas)
-    ponto_compra: float
-    ponto_venda: float
-    ponto_medio: float
-    zona: str            # só pelo preço: Zona de compra / Zona de venda / Neutro
-    sinal: str           # preço + tendência: Compra / Aguardar / Venda / Manter / Neutro
+    ponto_medio: float   # ponto médio das médias de 52 semanas (linha da tabela)
+    percentil: float     # posição do preço na faixa de 52 semanas, 0 a 100
     # tendência e força
     mm200: float | None
     inclinacao_mm200: float | None   # variação % da MM200 em ~3 meses
@@ -167,85 +165,53 @@ def indicadores(hist: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({"mm200": mm200, "incl": (mm200 / mm200.shift(63) - 1) * 100, "ifr": ifr})
 
 
-def classificar(preco, compra, venda, mm200, incl, ifr):
-    """Regras do sinal (aceita números ou séries). Devolve (tendência, zona, sinal).
-
-    Tendência: Alta = MM200 subindo (>1% em 3 meses) e preço acima dela;
-               Baixa = MM200 caindo (<-1%) e preço abaixo dela; senão Lateral.
-    Compra: preço <= ponto de compra e tendência não é de Baixa (senão: Aguardar).
-    Venda:  preço >= ponto de venda, exceto em Alta com IFR < 70 (aí: Manter).
-    """
-    preco, compra, venda, mm200, incl, ifr = (
-        np.asarray(x, dtype=float) for x in (preco, compra, venda, mm200, incl, ifr))
-    alta = (incl > 1) & (preco > mm200)
-    baixa = (incl < -1) & (preco < mm200)
-    tendencia = np.select([np.isnan(mm200) | np.isnan(incl), alta, baixa],
-                          ["—", "Alta", "Baixa"], "Lateral")
-    barato, caro = preco <= compra, preco >= venda
-    zona = np.select([barato, caro], ["Zona de compra", "Zona de venda"], "Neutro")
-    forte = alta & ~(ifr >= 70)  # em alta e ainda não sobrecomprado
-    sinal = np.select([barato & baixa, barato, caro & forte, caro],
-                      ["Aguardar", "Compra", "Manter", "Venda"], "Neutro")
-    return tendencia, zona, sinal
+def tendencia(preco: float, mm200: float | None, inclinacao: float | None) -> str:
+    """Alta = MM200 subindo (>1% em 3 meses) e preço acima dela;
+    Baixa = MM200 caindo (<-1%) e preço abaixo dela; senão Lateral."""
+    if mm200 is None or inclinacao is None or pd.isna(mm200) or pd.isna(inclinacao):
+        return "—"
+    if inclinacao > 1 and preco > mm200:
+        return "Alta"
+    if inclinacao < -1 and preco < mm200:
+        return "Baixa"
+    return "Lateral"
 
 
-# ------------------------------------------------------------ backtest
-def backtest(hist: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
-    """Aplica as regras semana a semana no histórico, só com dados conhecidos em cada data,
-    e mede o retorno 6 e 12 meses depois de cada sinal."""
-    h = _sem_fuso(hist).dropna(subset=["High", "Low", "Close"])
-    adj = (h["Adj Close"] if "Adj Close" in h else h["Close"]).ffill()
-    ind = indicadores(h)
-    w = h.resample("W-FRI").agg({"Low": "min", "High": "max", "Close": "last"})
-    w["adj"] = adj.resample("W-FRI").last()
-    for col in ind:
-        w[col] = ind[col].resample("W-FRI").last()
-    w = w.dropna(subset=["Close"])
-    m_min, m_max, m_fech = (w[c].rolling(52).mean() for c in ("Low", "High", "Close"))
-    compra, venda = (m_min + m_fech) / 2, (m_max + m_fech) / 2
-    _, zona, sinal = classificar(w["Close"], compra, venda, w["mm200"], w["incl"], w["ifr"])
-    valido = compra.notna().to_numpy()
-    r6 = (w["adj"].shift(-26) / w["adj"] - 1).to_numpy() * 100
-    r12 = (w["adj"].shift(-52) / w["adj"] - 1).to_numpy() * 100
+# ------------------------------------------------------------ fundamentos
+def dy_atual_e_medio(hist: pd.DataFrame) -> tuple[float | None, float | None]:
+    """Dividend yield de hoje e a média do DY diário dos últimos 12 meses.
 
-    def linha(nome, mascara):
-        m = mascara & valido
-        a, b = r6[m & ~np.isnan(r6)], r12[m & ~np.isnan(r12)]
-        return {
-            "Situação": nome, "Semanas": int(len(a)),
-            "Retorno 6m": a.mean() if len(a) else None,
-            "Acerto 6m": (a > 0).mean() * 100 if len(a) else None,
-            "Retorno 12m": b.mean() if len(b) else None,
-            "Acerto 12m": (b > 0).mean() * 100 if len(b) else None,
-            "_n12": int(len(b)),
-        }
+    DY de cada dia = proventos pagos nos 365 dias anteriores ÷ preço do dia."""
+    if "Dividends" not in hist:
+        return None, None
+    h = _sem_fuso(hist)
+    pagos = h["Dividends"].fillna(0).rolling("365D").sum()
+    dy = (pagos / h["Close"] * 100).dropna()
+    if dy.empty:
+        return None, None
+    ano = dy[dy.index > dy.index[-1] - pd.DateOffset(years=1)]
+    # sem um ano inteiro de proventos antes da janela, a média ficaria subestimada
+    if h.index[0] > ano.index[0] - pd.Timedelta(days=360):
+        return float(dy.iloc[-1]), None
+    return float(dy.iloc[-1]), float(ano.mean())
 
-    linhas = [
-        linha("Sinal de compra", sinal == "Compra"),
-        linha("Zona de compra, sem filtro", zona == "Zona de compra"),
-        linha("Sinal de venda", sinal == "Venda"),
-        linha("Zona de venda, sem filtro", zona == "Zona de venda"),
-        linha("Qualquer semana (referência)", np.ones(len(w), dtype=bool)),
-    ]
-    tabela = pd.DataFrame(linhas).set_index("Situação")
-    ref = tabela.loc["Qualquer semana (referência)"]
 
-    def veredito(nome, melhor_se_maior):
-        l = tabela.loc[nome]
-        if l["_n12"] < 8 or ref["Retorno 12m"] is None or pd.isna(ref["Retorno 12m"]):
-            return "poucos"
-        dif = l["Retorno 12m"] - ref["Retorno 12m"]
-        if not melhor_se_maior:
-            dif = -dif
-        return "ajudou" if dif > 2 else "atrapalhou" if dif < -2 else "indiferente"
+def crescimento_lpa(lpa_trimestral: pd.Series | None, lpa_anual: pd.Series | None
+                    ) -> tuple[float | None, float | None, str]:
+    """LPA atual e o de 12 meses antes. Devolve (atual, anterior, base usada).
 
-    anos = (w.index[valido][-1] - w.index[valido][0]).days / 365.25 if valido.any() else 0
-    resumo = {
-        "compra": veredito("Sinal de compra", True),
-        "venda": veredito("Sinal de venda", False),
-        "anos": anos,
-    }
-    return tabela, resumo
+    Preferência: soma dos 4 últimos trimestres contra os 4 anteriores.
+    Sem 8 trimestres, usa os dois últimos anos fiscais."""
+    if lpa_trimestral is not None:
+        e = _sem_fuso(lpa_trimestral.dropna().astype(float))
+        e = e[~e.index.duplicated(keep="last")]
+        if len(e) >= 8:
+            return float(e.iloc[-4:].sum()), float(e.iloc[-8:-4].sum()), "últimos 4 trimestres"
+    if lpa_anual is not None:
+        a = _sem_fuso(lpa_anual.dropna().astype(float))
+        if len(a) >= 2:
+            return float(a.iloc[-1]), float(a.iloc[-2]), "último ano fiscal"
+    return None, None, ""
 
 
 # ------------------------------------------------------------ preço justo
@@ -310,14 +276,9 @@ def calcular(hist: pd.DataFrame, dividendos: pd.Series | None) -> Resultado:
     media_max_30d = float(d30["High"].mean())
     media_fech_30d = float(d30["Close"].mean())
 
-    # ---- pontos de compra e venda
-    ponto_compra = (media_min + media_fech) / 2
-    ponto_venda = (media_max + media_fech) / 2
     ponto_medio = (media_min + media_max) / 2
 
     ind = indicadores(hist).iloc[-1]
-    tendencia, zona, sinal = (str(x) for x in classificar(
-        preco, ponto_compra, ponto_venda, ind["mm200"], ind["incl"], ind["ifr"]))
 
     def _ou_none(v):
         return None if pd.isna(v) else float(v)
@@ -355,15 +316,12 @@ def calcular(hist: pd.DataFrame, dividendos: pd.Series | None) -> Resultado:
         media_max_30d=media_max_30d,
         media_fech_30d=media_fech_30d,
         medio_media_30d=(media_min_30d + media_max_30d) / 2,
-        ponto_compra=ponto_compra,
-        ponto_venda=ponto_venda,
         ponto_medio=ponto_medio,
-        zona=zona,
-        sinal=sinal,
+        percentil=percentil_na_faixa(preco, minimo_1a, maximo_1a),
         mm200=_ou_none(ind["mm200"]),
         inclinacao_mm200=_ou_none(ind["incl"]),
         ifr=_ou_none(ind["ifr"]),
-        tendencia=tendencia,
+        tendencia=tendencia(preco, _ou_none(ind["mm200"]), _ou_none(ind["incl"])),
         maxima_ano=float(do_ano["High"].max()),
         minima_ano=float(do_ano["Low"].min()),
         retorno_1a=_retorno(serie_ret, 1),
@@ -374,3 +332,4 @@ def calcular(hist: pd.DataFrame, dividendos: pd.Series | None) -> Resultado:
         fechamentos_1a=um_ano["Close"],
         semanal=semanal,
     )
+retorno_periodo = _retorno
