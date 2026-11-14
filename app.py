@@ -4,12 +4,19 @@ Rodar:  streamlit run app.py
 """
 from __future__ import annotations
 
+import importlib
 from html import escape
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
+
+import calculos
+
+# O Streamlit Cloud pode manter a versão antiga deste módulo na memória depois de uma
+# atualização; recarregar garante que app.py e calculos.py estejam sempre na mesma versão.
+importlib.reload(calculos)
 
 from calculos import (Resultado, backtest, calcular, normalizar_ticker, pl_medio_12m,
                       pl_medio_longo, preco_justo_graham, preco_teto_bazin)
