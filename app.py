@@ -11,7 +11,8 @@ import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
 
-from calculos import Resultado, calcular, normalizar_ticker, pl_medio_12m
+from calculos import (Resultado, backtest, calcular, normalizar_ticker, pl_medio_12m,
+                      pl_medio_longo, preco_justo_graham, preco_teto_bazin)
 
 st.set_page_config(page_title="FINTAI", page_icon="📈", layout="wide")
 
@@ -68,8 +69,14 @@ table.t thead th {{ color:var(--suave); font-weight:500; font-size:.74rem; lette
   border-bottom:1px solid var(--borda); background:var(--cartao2); }}
 table.t th:first-child, table.t td:first-child {{ text-align:left; color:var(--suave); font-weight:500; }}
 table.t td {{ color:var(--texto); border-bottom:1px solid #26314766; }}
-table.t tr:last-child td {{ border-bottom:none; font-weight:700; color:var(--ambar); }}
-table.t tr:last-child td:first-child {{ color:var(--ambar); }}
+table.t tr:last-child td {{ border-bottom:none; }}
+table.t.destaque tr:last-child td, table.t.destaque tr:last-child td:first-child {{ font-weight:700; color:var(--ambar); }}
+table.t.bt tr:last-child td {{ color:var(--suave); }}
+.chips {{ display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.8rem; }}
+.chip {{ border:1px solid var(--borda); border-radius:999px; padding:.25rem .7rem; font-size:.78rem; color:var(--suave); }}
+.chip b {{ color:var(--texto); font-weight:600; }}
+.nota {{ color:var(--suave); font-size:.82rem; margin:.7rem .2rem 0; line-height:1.5; }}
+.nota b {{ color:var(--texto); }}
 @media (max-width: 560px) {{
   .grade.tres {{ grid-template-columns:1fr; gap:.5rem; }}
   .grade.tres .kpi {{ display:grid; grid-template-columns:1fr auto; align-items:center; column-gap:.8rem;
@@ -81,6 +88,7 @@ table.t tr:last-child td:first-child {{ color:var(--ambar); }}
   table.t {{ font-size:.82rem; }}
   table.t th, table.t td {{ padding:.6rem .45rem; }}
   table.t thead th {{ white-space:normal; font-size:.66rem; vertical-align:bottom; }}
+  table.t.bt td:first-child, table.t.bt th:first-child {{ white-space:normal; min-width:6.5rem; }}
   .heroi .preco {{ font-size:2.1rem; }}
 }}
 .rodape {{ color:var(--suave); font-size:.76rem; margin-top:1.5rem; text-align:center; }}
@@ -131,7 +139,7 @@ def secao(titulo, detalhe=""):
 @st.cache_data(ttl=900, show_spinner=False)
 def baixar(ticker: str):
     tk = yf.Ticker(ticker)
-    hist = tk.history(period="5y", interval="1d", auto_adjust=False)
+    hist = tk.history(period="10y", interval="1d", auto_adjust=False)
     if hist is None or hist.empty:
         raise ValueError(f"Não encontrei dados para {ticker}. Confira o código.")
     try:
@@ -144,7 +152,7 @@ def baixar(ticker: str):
         divs = pd.Series(dtype=float)
     lpa_tri = None
     try:  # LPA divulgado a cada trimestre, para o P/L médio
-        datas = tk.get_earnings_dates(limit=16)
+        datas = tk.get_earnings_dates(limit=28)
         if datas is not None and "Reported EPS" in datas:
             lpa_tri = datas["Reported EPS"].dropna()
     except Exception:
@@ -152,23 +160,61 @@ def baixar(ticker: str):
     return hist, divs, info, lpa_tri
 
 
-def fundamentos(info: dict, r: Resultado, lpa_tri):
+def fundamentos(info: dict, r: Resultado, lpa_tri, hist: pd.DataFrame) -> dict:
     lpa = info.get("trailingEps") or info.get("epsTrailingTwelveMonths")
     pl = info.get("trailingPE")
     if pl is None and lpa and lpa > 0:
         pl = r.preco_atual / lpa
-    pl_medio, metodo = pl_medio_12m(r.fechamentos_1a, lpa_tri, lpa)
+    splits = hist["Stock Splits"] if "Stock Splits" in hist else None
+    pl_medio, metodo = pl_medio_12m(r.fechamentos_1a, lpa_tri, lpa, splits)
+    pl_5a, anos_5a = pl_medio_longo(hist["Close"], lpa_tri, lpa, splits)
     acoes = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding")
     div, dy = r.dividendo_12m, r.dividend_yield
     if not div and info.get("dividendRate"):  # sem histórico, usa o informado
         div = float(info["dividendRate"])
         dy = div / r.preco_atual * 100
-    return pl, pl_medio, metodo, lpa, acoes, div, dy
+
+    # ---- preço justo
+    inicio = hist.index[0].tz_localize(None) if hist.index.tz is not None else hist.index[0]
+    bazin, div_medio = preco_teto_bazin(divs_de(hist), inicio, r.data_ultimo)
+    vpa = info.get("bookValue")
+    graham = preco_justo_graham(lpa, vpa)
+    if pl_5a:
+        pl_ref, rotulo_ref = pl_5a, f"P/L médio de {num(anos_5a, 1)} anos"
+    elif metodo == "trimestral":
+        pl_ref, rotulo_ref = pl_medio, "P/L médio de 12 meses"
+    else:
+        pl_ref, rotulo_ref = None, ""
+    justo_pl = pl_ref * lpa if pl_ref and lpa and lpa > 0 else None
+    justos = [("Bazin", bazin), ("Graham", graham), ("P/L histórico", justo_pl)]
+    validos = [(n, v) for n, v in justos if v]
+    return dict(
+        pl=pl, pl_medio=pl_medio, metodo=metodo, lpa=lpa, acoes=acoes, div=div, dy=dy,
+        vpa=vpa, bazin=bazin, div_medio=div_medio, graham=graham, pl_ref=pl_ref,
+        rotulo_ref=rotulo_ref, justo_pl=justo_pl,
+        a_favor=sum(r.preco_atual <= v for _, v in validos), criterios=len(validos),
+    )
+
+
+def divs_de(hist: pd.DataFrame) -> pd.Series | None:
+    """Proventos por data, tirados do próprio histórico (cobre os mesmos 10 anos)."""
+    if "Dividends" not in hist:
+        return None
+    d = hist["Dividends"]
+    return d[d > 0]
 
 
 # ------------------------------------------------------------ blocos visuais
-def bloco_heroi(nome, ticker, moeda, r: Resultado):
-    cor = {"Zona de compra": VERDE, "Zona de venda": VERMELHO}.get(r.sinal, SUAVE)
+COR_SINAL = {"Compra": VERDE, "Venda": VERMELHO, "Aguardar": AMBAR, "Manter": AZUL}
+TEXTO_SINAL = {"Aguardar": "Aguardar · barata, mas em queda", "Manter": "Manter · cara, mas em alta"}
+
+
+def bloco_heroi(nome, ticker, moeda, r: Resultado, f: dict):
+    cor = COR_SINAL.get(r.sinal, SUAVE)
+    fund = (f"<span class='chip'>Fundamentos <b>{f['a_favor']} de {f['criterios']} a favor</b></span>"
+            if f["criterios"] else "")
+    chips = (f"<div class='chips'><span class='chip'>Preço <b>{r.zona.lower()}</b></span>"
+             f"<span class='chip'>Tendência <b>{r.tendencia}</b></span>{fund}</div>")
     var = ""
     if r.variacao_dia is not None:
         cv = VERDE if r.variacao_dia >= 0 else VERMELHO
@@ -178,7 +224,8 @@ def bloco_heroi(nome, ticker, moeda, r: Resultado):
         f"<div class='heroi'><div class='nome'>{escape(nome)} · {escape(ticker)}</div>"
         f"<div class='sub'>Último pregão {r.data_ultimo:%d/%m/%Y} · {moeda} · Yahoo Finance</div>"
         f"<div class='linha'><span class='preco'>{dinheiro(r.preco_atual, moeda)}</span>{var}"
-        f"<span class='pill' style='background:{cor}26;color:{cor}'>{r.sinal}</span></div></div>",
+        f"<span class='pill' style='background:{cor}26;color:{cor}'>{TEXTO_SINAL.get(r.sinal, r.sinal)}</span>"
+        f"</div>{chips}</div>",
         unsafe_allow_html=True,
     )
 
@@ -221,7 +268,7 @@ def bloco_tabela(r: Resultado):
         for nome, *vals in linhas
     )
     st.markdown(
-        f"<div class='rolagem'><table class='t'><thead><tr><th></th>{cab}</tr></thead>"
+        f"<div class='rolagem'><table class='t destaque'><thead><tr><th></th>{cab}</tr></thead>"
         f"<tbody>{corpo}</tbody></table></div>",
         unsafe_allow_html=True,
     )
@@ -243,7 +290,9 @@ def grafico_preco(hist: pd.DataFrame, r: Resultado):
     h = hist.copy()
     if getattr(h.index, "tz", None) is not None:
         h.index = h.index.tz_localize(None)
+    mm200 = h["Close"].rolling(200).mean()
     h = h[h.index > h.index[-1] - pd.DateOffset(years=1)]
+    mm200 = mm200.reindex(h.index)
     fig = go.Figure(
         go.Candlestick(
             x=h.index, open=h["Open"], high=h["High"], low=h["Low"], close=h["Close"],
@@ -258,6 +307,8 @@ def grafico_preco(hist: pd.DataFrame, r: Resultado):
         fig.add_hline(y=y, line_color=cor, line_dash="dash", line_width=1.3,
                       annotation_text=f"{nome} {num(y)}", annotation_position=canto,
                       annotation_font=dict(color=cor, size=11))
+    fig.add_scatter(x=mm200.index, y=mm200, mode="lines", name="MM200",
+                    line=dict(color=AZUL, width=2), hoverinfo="skip")
     fig.update_layout(xaxis_rangeslider_visible=False)
     return _estilo(fig, 420)
 
@@ -277,20 +328,114 @@ def grafico_escada(r: Resultado):
     return _estilo(fig, 330).update_layout(margin=dict(l=8, r=8, t=40, b=8))
 
 
+def bloco_tendencia(r: Resultado, moeda):
+    if r.mm200 is None:
+        st.markdown("<div class='nota'>Histórico curto demais para calcular a média de 200 dias.</div>",
+                    unsafe_allow_html=True)
+        return
+    cor = {"Alta": VERDE, "Baixa": VERMELHO}.get(r.tendencia, TEXTO)
+    incl = "" if r.inclinacao_mm200 is None else f"média de 200 dias {pct(r.inclinacao_mm200)} em 3 meses"
+    if r.ifr is None:
+        leitura = ""
+    elif r.ifr >= 70:
+        leitura = "sobrecomprada (≥ 70)"
+    elif r.ifr <= 30:
+        leitura = "sobrevendida (≤ 30)"
+    else:
+        leitura = "faixa normal (30 a 70)"
+    grade(
+        kpi("Tendência", f"<span style='color:{cor}'>{r.tendencia}</span>", incl),
+        kpi("Média de 200 dias", dinheiro(r.mm200, moeda),
+            f"preço {pct((r.preco_atual / r.mm200 - 1) * 100)} da média"),
+        kpi("IFR 14 dias", num(r.ifr, 0), leitura),
+        classe="tres",
+    )
+
+
+def bloco_preco_justo(r: Resultado, f: dict, moeda):
+    def cartao(rotulo, valor, base):
+        if not valor:
+            return kpi(rotulo, "—", "sem dados suficientes")
+        margem = (valor / r.preco_atual - 1) * 100
+        cor = VERDE if margem >= 0 else VERMELHO
+        situacao = "de desconto" if margem >= 0 else "acima do justo"
+        return kpi(rotulo, dinheiro(valor, moeda),
+                   f"<span style='color:{cor};font-weight:600'>{num(abs(margem), 0)}% {situacao}</span><br>{base}")
+
+    grade(
+        cartao("Preço-teto Bazin", f["bazin"],
+               f"dividendo médio {num(f['div_medio'])} ÷ 6%" if f["div_medio"] else ""),
+        cartao("Preço justo Graham", f["graham"],
+               f"LPA {num(f['lpa'])} · VPA {num(f['vpa'])}" if f["graham"] else ""),
+        cartao("Justo pelo P/L histórico", f["justo_pl"],
+               f"{f['rotulo_ref']}: {num(f['pl_ref'])}" if f["pl_ref"] else ""),
+    )
+    if f["criterios"]:
+        st.markdown(
+            f"<div class='nota'><b>{f['a_favor']} de {f['criterios']}</b> critérios indicam que o preço atual "
+            f"está abaixo do justo. Fundamentos confirmam o sinal, mas não entram no teste histórico.</div>",
+            unsafe_allow_html=True)
+
+
+FRASE_COMPRA = {
+    "ajudou": "Comprar no sinal rendeu <b>mais</b> do que comprar em uma semana qualquer.",
+    "atrapalhou": "Comprar no sinal rendeu <b>menos</b> do que comprar em uma semana qualquer. Use com cautela neste papel.",
+    "indiferente": "Comprar no sinal rendeu <b>quase o mesmo</b> que comprar em uma semana qualquer.",
+    "poucos": "Houve <b>poucos sinais de compra</b> no período: resultado pouco confiável.",
+}
+FRASE_VENDA = {
+    "ajudou": "Depois dos sinais de venda a ação rendeu <b>menos</b> que a média: vender no sinal fez sentido.",
+    "atrapalhou": "Depois dos sinais de venda a ação <b>continuou rendendo acima</b> da média: vender no sinal custou retorno.",
+    "indiferente": "Depois dos sinais de venda a ação rendeu <b>perto da média</b>.",
+    "poucos": "Houve <b>poucos sinais de venda</b> no período: resultado pouco confiável.",
+}
+
+
+def bloco_backtest(hist: pd.DataFrame):
+    try:
+        tabela, res = backtest(hist)
+    except Exception:
+        tabela, res = None, None
+    if tabela is None or res["anos"] < 1:
+        st.markdown("<div class='nota'>Histórico curto demais para testar o sinal.</div>", unsafe_allow_html=True)
+        return
+    def cel(v, sufixo="%", sinal=False):
+        if v is None or pd.isna(v):
+            return "<td>—</td>"
+        return f"<td>{('+' if v > 0 else '') + num(v, 0) + '%' if sinal else num(v, 0) + sufixo}</td>"
+    corpo = "".join(
+        f"<tr><td>{nome}</td><td>{int(l['Semanas'])}</td>{cel(l['Retorno 6m'], sinal=True)}{cel(l['Acerto 6m'])}"
+        f"{cel(l['Retorno 12m'], sinal=True)}{cel(l['Acerto 12m'])}</tr>"
+        for nome, l in tabela.iterrows()
+    )
+    st.markdown(
+        "<div class='rolagem'><table class='t bt'><thead><tr><th>Se tivesse comprado em…</th><th>Sem.</th>"
+        "<th>Ret. 6m</th><th>Acerto 6m</th><th>Ret. 12m</th><th>Acerto 12m</th></tr></thead>"
+        f"<tbody>{corpo}</tbody></table></div>"
+        f"<div class='nota'>{FRASE_COMPRA[res['compra']]}<br>{FRASE_VENDA[res['venda']]}</div>"
+        "<div class='nota'>Retorno = ganho médio da ação depois de cada semana naquela situação, com dividendos. "
+        "Acerto = % das vezes em que o retorno foi positivo. Resultado passado não garante resultado futuro.</div>",
+        unsafe_allow_html=True,
+    )
+    return res
+
+
 # ------------------------------------------------------------ painel
 def painel(ticker: str):
     with st.spinner(f"Buscando {ticker}..."):
         hist, divs, info, lpa_tri = baixar(ticker)
     r = calcular(hist, divs)
     moeda = info.get("currency") or ("BRL" if ticker.endswith(".SA") else "USD")
-    pl, pl_medio, metodo, lpa, acoes, div, dy = fundamentos(info, r, lpa_tri)
+    f = fundamentos(info, r, lpa_tri, hist)
+    pl, pl_medio, metodo, lpa, acoes, div, dy = (f[k] for k in (
+        "pl", "pl_medio", "metodo", "lpa", "acoes", "div", "dy"))
     nome = info.get("longName") or info.get("shortName") or ticker
     cfg = {"displayModeBar": False}
 
     def dist(v):
         return f"{pct((v / r.preco_atual - 1) * 100)} do preço atual"
 
-    bloco_heroi(nome, ticker, moeda, r)
+    bloco_heroi(nome, ticker, moeda, r, f)
 
     secao("Pontos de compra e venda", "base: médias de 52 semanas")
     grade(
@@ -301,6 +446,9 @@ def painel(ticker: str):
     )
     bloco_faixa(r, moeda)
 
+    secao("Tendência e força", "filtro do sinal")
+    bloco_tendencia(r, moeda)
+
     secao("Mínimo, máximo e fechamento", f"valores em {SIMBOLO.get(moeda, moeda)}")
     bloco_tabela(r)
     st.write("")
@@ -309,9 +457,12 @@ def painel(ticker: str):
         kpi(f"Mínima de {r.data_ultimo.year}", dinheiro(r.minima_ano, moeda)),
     )
 
-    secao("Preço em 12 meses")
+    secao("Preço em 12 meses", "linha azul: média de 200 dias")
     st.plotly_chart(grafico_preco(hist, r), width="stretch", key=f"preco_{ticker}",
                     theme=None, config=cfg)
+
+    secao("Preço justo pelos fundamentos")
+    bloco_preco_justo(r, f, moeda)
 
     secao("Indicadores")
     nota_pl = ""
@@ -333,6 +484,9 @@ def painel(ticker: str):
     st.plotly_chart(grafico_escada(r), width="stretch", key=f"escada_{ticker}",
                     theme=None, config=cfg)
 
+    secao("O sinal funcionou no passado?", "teste com até 10 anos de histórico")
+    bloco_backtest(hist)
+
     with st.expander("Como os números são calculados"):
         st.markdown(
             f"""
@@ -343,7 +497,21 @@ def painel(ticker: str):
 - **Ponto médio** de cada coluna = (mínimo + máximo) ÷ 2.
 - **Ponto de compra** = (média das mínimas + média dos fechamentos de 52 semanas) ÷ 2
 - **Ponto de venda** = (média das máximas + média dos fechamentos de 52 semanas) ÷ 2
-- **Sinal**: preço ≤ ponto de compra → zona de compra; preço ≥ ponto de venda → zona de venda.
+- **Tendência**: *Alta* quando a média de 200 dias subiu mais de 1% em 3 meses e o preço está
+  acima dela; *Baixa* quando caiu mais de 1% e o preço está abaixo; senão *Lateral*.
+- **Sinal**:
+  - **Compra**: preço ≤ ponto de compra e a tendência não é de baixa.
+  - **Aguardar**: preço ≤ ponto de compra, mas em tendência de baixa (ainda caindo).
+  - **Venda**: preço ≥ ponto de venda.
+  - **Manter**: preço ≥ ponto de venda, mas em tendência de alta e com IFR abaixo de 70.
+- **IFR 14 dias**: índice de força relativa; acima de 70 a ação subiu rápido demais, abaixo de 30
+  caiu rápido demais.
+- **Preço-teto Bazin** = média dos dividendos anuais (até 3 anos) ÷ 6%.
+- **Preço justo Graham** = raiz de (22,5 × LPA × valor patrimonial por ação). Não se aplica bem
+  a bancos, FIIs e empresas com prejuízo.
+- **Justo pelo P/L histórico** = P/L médio da própria empresa × LPA atual.
+- **Teste histórico**: a cada semana do passado o app aplica as mesmas regras, usando só os dados
+  disponíveis naquela data, e mede o retorno 6 e 12 meses depois.
 - **P/L atual** = preço ÷ lucro por ação dos últimos 12 meses.
 - **P/L médio 12 meses**: média do P/L de cada pregão do último ano, usando o lucro por ação
   já divulgado em cada data. Quando o Yahoo não traz o histórico de lucros, uso o preço médio
@@ -365,11 +533,12 @@ def resumo(tickers: list[str]):
         try:
             hist, divs, info, lpa_tri = baixar(t)
             r = calcular(hist, divs)
-            pl, pl_medio, _, lpa, acoes, div, dy = fundamentos(info, r, lpa_tri)
+            f = fundamentos(info, r, lpa_tri, hist)
             linhas.append({
-                "Ticker": t, "Preço": r.preco_atual, "Compra": r.ponto_compra,
-                "Médio": r.ponto_medio, "Venda": r.ponto_venda, "Sinal": r.sinal,
-                "P/L": pl, "P/L médio": pl_medio, "DY %": dy, "Ret. 1a %": r.retorno_1a,
+                "Ticker": t, "Preço": r.preco_atual, "Sinal": r.sinal, "Tendência": r.tendencia,
+                "Fundamentos": f"{f['a_favor']} de {f['criterios']}" if f["criterios"] else "—",
+                "Compra": r.ponto_compra, "Médio": r.ponto_medio, "Venda": r.ponto_venda,
+                "P/L": f["pl"], "P/L médio": f["pl_medio"], "DY %": f["dy"], "Ret. 1a %": r.retorno_1a,
                 "Ret. 3a %": r.retorno_3a, "Ret. 5a %": r.retorno_5a,
             })
         except Exception as e:
