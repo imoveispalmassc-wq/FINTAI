@@ -196,3 +196,5 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .barras .b.neg i { bottom: auto; top: 100%; padding: 3px 0 0; }
 .barras .zero { position: absolute; left: 0; right: 0; border-top: 1px solid var(--suave); }
 .selo.sem { background: var(--card2); color: var(--suave); }
+.card.forca { padding-bottom: 26px; }
+.app { padding-bottom: 96px; }

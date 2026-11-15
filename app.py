@@ -120,7 +120,7 @@ def brasil(dia: str) -> dict:
     return retornos_brasil(pd.Timestamp(dia))
 
 
-def comparadores(ticker: str, fim: pd.Timestamp) -> tuple[dict, str]:
+def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]:
     def do_indice(simbolos):
         serie = baixar_indice(simbolos)
         if serie is None or serie.empty:
@@ -137,6 +137,7 @@ def comparadores(ticker: str, fim: pd.Timestamp) -> tuple[dict, str]:
     br = brasil(f"{fim:%Y-%m-%d}")
     arred = lambda lista: [None if v is None else round(v, 2) for v in lista]
     todos = {
+        "nasdaq": {"nome": "Nasdaq", "curto": "Nasdaq", "artigo": "do índice", "moeda": "US$", "v": do_indice(("^IXIC",))},
         "sp500": {"nome": "S&P 500", "curto": "S&P", "artigo": "do índice", "moeda": "US$", "v": do_indice(("^SP500TR", "^GSPC"))},
         "ibov": {"nome": "Ibovespa", "curto": "Ibovespa", "artigo": "do índice", "moeda": "R$", "v": do_indice(("^BVSP",))},
         "cdi": {"nome": "CDI", "curto": "CDI", "artigo": "do CDI", "moeda": "R$", "v": arred(br["cdi"])},
@@ -144,8 +145,15 @@ def comparadores(ticker: str, fim: pd.Timestamp) -> tuple[dict, str]:
         "ipca": {"nome": "IPCA", "curto": "IPCA", "artigo": "do IPCA", "moeda": "R$", "v": arred(br["ipca"])},
         "poupanca": {"nome": "Poupança", "curto": "Poupança", "artigo": "da poupança", "moeda": "R$", "v": arred(br["poupanca"])},
     }
-    padrao = "ibov" if ticker.endswith(".SA") else "sp500"
-    ordem = [padrao] + [k for k in todos if k != padrao]
+    # Bolsa da ação decide o primeiro comparador: B3 = Ibovespa, Nasdaq = Nasdaq, demais = S&P 500
+    bolsa = f"{info.get('exchange', '')} {info.get('fullExchangeName', '')}".lower()
+    if ticker.endswith(".SA"):
+        ordem = ["ibov", "cdi", "selic", "ipca", "poupanca", "sp500", "nasdaq"]
+    elif "nasdaq" in bolsa or info.get("exchange") in ("NMS", "NGM", "NCM"):
+        ordem = ["nasdaq", "sp500", "ibov", "cdi", "selic", "ipca", "poupanca"]
+    else:
+        ordem = ["sp500", "nasdaq", "ibov", "cdi", "selic", "ipca", "poupanca"]
+    padrao = ordem[0]
     return {k: todos[k] for k in ordem}, padrao
 
 
@@ -156,7 +164,7 @@ def pacote(ticker: str) -> dict:
     hist = d["hist"]
     proventos = hist["Dividends"][hist["Dividends"] > 0] if "Dividends" in hist else None
     r = calcular(hist, proventos)
-    comps, padrao = comparadores(ticker, r.data_ultimo)
+    comps, padrao = comparadores(ticker, r.data_ultimo, d["info"])
     return montar(ticker, d, r, comps, padrao)
 
 

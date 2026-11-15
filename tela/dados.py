@@ -56,15 +56,23 @@ def series_do_grafico(hist: pd.DataFrame, intraday: dict) -> dict:
     fim = h.index[-1]
     regra = {"Open": "first", "High": "max", "Low": "min", "Close": "last", "Volume": "sum"}
     anterior = h["Close"].iloc[-2] if len(h) > 1 else None
-    um_ano = h[h.index > fim - pd.DateOffset(years=1)]
-    cinco = h[h.index > fim - pd.DateOffset(years=5)].resample("W-FRI").agg(regra).dropna(subset=["Close"])
+
+    def desde(anos):
+        """Do último pregão até `anos` atrás, incluindo o fechamento-base (o mesmo que o
+        cálculo de retorno usa), para gráfico e retorno darem o mesmo número."""
+        antes = h[h.index <= fim - pd.DateOffset(years=anos)]
+        return h[h.index >= antes.index[-1]] if len(antes) else h
+
+    um_ano = desde(1)
+    cinco_d = desde(5)
+    cinco = cinco_d.resample("W-FRI").agg(regra).dropna(subset=["Close"])
     tudo = h.resample("MS").agg(regra).dropna(subset=["Close"])
     return {
         "hoje": _serie(intraday.get("hoje"), "hora", "no dia", base=anterior),
         "1s": _serie(intraday.get("1s"), "dia", "em 7 dias"),
         "1m": _serie(intraday.get("1m"), "dia", "em 30 dias"),
         "1a": _serie(um_ano, "mes", "em 12 meses", casas=1, soPreco=True),
-        "5a": _serie(cinco, "ano", "em 5 anos"),
+        "5a": _serie(cinco, "ano", "em 5 anos", base=cinco_d["Close"].iloc[0]),
         "max": _serie(tudo, "ano", "em todo o histórico"),
     }
 
@@ -139,7 +147,8 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         r.percentil, r.minimo_1a, r.maximo_1a,
         compra_validada=bool(bt5 and bt5["compraValidada"]),
         venda_validada=bool(bt5 and bt5["vendaValidada"]),
-        quebrou=quebrou, motivo_quebra=motivo, simbolo=moeda)
+        quebrou=quebrou, motivo_quebra=motivo, simbolo=moeda,
+        preco=r.preco_atual, tendencia=r.tendencia)
 
     after = None
     if info.get("postMarketPrice") and info.get("postMarketChangePercent") is not None:

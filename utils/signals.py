@@ -89,7 +89,8 @@ class Estado:
 def decidir_estado(percentil: float, minimo: float, maximo: float, *,
                    compra_validada: bool, venda_validada: bool,
                    quebrou: bool = False, motivo_quebra: str = "",
-                   simbolo: str = "R$") -> Estado:
+                   simbolo: str = "R$", preco: float | None = None,
+                   tendencia: str = "") -> Estado:
     """Decide o estado do ativo. Os textos nunca citam a posição numérica na faixa.
 
     1. VENDER  - fundamento quebrou; ou preço na Zona Cara com venda validada no histórico.
@@ -124,8 +125,14 @@ def decidir_estado(percentil: float, minimo: float, maximo: float, *,
                       "Preço na Zona de Oportunidade, mas comprar nessa zona não foi validado "
                       "pelo histórico deste ativo.", zona)
     alvo = preco_no_percentil(minimo, maximo, P_OPORTUNIDADE)
+    if preco is None:
+        return Estado("AGUARDAR", "AGUARDAR · Neutro",
+                      f"Ponto de oportunidade em {simbolo} {num(alvo)}.", zona)
+    teto = preco_no_percentil(minimo, maximo, P_CARO)
+    alta = "Tendência de alta não significa preço barato. " if tendencia == "Alta" else ""
     return Estado("AGUARDAR", "AGUARDAR · Neutro",
-                  f"Ponto de oportunidade em {simbolo} {num(alvo)}.", zona)
+                  f"Preço {num(preco)} está na Zona Neutra ({num(alvo)} a {num(teto)}). {alta}"
+                  f"Aguardar queda até {num(alvo)} para ter margem.", zona)
 
 
 # ------------------------------------------------------------ critérios de fundamentos

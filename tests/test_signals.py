@@ -156,3 +156,15 @@ def test_backtest_janela_de_5_anos():
 def test_backtest_avisa_historico_insuficiente():
     b = backtest_percentil(_hist(np.linspace(10, 30, 900)), anos=5)   # ~3,5 anos
     assert b["insuficiente"] and b["anos"] < 5
+
+
+def test_aguardar_explica_a_zona_neutra():
+    e = decidir_estado(percentil_na_faixa(778.31, 192.59, 1255.0), 192.59, 1255.0,
+                       compra_validada=True, venda_validada=False, simbolo="US$",
+                       preco=778.31, tendencia="Alta")
+    assert e.codigo == "AGUARDAR"
+    assert e.texto == ("Preço 778,31 está na Zona Neutra (511,31 a 936,28). Tendência de alta não "
+                       "significa preço barato. Aguardar queda até 511,31 para ter margem.")
+    sem_alta = decidir_estado(55, 192.59, 1255.0, compra_validada=True, venda_validada=False,
+                              preco=778.31, tendencia="Lateral")
+    assert "Tendência de alta" not in sem_alta.texto and "Aguardar queda até 511,31" in sem_alta.texto

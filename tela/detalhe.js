@@ -84,8 +84,9 @@ function montar(root, d) {
     const series = d.series;
     let escala = series['1a'] ? '1a' : (ESCALAS.find(([k]) => series[k]) || [null])[0];
     if (!escala) { el.innerHTML = `<div class="aviso">${INDISP}</div>`; return; }
-    let velas = false, prog = 1, toque = null, raf = 0;
-    const justoY = metodosJusto.length >= 2 ? (metodosJusto[0][1] + metodosJusto[metodosJusto.length - 1][1]) / 2 : null;
+    let velas = false, prog = 1, toque = null, toqueY = 0, raf = 0;
+    const justoY = metodosJusto.length >= 2 ? metodosJusto.reduce((a, m) => a + m[1], 0) / metodosJusto.length : null;
+    const justoDivergem = metodosJusto.length >= 2 && metodosJusto[metodosJusto.length - 1][1] / metodosJusto[0][1] > 2;
 
     el.innerHTML = `<div class="grafico" id="gbox">
         <canvas id="gcanvas" role="img" aria-label="Gráfico de preço de ${d.ticker}"></canvas>
@@ -118,11 +119,20 @@ function montar(root, d) {
       ctx.save(); ctx.beginPath(); ctx.rect(x0, yTop - 6, x1 - x0, yPlot - yTop + 6); ctx.clip();
       ctx.fillStyle = '#2fbf8a1c'; ctx.fillRect(x0, Y(zOport), x1 - x0, 4000);
       ctx.fillStyle = '#f06a6a1a'; ctx.fillRect(x0, Y(zCara) - 4000, x1 - x0, 4000);
+      // tracejados das zonas, com o valor de cada limite
+      const tracejado = (y, c) => { ctx.setLineDash([5, 4]); ctx.strokeStyle = c; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke(); ctx.setLineDash([]); };
+      tracejado(Y(zOport), '#2fbf8a'); tracejado(Y(zCara), '#8c99b0');
+      ctx.textAlign = 'right'; ctx.font = '10.5px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#2fbf8a'; ctx.fillText(`Oportunidade até ${f(zOport)}`, x1 - 6, Y(zOport) + 9);
+      ctx.fillStyle = '#aab4c6'; ctx.fillText(`Neutro até ${f(zCara)}`, x1 - 6, Y(zCara) + 9);
+      ctx.fillStyle = '#f06a6a'; ctx.fillText(`Caro acima de ${f(zCara)}`, x1 - 6, Y(zCara) - 9);
+      ctx.font = '11px Inter, system-ui, sans-serif';
       if (justoY !== null) {
         const yj = Y(justoY);
         ctx.setLineDash([6, 5]); ctx.strokeStyle = '#f2994a'; ctx.lineWidth = 1.2;
         ctx.beginPath(); ctx.moveTo(x0, yj); ctx.lineTo(x1, yj); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = '#f2994a'; ctx.textAlign = 'left'; ctx.fillText('Preço-Justo não validado', x0 + 6, yj - 9);
+        ctx.fillStyle = '#f2994a'; ctx.textAlign = 'left';
+        ctx.fillText(`Média dos métodos: ${d.moeda} ${f(Math.round(justoY), 0)} - não validado`, x0 + 6, yj - 9);
       }
       ctx.restore();
 
@@ -198,6 +208,16 @@ function montar(root, d) {
         ctx.fillStyle = v >= 0 ? '#1f9d6b' : '#d64545'; ctx.beginPath(); ctx.roundRect(bx, by, bw2, 22, 11); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(txt, bx + bw2 / 2, by + 11.5);
       }
+      // toque perto da linha laranja: explica de onde ela vem
+      if (toque !== null && justoY !== null && Math.abs(toqueY - Y(justoY)) < 16) {
+        const l1 = `Média de ${metodosJusto.map(m => `${m[0]} ${f(Math.round(m[1]), 0)}`).join(' e ')}.`;
+        const l2 = justoDivergem ? 'Divergência grande, não usar como alvo.' : 'Não validado por teste histórico, não usar como alvo.';
+        ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.textAlign = 'left';
+        const tw = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width) + 18, ty = Math.min(yPlot - 46, Y(justoY) + 8);
+        ctx.fillStyle = '#2a1c0cf2'; ctx.strokeStyle = '#f2994a'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.roundRect(x0 + 4, ty, Math.min(tw, x1 - x0 - 8), 40, 8); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#ffd9b0'; ctx.fillText(l1, x0 + 13, ty + 13); ctx.fillText(l2, x0 + 13, ty + 28);
+      }
     }
     function animar() {
       cancelAnimationFrame(raf);
@@ -218,7 +238,7 @@ function montar(root, d) {
     el.querySelectorAll('.e').forEach(b => { b.onclick = () => trocar(b.dataset.e); });
     $('gvela').onclick = e => { velas = !velas; e.currentTarget.setAttribute('aria-pressed', velas); animar(); };
     $('gexp').onclick = () => { $('gbox').classList.toggle('grande'); desenhar(); };
-    const mover = e => { toque = e.clientX - cv.getBoundingClientRect().left; desenhar(); };
+    const mover = e => { const r = cv.getBoundingClientRect(); toque = e.clientX - r.left; toqueY = e.clientY - r.top; desenhar(); };
     cv.onpointerdown = mover;
     cv.onpointermove = e => { if (e.pointerType === 'mouse' || e.buttons || toque !== null) mover(e); };
     cv.onpointerleave = () => { toque = null; desenhar(); };
@@ -266,7 +286,7 @@ function montar(root, d) {
       <div class="pilha">
         <div class="card duas"><div class="esq"><span class="rot">Tendência</span><small>média de 200 dias</small></div><div class="dir" style="color:${corT}">${tem(d.mm200) ? d.tendencia : '—'}</div></div>
         <div class="card duas"><div class="esq"><span class="rot">Média de 200 dias</span><small class="num">${tem(dist) ? `preço ${sinal(dist)} da média` : INDISP}</small></div><div class="dir num">${din(d.mm200)}</div></div>
-        <div class="card">
+        <div class="card forca">
           <div class="cab"><div><strong>Força</strong><div class="nota">Últimos 14 dias</div></div><button class="link" data-folha="forca">Ver como calculamos</button></div>
           ${tem(d.forca) ? `<div class="regua" style="background:${fundo}">
             <span class="balao num" id="fbalao" style="left:${d.forca}%" hidden>${f(d.forca, 0)}</span>
@@ -331,7 +351,7 @@ function montar(root, d) {
     let cD, tD, fraseD;
     if (!tem(dy)) { [cD, tD] = semDado; fraseD = 'Sem dados de proventos para este ativo.'; }
     else if (naoPagadora) {
-      [cD, tD] = ['neutro', 'Não é pagadora de dividendos'];
+      [cD, tD] = ['neutro', d.dividendo > 0 ? 'Pagadora baixa' : 'Não paga dividendos'];
       fraseD = d.dividendo > 0
         ? `A ${d.ticker} quase não paga dividendo. Ela reinveste quase todo o lucro na própria empresa. Não é um problema, é o perfil da empresa. Ela é para quem busca crescimento, não renda.`
         : `A ${d.ticker} não pagou dividendo nos últimos 12 meses. Não é necessariamente um problema: é o perfil de quem reinveste o lucro. Ela é para quem busca crescimento, não renda.`;
@@ -535,6 +555,7 @@ function montar(root, d) {
         <div class="leg" style="margin:8px 0 12px"><span style="--c:var(--verde)">${d.ticker}</span><span style="--c:var(--ardosia)">${c.nome}</span></div>
         ${outraMoeda ? `<div class="aviso" style="margin-bottom:10px">Comparação com ${c.nome} é em moedas diferentes (${d.moeda} e ${c.moeda}). Para comparar certo, converta a moeda ou use o comparador ${padrao.nome}.</div>` : ''}
         <div class="card resumo num">${linhas}</div>
+        ${tem(d.retorno.total[0]) && tem(d.retorno.preco[0]) ? `<p class="nota num" style="margin:12px 2px 0">Em 1 ano: <b>${sinal(d.retorno.preco[0], 2)}</b> só preço e <b>${sinal(d.retorno.total[0], 2)}</b> com dividendos. Diferença de ${f(d.retorno.total[0] - d.retorno.preco[0], 2)} ponto é o dividendo.</p>` : ''}
         <p class="nota" style="margin:12px 2px 0">${porque}Retorno passado não garante retorno futuro.</p>
         <p class="nota" style="margin:8px 2px 0">Dados até ${d.data} · <button class="link" data-folha="retorno">Ver como calculamos</button></p>`;
       el.querySelectorAll('[data-r]').forEach(b => { b.onclick = () => { reinveste = b.dataset.r === '1'; render(); }; });
@@ -546,7 +567,7 @@ function montar(root, d) {
       <p><b>Sem reinvestir (Price Return)</b></p><code>Preço final ÷ Preço inicial − 1</code>
       ${tem(d.retorno.total[0]) && tem(d.retorno.preco[0]) ? `<p><b>1 ano:</b> ${ret(d.retorno.total[0])} com dividendos e ${ret(d.retorno.preco[0])} só preço. A diferença de ${f(d.retorno.total[0] - d.retorno.preco[0], 2)} ponto vem dos dividendos do período.</p>` : ''}
       <p><b>Diferença em pontos:</b> retorno da ação menos retorno do comparador.</p>
-      <p>S&P 500 e Ibovespa vêm do Yahoo Finance; CDI, Selic, IPCA e Poupança vêm do Banco Central. Cada comparador fica na própria moeda, sem conversão.</p>${fonte}`];
+      <p>Nasdaq (Composite, sem dividendos), S&P 500 (com dividendos) e Ibovespa vêm do Yahoo Finance; CDI, Selic, IPCA e Poupança vêm do Banco Central. Cada comparador fica na própria moeda, sem conversão.</p>${fonte}`];
     render();
   })($('retorno'));
 
