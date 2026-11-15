@@ -83,44 +83,49 @@ class Estado:
     codigo: str   # COMPRAR | AGUARDAR | CARO | VENDER
     rotulo: str
     texto: str
+    zona: str     # Zona de oportunidade | Zona neutra | Zona cara
 
 
 def decidir_estado(percentil: float, minimo: float, maximo: float, *,
                    compra_validada: bool, venda_validada: bool,
                    quebrou: bool = False, motivo_quebra: str = "",
                    simbolo: str = "R$") -> Estado:
-    """Decide o estado do ativo. Ordem de prioridade:
+    """Decide o estado do ativo. Os textos nunca citam a posição numérica na faixa.
 
-    1. VENDER  - fundamento quebrou; ou preço >= percentil 70 com venda validada no histórico.
-    2. CARO    - preço >= percentil 70 (sem venda validada). Nunca fala em vender.
-    3. COMPRAR - preço <= percentil 35 com compra validada no histórico.
+    1. VENDER  - fundamento quebrou; ou preço na Zona Cara com venda validada no histórico.
+    2. CARO    - preço na Zona Cara (sem venda validada). Nunca fala em vender.
+    3. COMPRAR - preço na Zona de Oportunidade com compra validada no histórico.
     4. AGUARDAR - todo o resto.
     """
-    p = round(percentil)
+    if percentil >= P_CARO:
+        zona = "Zona cara"
+    elif percentil <= P_OPORTUNIDADE:
+        zona = "Zona de oportunidade"
+    else:
+        zona = "Zona neutra"
     if quebrou:
         return Estado("VENDER", "VENDER · Fundamento quebrou",
-                      f"Fundamento quebrou: {motivo_quebra}.")
+                      f"Fundamento quebrou: {motivo_quebra}.", zona)
     if percentil >= P_CARO:
         if venda_validada:
             return Estado("VENDER", "VENDER · Validado pelo histórico",
-                          f"Preço no percentil {p} e, no histórico deste ativo, a ação caiu na "
-                          "maioria das vezes nos 12 meses seguintes.")
+                          "Preço na Zona Cara e, no histórico deste ativo, a ação caiu na "
+                          "maioria das vezes nos 12 meses seguintes.", zona)
         limite = preco_no_percentil(minimo, maximo, P_CARO)
         return Estado("CARO", "CARO · Não comprar",
-                      f"Caro para comprar agora. Preço no percentil {p}. "
-                      f"Volta à zona neutra abaixo de {simbolo} {num(limite)} (percentil {P_CARO}).")
+                      f"Caro para comprar agora. Volta à Zona Neutra abaixo de {simbolo} {num(limite)}.",
+                      zona)
     if percentil <= P_COMPRA:
         if compra_validada:
             return Estado("COMPRAR", "COMPRAR · Oportunidade",
-                          f"Preço no percentil {p} e comprar nessa faixa foi validado "
-                          "pelo histórico deste ativo.")
+                          "Preço na Zona de Oportunidade, e comprar nessa zona foi validado "
+                          "pelo histórico deste ativo.", zona)
         return Estado("AGUARDAR", "AGUARDAR · Neutro",
-                      f"Preço no percentil {p}, mas comprar nessa faixa não foi validado pelo "
-                      "histórico deste ativo. Sem vantagem estatística agora.")
+                      "Preço na Zona de Oportunidade, mas comprar nessa zona não foi validado "
+                      "pelo histórico deste ativo.", zona)
     alvo = preco_no_percentil(minimo, maximo, P_OPORTUNIDADE)
     return Estado("AGUARDAR", "AGUARDAR · Neutro",
-                  f"Preço no percentil {p} - sem vantagem estatística agora. "
-                  f"Ponto de oportunidade em {simbolo} {num(alvo)} (percentil {P_OPORTUNIDADE}).")
+                  f"Ponto de oportunidade em {simbolo} {num(alvo)}.", zona)
 
 
 # ------------------------------------------------------------ critérios de fundamentos
@@ -144,13 +149,17 @@ def avaliar_criterio(atual: float | None, referencia: float | None, *,
 
 
 # ------------------------------------------------------------ teste histórico
-def backtest_percentil(hist: pd.DataFrame) -> dict:
-    """Aplica as regras de percentil semana a semana, só com dados conhecidos em cada data,
-    e mede o que aconteceu 6 e 12 meses depois.
+def backtest_percentil(hist: pd.DataFrame, anos: float | None = 5) -> dict:
+    """Testa as zonas semana a semana, só com dados conhecidos em cada data, e mede o que
+    aconteceu 6 e 12 meses depois.
 
-    Devolve, para "compra" (percentil <= 35), "venda" (percentil >= 70) e "referencia"
+    anos: tamanho da janela, contada para trás a partir do último pregão (None = todo o
+    histórico). Só entram semanas dentro da janela.
+
+    Devolve, para "compra" (Zona de Oportunidade), "venda" (Zona Cara) e "referencia"
     (qualquer semana): casos, retorno médio de 6 e 12 meses e acerto de 12 meses.
-    Na venda, acerto = % das vezes em que a ação caiu.
+    Na venda, acerto = % das vezes em que a ação caiu. "anos" é o período realmente
+    coberto e "insuficiente" avisa quando o histórico não chega à janela pedida.
     """
     h = hist.copy()
     if getattr(h.index, "tz", None) is not None:
@@ -162,6 +171,9 @@ def backtest_percentil(hist: pd.DataFrame) -> dict:
     w = w.dropna(subset=["Close"])
     perc = percentil_movel(w["Close"], w["Low"], w["High"]).to_numpy()
     valido = ~np.isnan(perc)
+    fim = h.index[-1]
+    if anos is not None:
+        valido &= np.asarray(w.index > fim - pd.DateOffset(years=int(anos)))
     r6 = (w["adj"].shift(-26) / w["adj"] - 1).to_numpy() * 100
     r12 = (w["adj"].shift(-52) / w["adj"] - 1).to_numpy() * 100
 
@@ -179,9 +191,11 @@ def backtest_percentil(hist: pd.DataFrame) -> dict:
     with np.errstate(invalid="ignore"):
         compra, venda = perc <= P_COMPRA, perc >= P_CARO
     datas = w.index[valido]
+    coberto = (fim - datas[0]).days / 365.25 if len(datas) else 0.0
     return {
         "compra": medir(compra),
         "venda": medir(venda, acerto_na_queda=True),
         "referencia": medir(np.ones(len(w), dtype=bool)),
-        "anos": (datas[-1] - datas[0]).days / 365.25 if len(datas) else 0.0,
+        "anos": coberto,
+        "insuficiente": anos is not None and coberto < anos - 0.25,
     }

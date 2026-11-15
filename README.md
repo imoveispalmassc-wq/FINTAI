@@ -12,10 +12,15 @@ e comparação com o índice.
 
 ## Estrutura
 
-- `app.py`: tela (Streamlit) e busca de dados no Yahoo Finance.
-- `utils/percentile.py`: percentil na faixa de 52 semanas e zonas de preço.
-- `utils/signals.py`: decisão de estado, selo do teste histórico, critérios de fundamentos.
+- `app.py`: página do Streamlit, busca de dados (Yahoo Finance e Banco Central) e cache.
+- `tela/dados.py`: monta o pacote único de dados que a tela lê (fonte única de verdade).
+- `tela/detalhe.html`, `detalhe.css`, `detalhe.js`: a tela de detalhes da ação, montada
+  como componente do Streamlit.
+- `utils/percentile.py`: posição do preço na faixa de 52 semanas e zonas de preço.
+- `utils/signals.py`: decisão de estado, selo do teste histórico, backtest de 5 anos.
+- `utils/benchmarks.py`: CDI, Selic, IPCA e Poupança pelo SGS do Banco Central.
 - `calculos.py`: médias, tendência, P/L médio, dividendos e preço justo.
+- `prototipos/fintai-micron.html`: protótipo da tela com dados de exemplo (Micron).
 - `tests/`: testes unitários.
 
 ## Testes

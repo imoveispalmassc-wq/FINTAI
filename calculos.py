@@ -67,6 +67,10 @@ class Resultado:
     retorno_1a: float | None
     retorno_3a: float | None
     retorno_5a: float | None
+    # só preço, sem dividendos
+    retorno_preco_1a: float | None
+    retorno_preco_3a: float | None
+    retorno_preco_5a: float | None
     # dividendos dos últimos 12 meses
     dividendo_12m: float
     dividend_yield: float
@@ -216,13 +220,14 @@ def crescimento_lpa(lpa_trimestral: pd.Series | None, lpa_anual: pd.Series | Non
 
 # ------------------------------------------------------------ preço justo
 def preco_teto_bazin(dividendos: pd.Series | None, inicio_hist: pd.Timestamp,
-                     fim: pd.Timestamp, taxa: float = 0.06) -> tuple[float | None, float | None]:
-    """Bazin: dividendo médio anual (até 3 anos) ÷ 6%. Devolve (preço-teto, dividendo médio)."""
+                     fim: pd.Timestamp, taxa: float = 0.06, anos: int = 5
+                     ) -> tuple[float | None, float | None]:
+    """Bazin: dividendo médio anual (até 5 anos) ÷ 6%. Devolve (preço-teto, dividendo médio)."""
     if dividendos is None or not len(dividendos):
         return None, None
     d = _sem_fuso(dividendos)
     somas = []
-    for k in range(3):
+    for k in range(anos):
         a, b = fim - pd.DateOffset(years=k + 1), fim - pd.DateOffset(years=k)
         if a < inicio_hist - pd.Timedelta(days=10):
             break
@@ -327,6 +332,9 @@ def calcular(hist: pd.DataFrame, dividendos: pd.Series | None) -> Resultado:
         retorno_1a=_retorno(serie_ret, 1),
         retorno_3a=_retorno(serie_ret, 3),
         retorno_5a=_retorno(serie_ret, 5),
+        retorno_preco_1a=_retorno(hist["Close"], 1),
+        retorno_preco_3a=_retorno(hist["Close"], 3),
+        retorno_preco_5a=_retorno(hist["Close"], 5),
         dividendo_12m=div_12m,
         dividend_yield=dy,
         fechamentos_1a=um_ano["Close"],

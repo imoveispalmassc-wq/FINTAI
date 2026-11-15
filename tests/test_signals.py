@@ -19,15 +19,15 @@ def estado(percentil, **kw):
 def test_csmg3_fica_em_aguardar_com_o_texto_da_especificacao():
     e = estado(percentil_na_faixa(55.15, MINIMO, MAXIMO), compra_validada=True, venda_validada=True)
     assert e.codigo == "AGUARDAR"
-    assert e.texto == ("Preço no percentil 58 - sem vantagem estatística agora. "
-                       "Ponto de oportunidade em R$ 46,48 (percentil 30).")
+    assert e.texto == "Ponto de oportunidade em R$ 46,48."
+    assert e.zona == "Zona neutra"
 
 
 def test_comprar_exige_preco_baixo_e_backtest_validado():
-    assert estado(35, compra_validada=True).codigo == "COMPRAR"
+    assert estado(30, compra_validada=True).codigo == "COMPRAR"
     assert estado(20, compra_validada=True).codigo == "COMPRAR"
     assert estado(20, compra_validada=False).codigo == "AGUARDAR"
-    assert estado(36, compra_validada=True).codigo == "AGUARDAR"
+    assert estado(31, compra_validada=True).codigo == "AGUARDAR"
 
 
 def test_caro_nunca_fala_em_venda():
@@ -46,6 +46,14 @@ def test_vender_so_com_backtest_validado_ou_fundamento_quebrado():
     # fundamento quebrado vale em qualquer preço
     e = estado(10, compra_validada=True, quebrou=True, motivo_quebra="2 trimestres seguidos de prejuízo")
     assert e.codigo == "VENDER" and "prejuízo" in e.texto
+
+
+@pytest.mark.parametrize("p", range(0, 101, 5))
+@pytest.mark.parametrize("compra,venda,quebrou", [(False, False, False), (True, True, False),
+                                                   (True, True, True)])
+def test_textos_nunca_citam_percentil(p, compra, venda, quebrou):
+    e = estado(p, compra_validada=compra, venda_validada=venda, quebrou=quebrou, motivo_quebra="x")
+    assert "percentil" not in (e.rotulo + e.texto + e.zona).lower()
 
 
 @pytest.mark.parametrize("p", range(0, 101, 5))
@@ -134,3 +142,17 @@ def test_backtest_ciclico_valida_a_compra():
     assert b["compra"]["retorno_12m"] > b["referencia"]["retorno_12m"]
     assert b["venda"]["retorno_12m"] < b["referencia"]["retorno_12m"]
     assert b["compra"]["acerto_12m"] > 60 and b["venda"]["acerto_12m"] > 60
+
+
+def test_backtest_janela_de_5_anos():
+    t = np.arange(2600)                      # ~10 anos de pregões
+    h = _hist(50 + 20 * np.sin(2 * np.pi * t / 520))
+    b5, bmax = backtest_percentil(h, anos=5), backtest_percentil(h, anos=None)
+    assert 4.9 <= b5["anos"] <= 5.05 and not b5["insuficiente"]
+    assert bmax["anos"] > 8
+    assert b5["referencia"]["casos"] < bmax["referencia"]["casos"]
+
+
+def test_backtest_avisa_historico_insuficiente():
+    b = backtest_percentil(_hist(np.linspace(10, 30, 900)), anos=5)   # ~3,5 anos
+    assert b["insuficiente"] and b["anos"] < 5

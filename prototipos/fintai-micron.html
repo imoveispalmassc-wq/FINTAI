@@ -1,0 +1,855 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Fintai Micron</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap">
+<style>
+/* Layout: coluna única de celular (máx. 480px), cartões escuros, uma régua visual repetida
+   (faixa de preço, força, ponto médio, faixa justa) como linguagem comum da tela. */
+:root {
+  color-scheme: dark;
+  --bg: #0e1420; --card: #161e2e; --card2: #1b2538; --borda: #263147;
+  --texto: #e8edf5; --suave: #8c99b0; --fraco: #5d6a82;
+  --azul: #5b8def; --verde: #2fbf8a; --vermelho: #f06a6a; --ambar: #f2b84b; --ardosia: #4a5875;
+  --claro: #e3e7ee; --tinta: #10151f;
+  --display: 'Space Grotesk', system-ui, sans-serif;
+  --corpo: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--texto); font-family: var(--corpo); font-size: 14px; line-height: 1.45; }
+.app { max-width: 480px; margin: 0 auto; padding-block: 0 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button:focus-visible, summary:focus-visible { outline: 2px solid var(--azul); outline-offset: 2px; border-radius: 8px; }
+.num { font-variant-numeric: tabular-nums; }
+
+.proto { margin: 10px 0 0; padding: 6px 10px; border-radius: 8px; background: #f2b84b1f; color: var(--ambar); font-size: 11.5px; text-align: center; }
+
+/* topo */
+.topo { display: flex; align-items: center; gap: 10px; padding: 12px 0 8px; }
+.topo .icone { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; flex: none; }
+.topo .icone:active { background: var(--card); }
+.topo .meio { flex: 1; min-width: 0; }
+.topo .nome { font-family: var(--display); font-size: 19px; font-weight: 700; line-height: 1.15; }
+.topo .bolsa { display: inline-flex; align-items: center; gap: 6px; color: var(--suave); font-size: 12.5px; margin-top: 2px; }
+.topo .bolsa svg { flex: none; }
+svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* cartão de decisão */
+.decisao { background: linear-gradient(135deg, #1b2740 0%, #141c2c 70%); border: 1px solid var(--borda); border-radius: 18px; padding: 16px; }
+.decisao .razao { font-weight: 600; font-size: 14.5px; }
+.decisao .meta { color: var(--suave); font-size: 12px; margin-top: 2px; }
+.decisao .linha { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.decisao .preco { font-family: var(--display); font-size: 34px; font-weight: 700; line-height: 1; }
+.decisao .var { font-weight: 600; font-size: 14px; }
+.decisao .after { font-size: 12px; margin-top: 6px; color: var(--vermelho); }
+.badge { display: inline-block; margin-top: 14px; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; background: #ece3c4; color: var(--tinta); }
+.badge.COMPRAR { background: #bfecd9; } .badge.CARO { background: #f6d99a; } .badge.VENDER { background: #f6c1c1; }
+.decisao .ponto { margin-top: 10px; font-size: 14px; }
+.pilula { display: inline-block; margin-top: 10px; border: 1px solid var(--borda); border-radius: 999px; padding: 4px 11px; font-size: 12px; color: var(--texto); }
+
+.visao-t { font-family: var(--display); font-size: 18px; font-weight: 600; margin: 22px 0 0; }
+
+/* gráfico */
+.grafico { position: relative; margin-top: 12px; }
+.grafico canvas { display: block; width: 100%; height: 280px; touch-action: pan-y; border-radius: 12px; }
+.grafico.grande canvas { height: 440px; }
+.grafico .expandir { position: absolute; top: 6px; left: 6px; width: 32px; height: 32px; border-radius: 9px; background: #161e2ecc; display: grid; place-items: center; color: var(--suave); }
+.grafico .ia { position: absolute; top: 6px; right: 6px; padding: 6px 11px; border-radius: 999px; background: var(--claro); color: var(--tinta); font-size: 12px; font-weight: 600; }
+.grafico .ia b { color: #3b6fd6; margin-right: 4px; }
+.aviso { margin-top: 8px; padding: 9px 11px; border-radius: 10px; background: var(--card); border: 1px solid var(--borda); color: var(--suave); font-size: 12.5px; }
+.escalas { display: flex; align-items: center; gap: 2px; margin-top: 10px; }
+.escalas .e { flex: 1; padding: 7px 0; border-radius: 9px; color: var(--suave); font-size: 13px; font-weight: 500; text-align: center; }
+.escalas .e[aria-pressed="true"] { background: var(--claro); color: var(--tinta); font-weight: 700; }
+.escalas .vela { flex: none; width: 38px; height: 34px; margin-left: 6px; border-radius: 9px; display: grid; place-items: center; color: var(--suave); border: 1px solid var(--borda); }
+.escalas .vela[aria-pressed="true"] { color: var(--texto); border-color: var(--azul); }
+.legenda-var { color: var(--suave); font-size: 12px; margin-top: 8px; }
+.legenda-var b { font-weight: 600; }
+
+/* seções */
+.sec { margin-top: 30px; }
+.sec > h2 { font-family: var(--display); font-size: 18px; font-weight: 600; margin: 0 0 10px; text-wrap: balance; }
+.sec > h2 small { font-family: var(--corpo); font-weight: 400; color: var(--suave); font-size: 12.5px; margin-left: 6px; }
+.sub { color: var(--suave); font-size: 12px; margin: -6px 0 10px; }
+.card { background: var(--card); border: 1px solid var(--borda); border-radius: 14px; padding: 14px; }
+.pilha { display: grid; gap: 8px; }
+.rot { color: var(--suave); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; }
+.link { color: var(--azul); font-size: 12.5px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #5b8def66; }
+.nota { color: var(--suave); font-size: 12.5px; line-height: 1.5; }
+.nota b { color: var(--texto); font-weight: 600; }
+.tag-proto { display: inline-block; padding: 1px 7px; border-radius: 999px; border: 1px dashed var(--fraco); color: var(--suave); font-size: 10.5px; letter-spacing: .03em; vertical-align: middle; }
+
+/* linha simples: rótulo à esquerda, valor à direita */
+.zona { display: flex; justify-content: space-between; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--borda);
+  border-left: 3px solid var(--c); border-radius: 12px; padding: 13px 14px; }
+.zona b { font-size: 15.5px; font-weight: 700; text-align: right; }
+.duas { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.duas .dir { font-size: 17px; font-weight: 700; text-align: right; white-space: nowrap; }
+.duas .esq small { display: block; color: var(--suave); font-size: 12px; margin-top: 2px; }
+
+/* régua */
+.regua { position: relative; height: 10px; border-radius: 999px; margin: 26px 6px 8px; }
+.regua .traco { position: absolute; top: -5px; width: 2px; height: 20px; transform: translateX(-1px); border-radius: 2px; background: var(--texto); }
+.regua .bola { position: absolute; top: -4px; width: 18px; height: 18px; transform: translateX(-9px); border-radius: 50%; background: var(--texto);
+  border: 3px solid var(--azul); box-shadow: 0 0 0 4px #5b8def33; }
+.regua button.bola { cursor: pointer; }
+.regua .aqui { position: absolute; top: -22px; transform: translateX(-50%); font-size: 10.5px; font-weight: 700; letter-spacing: .05em; color: var(--azul); white-space: nowrap; }
+.regua .balao { position: absolute; top: -30px; transform: translateX(-50%); background: var(--claro); color: var(--tinta); font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 999px; }
+.pontas { display: flex; justify-content: space-between; gap: 8px; color: var(--suave); font-size: 12px; }
+.pontas.tres span { flex: 1; } .pontas.tres span:nth-child(2) { text-align: center; } .pontas.tres span:nth-child(3) { text-align: right; }
+.leg { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--suave); font-size: 12px; margin-top: 10px; }
+.leg span::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; background: var(--c); }
+
+/* bloco mín/máx */
+.trio { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.trio div span { display: block; color: var(--suave); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+.trio div b { font-size: 15.5px; }
+.trio div:nth-child(2) { text-align: center; } .trio div:nth-child(3) { text-align: right; }
+.destaque { margin-top: 10px; font-weight: 600; }
+.cab { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.cab strong { font-size: 14.5px; }
+
+/* fundamentos */
+details.acord { border: 1px solid var(--borda); border-radius: 14px; background: #121a28; }
+details.acord > summary { padding: 13px 14px; font-weight: 600; cursor: pointer; list-style: none; display: flex; gap: 8px; align-items: center; }
+details.acord > summary::-webkit-details-marker { display: none; }
+details.acord > summary::before { content: "›"; display: inline-block; color: var(--suave); font-size: 18px; line-height: 1; transition: transform .15s; }
+details.acord[open] > summary::before { transform: rotate(90deg); }
+details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
+.crit .topo-c { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.crit .nome { font-weight: 600; font-size: 15px; }
+.st { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+.st.bom { background: #2fbf8a26; color: var(--verde); } .st.ruim { background: #f06a6a26; color: var(--vermelho); }
+.st.neutro { background: var(--claro); color: var(--tinta); }
+.vals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 10px; }
+.vals span { display: block; color: var(--suave); font-size: 10.5px; letter-spacing: .04em; text-transform: uppercase; }
+.vals b { font-size: 16px; }
+.lista-v { margin: 12px 0 10px; display: grid; gap: 6px; }
+.lista-v div { display: flex; justify-content: space-between; gap: 10px; color: var(--suave); font-size: 13px; }
+.lista-v b { color: var(--texto); }
+.exemplo { background: var(--card2); border-radius: 10px; padding: 10px 12px; font-weight: 600; margin-bottom: 10px; }
+.crit p { margin: 0 0 10px; color: var(--suave); font-size: 13px; line-height: 1.5; }
+
+/* indicadores */
+.grade2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ind { text-align: left; background: var(--card); border: 1px solid var(--borda); border-radius: 14px; padding: 13px 14px; min-width: 0; }
+.ind .v { display: block; font-size: 21px; font-weight: 700; margin: 5px 0 3px; overflow-wrap: anywhere; }
+.ind .s { display: block; color: var(--suave); font-size: 12px; }
+.ind .dica { display: none; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--borda); color: var(--texto); font-size: 12.5px; line-height: 1.45; }
+.ind[aria-expanded="true"] { border-color: var(--azul); } .ind[aria-expanded="true"] .dica { display: block; }
+
+/* retorno */
+.toggle { display: flex; gap: 6px; background: var(--card); border: 1px solid var(--borda); border-radius: 999px; padding: 4px; }
+.toggle button { flex: 1; padding: 9px 4px; border-radius: 999px; color: var(--suave); font-size: 11.5px; white-space: nowrap; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.toggle button::after { content: ""; width: 9px; height: 9px; border-radius: 50%; border: 2px solid currentColor; flex: none; }
+.toggle button[aria-pressed="true"] { background: var(--claro); color: var(--tinta); }
+.toggle button[aria-pressed="true"]::after { background: var(--verde); border-color: var(--verde); }
+.chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 4px; margin-top: 12px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chips button { flex: none; padding: 7px 13px; border-radius: 999px; border: 1px solid var(--borda); color: var(--suave); font-size: 12.5px; font-weight: 600; }
+.chips button[aria-pressed="true"] { background: var(--claro); color: var(--tinta); border-color: var(--claro); }
+.barras { position: relative; height: 230px; margin: 16px 0 0 44px; }
+.barras .grade-y { position: absolute; inset: 0 0 24px 0; }
+.barras .grade-y div { position: absolute; left: 0; right: 0; border-top: 1px solid #26314799; }
+.barras .grade-y span { position: absolute; left: -44px; width: 38px; text-align: right; transform: translateY(-50%); color: var(--suave); font-size: 11px; }
+.barras .cols { position: absolute; inset: 0 0 24px 0; display: flex; }
+.barras .col { flex: 1; display: flex; align-items: flex-end; justify-content: center; gap: 6px; position: relative; }
+.barras .b { width: 34%; max-width: 46px; min-height: 3px; border-radius: 5px 5px 0 0; position: relative; transition: height .45s cubic-bezier(.2,.8,.2,1); }
+.barras .b.acao { background: var(--verde); } .barras .b.idx { background: var(--ardosia); }
+.barras .b i { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 11.5px; font-weight: 600; white-space: nowrap; padding-bottom: 3px; }
+.barras .b.idx i { color: var(--suave); font-weight: 500; }
+.barras .col em { position: absolute; top: 100%; font-style: normal; color: var(--suave); font-size: 12px; padding-top: 5px; }
+.resumo > div { padding: 12px 0; border-bottom: 1px solid #26314799; font-size: 13px; line-height: 1.55; color: var(--suave); }
+.resumo > div:first-child { padding-top: 0; } .resumo > div:last-child { border-bottom: 0; padding-bottom: 0; }
+.resumo b { color: var(--texto); font-weight: 600; } .resumo .dif { color: var(--verde); font-weight: 700; }
+.resumo .dif.neg { color: var(--vermelho); }
+.q { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; border: 1px solid var(--suave); color: var(--suave); font-size: 11px; font-weight: 700; margin-left: 4px; vertical-align: 1px; }
+.dica-q { display: block; margin-top: 6px; padding: 8px 10px; border-radius: 9px; background: var(--card2); color: var(--texto); font-size: 12.5px; }
+
+/* backtest */
+.selo { font-size: 11px; font-weight: 700; letter-spacing: .04em; padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
+.selo.ok { background: #15402f; color: #7ee2b8; } .selo.nao { background: #4a2020; color: #ffaaaa; }
+.bt p { margin: 0 0 8px; font-size: 13.5px; line-height: 1.5; } .bt p:last-child { margin: 0; color: var(--suave); }
+
+/* folha (modal) */
+.fundo { position: fixed; inset: 0; background: #05080fb3; z-index: 40; display: flex; align-items: flex-end; justify-content: center; }
+.folha { width: 100%; max-width: 480px; max-height: 82%; overflow-y: auto; background: var(--card2); border: 1px solid var(--borda); border-bottom: 0;
+  border-radius: 20px 20px 0 0; padding: 18px;
+  padding-left: max(18px, env(safe-area-inset-left, 0px)); padding-right: max(18px, env(safe-area-inset-right, 0px));
+  padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px)); }
+.folha .cab { align-items: center; margin-bottom: 10px; }
+.folha h3 { font-family: var(--display); font-size: 17px; margin: 0; }
+.folha .x { width: 34px; height: 34px; border-radius: 50%; background: var(--card); display: grid; place-items: center; color: var(--suave); font-size: 18px; flex: none; }
+.folha p, .folha li { color: var(--suave); font-size: 13.5px; line-height: 1.55; }
+.folha p { margin: 0 0 10px; } .folha ul { margin: 0 0 10px; padding-left: 18px; }
+.folha b { color: var(--texto); }
+.folha code { display: block; background: var(--bg); border-radius: 9px; padding: 9px 11px; margin: 6px 0 12px; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12.5px; color: var(--texto); overflow-x: auto; white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="app">
+  <div class="proto">Protótipo com dados de exemplo · MU em 13/11/2026</div>
+
+  <header class="topo">
+    <button class="icone" aria-label="Voltar"><svg class="i" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <div class="meio">
+      <div class="nome">Micron</div>
+      <button class="bolsa" aria-label="Trocar de bolsa">
+        <svg width="18" height="13" viewBox="0 0 18 13" aria-hidden="true"><rect width="18" height="13" rx="2" fill="#f4f4f4"/><path d="M0 1.5h18M0 4.5h18M0 7.5h18M0 10.5h18" stroke="#d0463b" stroke-width="1.6"/><rect width="8" height="7" rx="1" fill="#3a4f9a"/></svg>
+        NASDAQ (MU)
+        <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 3.5l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <button class="icone" aria-label="Criar alerta"><svg class="i" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 9.5-4.9M18 12v4l1.5 2h-15L6 16M10 21h4M19 3v6M16 6h6"/></svg></button>
+    <button class="icone" id="fav" aria-label="Favorito" aria-pressed="true"><svg class="i" viewBox="0 0 24 24" style="stroke:#f2c94c;fill:#f2c94c"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.8z"/></svg></button>
+  </header>
+
+  <section id="decisao"></section>
+
+  <h2 class="visao-t">Visão geral</h2>
+
+  <main id="visao">
+    <section id="grafico"></section>
+    <section class="sec" id="faixa"></section>
+    <section class="sec" id="tendencia"></section>
+    <section class="sec" id="minmax"></section>
+    <section class="sec" id="fundamentos"></section>
+    <section class="sec" id="justo"></section>
+    <section class="sec" id="indicadores"></section>
+    <section class="sec" id="retorno"></section>
+    <section class="sec" id="backtest"></section>
+    <p class="nota" style="text-align:center;margin-top:28px">Ferramenta de estudo, não é recomendação de investimento.</p>
+  </main>
+</div>
+<div class="fundo" id="fundo" hidden><div class="folha" role="dialog" aria-modal="true" aria-labelledby="folha-t">
+  <div class="cab"><h3 id="folha-t"></h3><button class="x" id="folha-x" aria-label="Fechar">×</button></div>
+  <div id="folha-c"></div>
+</div></div>
+
+<script>
+/* =====================================================================================
+   FONTE ÚNICA DE VERDADE. Todo componente lê daqui; nenhum número é digitado no layout.
+   Valores marcados MOCK são de protótipo e devem vir da API.
+   ===================================================================================== */
+const DADOS = {
+  MU: {
+    ticker: 'MU', nome: 'Micron', razao: 'Micron Technology, Inc.', bolsa: 'NASDAQ', moeda: 'US$', codMoeda: 'USD',
+    data: '13/11/2026', hora: '19:13', fonte: 'Yahoo Finance',
+    preco: 778.31, varDia: -2.52,
+    after: { preco: 751.14, variacao: -3.49, hora: '19:13' },
+    min52: 192.59, max52: 1255.00, min30: 650.00, max30: 990.00,
+    mm200: 765.61, tendencia: 'Alta', forca: 42,                 // força = IFR de 14 dias (uso interno)
+    pl: 10.47, plMedio12: 26.00, lpa: 74.33, lpa12Atras: 8.29,
+    dividendo: 0.57, dyMedio12: 0.09, dyDiferenca: -23, acoes: 1.13e9,
+    vpa: 122.35, plHistorico: 22.34, graham: 452.35, justoPL: 1660.53,
+    bazin: 8.33, divMedio5: 0.50,
+    retorno: { periodos: ['1 ano', '3 anos', '5 anos'], total: [229, 951, 931],
+               preco: [228.5, 950.7, 930.3] },                    // MOCK: só preço, sem reinvestir
+    preco1AnoAtras: 236.95, data1AnoAtras: '13/11/2025',
+    comparadores: {                                               // MOCK: plugar em Yahoo / BCB / B3
+      sp500:    { nome: 'S&P 500',  curto: 'S&P',      artigo: 'do índice',   moeda: 'US$', v: [14, 78, 73] },
+      ibov:     { nome: 'Ibovespa', curto: 'Ibovespa', artigo: 'do índice',   moeda: 'R$',  v: [18, 45, 62] },
+      cdi:      { nome: 'CDI',      curto: 'CDI',      artigo: 'do CDI',      moeda: 'R$',  v: [14.5, 42, 68] },
+      selic:    { nome: 'Selic',    curto: 'Selic',    artigo: 'da Selic',    moeda: 'R$',  v: [15, 43, 69] },
+      ipca:     { nome: 'IPCA',     curto: 'IPCA',     artigo: 'do IPCA',     moeda: 'R$',  v: [4.5, 15, 28] },
+      poupanca: { nome: 'Poupança', curto: 'Poupança', artigo: 'da poupança', moeda: 'R$',  v: [8.5, 24, 38] },
+    },
+    comparadorPadrao: 'sp500',
+    backtest: {                                                   // MOCK: RECALCULAR NA API
+      '5a':  { anos: 5.0, oportunidade: { vezes: 68,  retorno: 98,  acerto: 88 }, cara: { vezes: 92,  retorno: 71, acerto: 42 },
+               referencia: { retorno: 76, subiu: 68 } },
+      'max': { anos: 9.0, oportunidade: { vezes: 121, retorno: 108, acerto: 90 }, cara: { vezes: 164, retorno: 76, acerto: 43 },
+               referencia: null },
+    },
+  },
+};
+
+/* ------------------------------------------------------------ formatação */
+const f = (v, casas = 2) => v.toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+const din = (d, v, casas = 2) => `${d.moeda} ${f(v, casas)}`;
+const sinal = (v, casas = 2) => `${v > 0 ? '+' : v < 0 ? '-' : ''}${f(Math.abs(v), casas)}%`;
+const pctFlex = v => sinal(v, Number.isInteger(v) ? 0 : 1);
+const seta = v => (v >= 0 ? '▲' : '▼');
+const cor = v => (v >= 0 ? 'var(--verde)' : 'var(--vermelho)');
+const $ = id => document.getElementById(id);
+
+/* ------------------------------------------------------------ regras (espelham utils/percentile e utils/signals) */
+const P_OPORTUNIDADE = 30, P_COMPRA = 35, P_CARO = 70, ACERTO_MIN = 60, CASOS_MIN = 8;
+const posicaoNaFaixa = (preco, min, max) => max <= min ? 50 : Math.max(0, Math.min(100, (preco - min) / (max - min) * 100));
+const precoNaPosicao = (min, max, p) => min + (max - min) * p / 100;
+function zonas(d) {
+  return { oportunidade: precoNaPosicao(d.min52, d.max52, P_OPORTUNIDADE), cara: precoNaPosicao(d.min52, d.max52, P_CARO) };
+}
+function seloBacktest(tipo, s, ref) {
+  if (!s || s.vezes < CASOS_MIN) return false;
+  if (!ref) return tipo === 'compra' ? s.acerto > ACERTO_MIN : false;
+  return tipo === 'compra' ? s.acerto > ACERTO_MIN && s.retorno > ref.retorno
+                           : s.acerto > ACERTO_MIN && s.retorno < ref.retorno;
+}
+function decidir(d) {
+  const p = posicaoNaFaixa(d.preco, d.min52, d.max52), bt = d.backtest['5a'], z = zonas(d);
+  const compraOk = seloBacktest('compra', bt.oportunidade, bt.referencia);
+  const vendaOk = seloBacktest('venda', bt.cara, bt.referencia);
+  if (p >= P_CARO) return vendaOk
+    ? { codigo: 'VENDER', rotulo: 'VENDER · Validado', texto: 'No histórico, a ação caiu na maioria das vezes depois de entrar na Zona Cara.', zona: 'Zona cara' }
+    : { codigo: 'CARO', rotulo: 'CARO · Não comprar', texto: `Caro para comprar agora. Volta à Zona Neutra abaixo de ${din(d, z.cara)}.`, zona: 'Zona cara' };
+  if (p <= P_COMPRA && compraOk)
+    return { codigo: 'COMPRAR', rotulo: 'COMPRAR · Oportunidade', texto: 'Preço baixo e sinal de compra validado pelo histórico.', zona: p <= P_OPORTUNIDADE ? 'Zona de oportunidade' : 'Zona neutra' };
+  return { codigo: 'AGUARDAR', rotulo: 'AGUARDAR · Neutro', texto: `Ponto de oportunidade em ${din(d, z.oportunidade)}.`, zona: p <= P_OPORTUNIDADE ? 'Zona de oportunidade' : 'Zona neutra' };
+}
+
+/* ------------------------------------------------------------ folha "Ver como calculamos" */
+function abrirFolha(titulo, html) {
+  $('folha-t').textContent = titulo; $('folha-c').innerHTML = html; $('fundo').hidden = false; $('folha-x').focus();
+}
+function fecharFolha() { $('fundo').hidden = true; }
+$('folha-x').addEventListener('click', fecharFolha);
+$('fundo').addEventListener('click', e => { if (e.target === $('fundo')) fecharFolha(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharFolha(); });
+const FOLHAS = {};
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-folha]');
+  if (b && FOLHAS[b.dataset.folha]) { const [t, h] = FOLHAS[b.dataset.folha](); abrirFolha(t, h); }
+});
+const fonteHtml = d => `<p><b>Fonte:</b> ${d.fonte} · atualizado em ${d.data} às ${d.hora}.</p>`;
+
+/* =====================================================================================
+   Componentes. Cada um recebe o elemento e o ticker, e lê só de DADOS[ticker].
+   ===================================================================================== */
+
+function DecisionCard(el, { ticker }) {
+  const d = DADOS[ticker], e = decidir(d);
+  el.innerHTML = `<div class="decisao">
+    <div class="razao">${d.razao} · ${d.ticker}</div>
+    <div class="meta">Último pregão ${d.data} · ${d.codMoeda} · ${d.fonte}</div>
+    <div class="linha"><span class="preco num">${din(d, d.preco)}</span>
+      <span class="var num" style="color:${cor(d.varDia)}">${seta(d.varDia)} ${sinal(d.varDia)} no dia</span></div>
+    <div class="after num" style="color:${cor(d.after.variacao)}">After Market: ${din(d, d.after.preco)} ${seta(d.after.variacao)} ${sinal(d.after.variacao)} | ${d.after.hora}</div>
+    <div><span class="badge ${e.codigo}">${e.rotulo}</span></div>
+    <div class="ponto">${e.texto}</div>
+    <span class="pilula">${e.zona}</span>
+  </div>`;
+}
+
+/* ------------------------------------------------------------ séries de exemplo para o gráfico */
+function semente(s) { return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; }
+function gerarSerie(ancoras, n, ruido, seed, lo, hi) {
+  const r = semente(seed), c = new Array(n);
+  let a = 0, w = 0;
+  for (let i = 0; i < n; i++) {
+    while (a < ancoras.length - 2 && i > ancoras[a + 1][0]) a++;
+    const [i0, p0] = ancoras[a], [i1, p1] = ancoras[a + 1];
+    const t = i1 === i0 ? 0 : (i - i0) / (i1 - i0);
+    w = w * 0.82 + (r() - 0.5) * ruido;
+    let v = Math.exp(Math.log(p0) + (Math.log(p1) - Math.log(p0)) * t + w * Math.sin(Math.PI * t));
+    c[i] = Math.max(lo, Math.min(hi, v));
+  }
+  ancoras.forEach(([i, p]) => { c[i] = p; });
+  const v = c.map((x, i) => (0.35 + r() * 0.65) * (1 + 2.2 * Math.abs(i ? x / c[i - 1] - 1 : 0) * 20));
+  return { c, v };
+}
+function construirSeries(d) {
+  const fim = new Date(2026, 10, 13, 16, 0), P = d.preco, abertura = P / (1 + d.varDia / 100);
+  const datas = (n, passo) => Array.from({ length: n }, (_, i) => passo(n - 1 - i));
+  const diasUteis = k => { const x = new Date(fim); let r = k; while (r > 0) { x.setDate(x.getDate() - 1); if (x.getDay() % 6) r--; } return x; };
+  const S = {};
+  let s = gerarSerie([[0, abertura], [14, 786], [40, 771.2], [62, 783], [78, P]], 79, 0.004, 7, 760, 805);
+  S.hoje = { ...s, t: datas(79, k => new Date(fim.getTime() - k * 5 * 60000)), rot: 'hora', variacao: 'no dia' };
+  s = gerarSerie([[0, 742], [20, 801], [38, 812], [51, abertura], [64, P]], 65, 0.012, 11, 700, 830);
+  S['1s'] = { ...s, t: datas(65, k => { const x = diasUteis(Math.floor(k / 13)); x.setHours(16, 0); return new Date(x.getTime() - (k % 13) * 30 * 60000); }), rot: 'dia', variacao: 'em 7 dias' };
+  s = gerarSerie([[0, 905], [35, 985], [98, 660], [133, 800], [153, P]], 154, 0.02, 23, d.min30 + 5, d.max30 - 2);
+  S['1m'] = { ...s, t: datas(154, k => { const x = diasUteis(Math.floor(k / 7)); x.setHours(16, 0); return new Date(x.getTime() - (k % 7) * 3600000); }), rot: 'dia', variacao: 'em 30 dias' };
+  s = gerarSerie([[0, d.preco1AnoAtras], [28, 199.5], [120, 560], [185, 1180.32], [230, 905], [235, 985], [244, 660], [249, 800], [251, P]], 252, 0.045, 31, 199.5, 1180.32);
+  S['1a'] = { ...s, t: datas(252, diasUteis), rot: 'mes', variacao: 'em 12 meses', casas: 1, soPreco: true };
+  s = gerarSerie([[0, 75.5], [40, 95], [75, 68.38], [104, 74.05], [150, 120], [208, d.preco1AnoAtras], [216, 200], [243, 1180.32], [259, P]], 260, 0.07, 43, 68.38, 1180.32);
+  S['5a'] = { ...s, t: datas(260, k => new Date(fim.getTime() - k * 7 * 864e5)), rot: 'ano', variacao: 'em 5 anos' };
+  s = gerarSerie([[0, 1.5], [140, 8], [193, 95], [220, 9], [294, 2.5], [365, 34], [380, 11], [408, 60], [449, 94], [461, 52], [473, 74], [497, d.preco1AnoAtras], [505, 1180.32], [508, P]], 509, 0.16, 59, 1.1, 1180.32);
+  S.max = { ...s, t: datas(509, k => new Date(2026, 10 - k, 13)), rot: 'ano', variacao: 'em todo o histórico' };
+  return S;
+}
+const MESES = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
+const p2 = n => String(n).padStart(2, '0');
+const ROTULO_X = {
+  hora: t => `${p2(t.getHours())}:${p2(t.getMinutes())}`,
+  dia: t => `${p2(t.getDate())}/${p2(t.getMonth() + 1)}`,
+  mes: t => `${MESES[t.getMonth()].slice(0, 3)}/${String(t.getFullYear()).slice(2)}`,
+  ano: t => String(t.getFullYear()),
+};
+
+function StockChart(el, { ticker, aoTrocarEscala }) {
+  const d = DADOS[ticker], z = zonas(d), series = construirSeries(d);
+  const ESCALAS = [['hoje', 'Hoje'], ['1s', '1S'], ['1m', '1M'], ['1a', '1A'], ['5a', '5A'], ['max', 'Máx.']];
+  // Preço-justo só vira linha se validado; aqui os métodos divergem mais de 2x, então é "não validado".
+  const justoValidado = d.justoPL / d.graham <= 2, justoY = (d.graham + d.justoPL) / 2;
+  let escala = '1a', velas = false, prog = 1, toque = null, raf = 0;
+
+  el.innerHTML = `<div class="grafico" id="gbox">
+      <canvas id="gcanvas" role="img" aria-label="Gráfico de preço de ${d.ticker}"></canvas>
+      <button class="expandir" id="gexp" aria-label="Expandir gráfico"><svg class="i" viewBox="0 0 24 24" style="width:17px;height:17px"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg></button>
+      <button class="ia" id="gia"><b>AI</b>Análise gráfica</button>
+    </div>
+    <div class="aviso" id="gaviso" hidden>A análise gráfica por IA entra quando a tela for ligada à API.</div>
+    <div class="escalas" role="group" aria-label="Período do gráfico">
+      ${ESCALAS.map(([k, r]) => `<button class="e" data-e="${k}" aria-pressed="${k === escala}">${r}</button>`).join('')}
+      <button class="vela" id="gvela" aria-pressed="false" aria-label="Alternar entre linha e candles"><svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M8 3v4M8 15v6M16 3v6M16 17v4"/><rect x="5.5" y="7" width="5" height="8" rx="1"/><rect x="13.5" y="9" width="5" height="8" rx="1"/></svg></button>
+    </div>
+    <div class="legenda-var num"><span id="gvar"></span> · <button class="link" data-folha="grafico">Ver como calculamos</button></div>`;
+  FOLHAS.grafico = () => ['Variação no gráfico', `
+    <p>O gráfico mostra só a variação do preço, sem dividendos: último preço do período dividido pelo primeiro, menos 1.</p>
+    <p><b>Escala 1A</b></p><code>Retorno só preço: (${f(d.preco)} - ${f(d.preco1AnoAtras)}) / ${f(d.preco1AnoAtras)} = ${f((d.preco / d.preco1AnoAtras - 1) * 100)}%</code>
+    <p>Preço em ${d.data1AnoAtras}: <b>${din(d, d.preco1AnoAtras)}</b>. Preço em ${d.data}: <b>${din(d, d.preco)}</b>.</p>
+    <p>O retorno com dividendos fica na seção Retorno acumulado.</p>${fonteHtml(d)}`];
+
+  const cv = $('gcanvas'), ctx = cv.getContext('2d');
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  function desenhar() {
+    const s = series[escala], n = s.c.length, dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    const eixoW = 58, x0 = 4, x1 = W - eixoW, yTop = 44, yBase = H - 22, volH = 30, yPlot = yBase - volH - 8;
+    const hi = velas ? s.c.map((c, i) => Math.max(c, s.c[i - 1] ?? c) * 1.004) : s.c;
+    const lo = velas ? s.c.map((c, i) => Math.min(c, s.c[i - 1] ?? c) * 0.996) : s.c;
+    const vmin = Math.min(...lo), vmax = Math.max(...hi), folga = (vmax - vmin) * 0.04 || 1;
+    const Y = v => yPlot - (v - (vmin - folga)) / (vmax - vmin + 2 * folga) * (yPlot - yTop);
+    const X = i => x0 + (x1 - x0) * (n === 1 ? 0 : i / (n - 1));
+    ctx.font = '11px Inter, system-ui, sans-serif'; ctx.textBaseline = 'middle';
+
+    // camadas Fintai: zonas de fundo
+    ctx.save(); ctx.beginPath(); ctx.rect(x0, yTop - 6, x1 - x0, yPlot - yTop + 6); ctx.clip();
+    const yOp = Y(z.oportunidade), yCa = Y(z.cara);
+    ctx.fillStyle = '#2fbf8a1c'; ctx.fillRect(x0, yOp, x1 - x0, 4000);
+    ctx.fillStyle = '#f06a6a1a'; ctx.fillRect(x0, yCa - 4000, x1 - x0, 4000);
+    if (!justoValidado) {
+      const yj = Y(justoY);
+      ctx.setLineDash([6, 5]); ctx.strokeStyle = '#f2994a'; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(x0, yj); ctx.lineTo(x1, yj); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#f2994a'; ctx.textAlign = 'left'; ctx.fillText('Preço-Justo não validado', x0 + 6, yj - 9);
+    }
+    ctx.restore();
+
+    // eixo Y à direita: 6 marcas, do mínimo ao máximo do período
+    const yPreco = Y(d.preco);
+    ctx.textAlign = 'left';
+    for (let k = 0; k < 6; k++) {
+      const v = vmin + (vmax - vmin) * k / 5, y = Y(v);
+      ctx.strokeStyle = '#26314766'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
+      if (Math.abs(y - yPreco) > 13) { ctx.fillStyle = css('--suave'); ctx.fillText(f(v), x1 + 7, y); }
+    }
+
+    // volume
+    const vm = Math.max(...s.v), bw = Math.max(1, (x1 - x0) / n * 0.6);
+    ctx.fillStyle = '#8c99b040';
+    for (let i = 0; i < n; i++) { if (i / (n - 1) > prog) break; const h = s.v[i] / vm * volH; ctx.fillRect(X(i) - bw / 2, yBase - h, bw, h); }
+
+    // preço (linha com área ou candles), com revelação animada
+    ctx.save(); ctx.beginPath(); ctx.rect(x0 - 2, 0, (x1 - x0) * prog + 4, H); ctx.clip();
+    if (velas) {
+      const cw = Math.max(1.5, (x1 - x0) / n * 0.62);
+      for (let i = 0; i < n; i++) {
+        const a = s.c[i - 1] ?? s.c[i], c = s.c[i], sobe = c >= a;
+        ctx.strokeStyle = ctx.fillStyle = sobe ? css('--verde') : css('--vermelho'); ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(X(i), Y(hi[i])); ctx.lineTo(X(i), Y(lo[i])); ctx.stroke();
+        ctx.fillRect(X(i) - cw / 2, Math.min(Y(a), Y(c)), cw, Math.max(1, Math.abs(Y(a) - Y(c))));
+      }
+    } else {
+      ctx.beginPath(); s.c.forEach((c, i) => (i ? ctx.lineTo(X(i), Y(c)) : ctx.moveTo(X(i), Y(c))));
+      ctx.strokeStyle = css('--azul'); ctx.lineWidth = 1.6; ctx.lineJoin = 'round'; ctx.stroke();
+      ctx.lineTo(x1, yPlot); ctx.lineTo(x0, yPlot); ctx.closePath();
+      const g = ctx.createLinearGradient(0, yTop, 0, yPlot); g.addColorStop(0, '#5b8def55'); g.addColorStop(1, '#5b8def00');
+      ctx.fillStyle = g; ctx.fill();
+    }
+    ctx.restore();
+
+    // linha pontilhada e etiqueta do preço atual
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x0, yPreco); ctx.lineTo(x1, yPreco); ctx.stroke(); ctx.setLineDash([]);
+    const etq = f(d.preco); ctx.font = '600 11px Inter, system-ui, sans-serif';
+    const ew = ctx.measureText(etq).width + 12;
+    ctx.fillStyle = css('--claro'); ctx.beginPath(); ctx.roundRect(x1 + 2, yPreco - 10, ew, 20, 7); ctx.fill();
+    ctx.fillStyle = css('--tinta'); ctx.textAlign = 'left'; ctx.fillText(etq, x1 + 8, yPreco + 0.5);
+
+    // eixo X
+    ctx.font = '11px Inter, system-ui, sans-serif'; ctx.fillStyle = css('--suave'); ctx.textBaseline = 'alphabetic';
+    ctx.font = '10.5px Inter, system-ui, sans-serif';
+    [0.06, 0.31, 0.56, 0.81].forEach(fr => {
+      const i = Math.round((n - 1) * fr);
+      ctx.textAlign = 'center';
+      ctx.fillText(ROTULO_X[s.rot](s.t[i]), X(i), H - 5);
+    });
+
+    // mini-legenda das zonas
+    ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.font = '10px Inter, system-ui, sans-serif';
+    ctx.fillStyle = '#0e1420cc'; ctx.beginPath(); ctx.roundRect(x0 + 1, yPlot - 43, 84, 42, 7); ctx.fill();
+    [['Caro', '#f06a6a'], ['Neutro', '#8c99b0'], ['Oportunidade', '#2fbf8a']].forEach(([t, c], k) => {
+      const y = yPlot - 34 + k * 12; ctx.fillStyle = c; ctx.fillRect(x0 + 6, y - 3, 6, 6);
+      ctx.fillStyle = css('--suave'); ctx.fillText(t, x0 + 16, y);
+    });
+
+    // toque: cursor e balão com a variação do período
+    if (toque !== null) {
+      const i = Math.max(0, Math.min(n - 1, Math.round((toque - x0) / (x1 - x0) * (n - 1)))), x = X(i), y = Y(s.c[i]);
+      ctx.strokeStyle = '#8c99b099'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, yTop - 6); ctx.lineTo(x, yBase); ctx.stroke();
+      ctx.fillStyle = css('--texto'); ctx.beginPath(); ctx.arc(x, y, 4.5, 0, 7); ctx.fill();
+      ctx.strokeStyle = css('--azul'); ctx.lineWidth = 2; ctx.stroke();
+      const v = (s.c[i] / s.c[0] - 1) * 100, txt = sinal(v, s.casas ?? 2) + (s.soPreco && i === n - 1 ? ' só preço' : '');
+      ctx.font = '700 12px Inter, system-ui, sans-serif';
+      const bw2 = ctx.measureText(txt).width + 18, bx = Math.max(x0, Math.min(x1 - bw2, x - bw2 / 2)), by = Math.max(yTop - 4, y - 34);
+      ctx.fillStyle = v >= 0 ? '#1f9d6b' : '#d64545'; ctx.beginPath(); ctx.roundRect(bx, by, bw2, 22, 11); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(txt, bx + bw2 / 2, by + 11.5);
+    }
+  }
+
+  function animar() {
+    cancelAnimationFrame(raf);
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { prog = 1; desenhar(); return; }
+    const t0 = performance.now();
+    const passo = t => { const k = Math.min(1, (t - t0) / 480); prog = 1 - Math.pow(1 - k, 3); desenhar(); if (k < 1) raf = requestAnimationFrame(passo); };
+    raf = requestAnimationFrame(passo);
+  }
+  function legenda() {
+    const s = series[escala], v = (s.c[s.c.length - 1] / s.c[0] - 1) * 100;
+    $('gvar').innerHTML = `Variação ${s.variacao}: <b style="color:${cor(v)}">${sinal(v, s.casas ?? 2)}</b>${s.soPreco ? ' só preço' : ''}`;
+  }
+  function trocar(k) {
+    escala = k; toque = null;
+    el.querySelectorAll('.e').forEach(b => b.setAttribute('aria-pressed', b.dataset.e === k));
+    legenda(); animar(); aoTrocarEscala && aoTrocarEscala(k);
+  }
+  el.querySelectorAll('.e').forEach(b => b.addEventListener('click', () => trocar(b.dataset.e)));
+  $('gvela').addEventListener('click', e => { velas = !velas; e.currentTarget.setAttribute('aria-pressed', velas); animar(); });
+  $('gexp').addEventListener('click', () => { $('gbox').classList.toggle('grande'); desenhar(); });
+  $('gia').addEventListener('click', () => { $('gaviso').hidden = !$('gaviso').hidden; });
+  const mover = e => { toque = e.clientX - cv.getBoundingClientRect().left; desenhar(); };
+  cv.addEventListener('pointerdown', mover); cv.addEventListener('pointermove', e => { if (e.pointerType === 'mouse' || e.buttons || toque !== null) mover(e); });
+  cv.addEventListener('pointerleave', () => { toque = null; desenhar(); });
+  cv.addEventListener('pointerup', e => { if (e.pointerType !== 'mouse') { toque = null; desenhar(); } });
+  new ResizeObserver(desenhar).observe(cv);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(desenhar);
+  legenda(); desenhar();
+}
+
+function PriceRange(el, { ticker }) {
+  const d = DADOS[ticker], z = zonas(d), p = posicaoNaFaixa(d.preco, d.min52, d.max52);
+  // segmentos proporcionais aos preços reais: mín. até oportunidade, oportunidade até cara, cara até máx.
+  const larg = d.max52 - d.min52, a = (z.oportunidade - d.min52) / larg * 100, b = (z.cara - d.min52) / larg * 100;
+  const fundo = `linear-gradient(90deg,var(--verde) 0 ${a}%,var(--ardosia) ${a}% ${b}%,var(--ambar) ${b}% 100%)`;
+  el.innerHTML = `<h2>Faixa de preço <small>Últimas 52 semanas</small></h2>
+    <div class="pilha">
+      <div class="zona" style="--c:var(--verde)"><span class="rot">Zona de oportunidade</span><b class="num">até ${din(d, z.oportunidade)}</b></div>
+      <div class="zona" style="--c:var(--ardosia)"><span class="rot">Zona neutra</span><b class="num">${f(z.oportunidade)} a ${f(z.cara)}</b></div>
+      <div class="zona" style="--c:var(--ambar)"><span class="rot">Zona cara</span><b class="num">acima de ${din(d, z.cara)}</b></div>
+      <div class="card">
+        <div class="regua" style="background:${fundo}">
+          <span class="aqui" style="left:${Math.min(Math.max(p, 18), 82)}%">VOCÊ ESTÁ AQUI</span><span class="bola" style="left:${p}%"></span>
+        </div>
+        <div class="pontas num"><span>Mín. 52 sem. ${f(d.min52)}</span><span>Máx. 52 sem. ${f(d.max52)}</span></div>
+        <div class="leg num"><span style="--c:var(--verde)">Oportunidade até ${f(z.oportunidade)}</span><span style="--c:var(--ardosia)">Neutra</span><span style="--c:var(--ambar)">Cara acima de ${f(z.cara)}</span></div>
+      </div>
+    </div>`;
+}
+
+function TrendStrength(el, { ticker }) {
+  const d = DADOS[ticker], dist = (d.preco / d.mm200 - 1) * 100;
+  const corT = { Alta: 'var(--verde)', Baixa: 'var(--vermelho)' }[d.tendencia] || 'var(--texto)';
+  const leitura = d.forca >= 70 ? 'Sobrecomprada. Subiu rápido demais, pode corrigir.'
+    : d.forca <= 30 ? 'Sobrevendida. Caiu rápido demais, pode repicar.' : 'Neutra. Sem pressão de compra nem de venda.';
+  const fundo = 'linear-gradient(90deg,var(--verde) 0 30%,var(--ardosia) 30% 70%,var(--ambar) 70% 100%)';
+  el.innerHTML = `<h2>Tendência e força</h2>
+    <div class="pilha">
+      <div class="card duas"><div class="esq"><span class="rot">Tendência</span><small>média de 200 dias</small></div><div class="dir" style="color:${corT}">${d.tendencia}</div></div>
+      <div class="card duas"><div class="esq"><span class="rot">Média de 200 dias</span><small class="num">preço ${sinal(dist)} da média</small></div><div class="dir num">${din(d, d.mm200)}</div></div>
+      <div class="card">
+        <div class="cab"><div><strong>Força</strong><div class="nota">Últimos 14 dias</div></div><button class="link" data-folha="forca">Ver como calculamos</button></div>
+        <div class="regua" style="background:${fundo}">
+          <span class="balao num" id="fbalao" style="left:${d.forca}%" hidden>${d.forca}</span>
+          <button class="bola" id="fbola" style="left:${d.forca}%" aria-label="Mostrar o valor da força" aria-expanded="false"></button>
+        </div>
+        <div class="pontas tres"><span>Muita venda</span><span>Equilíbrio</span><span>Muita compra</span></div>
+        <div class="destaque">${leitura}</div>
+      </div>
+    </div>`;
+  $('fbola').addEventListener('click', e => { const b = $('fbalao'); b.hidden = !b.hidden; e.currentTarget.setAttribute('aria-expanded', !b.hidden); });
+  FOLHAS.forca = () => ['Como calculamos a força', `
+    <p>A força é o <b>IFR (RSI) de 14 dias</b>: compara o tamanho das altas com o das quedas nos últimos 14 pregões, numa escala de 0 a 100.</p>
+    <ul><li><b>Até 30:</b> sobrevendida (muita venda).</li><li><b>De 30 a 70:</b> neutra (equilíbrio).</li><li><b>Acima de 70:</b> sobrecomprada (muita compra).</li></ul>
+    <code>IFR = 100 − 100 ÷ (1 + média das altas ÷ média das quedas)</code>
+    <p>Valor de hoje: <b>${d.forca}</b>.</p>${fonteHtml(d)}`];
+}
+
+function MinMaxMidpoint(el, { ticker }) {
+  const d = DADOS[ticker];
+  const bloco = (id, titulo, min, max, periodo) => {
+    if (min == null || max == null) return `<div class="card"><strong>${titulo}</strong><div class="nota" style="margin-top:6px">Dados indisponíveis</div></div>`;
+    const meio = Math.floor((min + max) / 2 * 100 + 1e-6) / 100, dif = d.preco - meio, p = posicaoNaFaixa(d.preco, min, max);
+    FOLHAS[id] = () => [`Ponto médio · ${titulo.toLowerCase()}`, `
+      <p>O ponto médio é a metade do caminho entre a mínima e a máxima reais do período.</p>
+      <code>(${f(min)} + ${f(max)}) ÷ 2 = ${f(meio)}</code>
+      <p>Preço agora: <b>${din(d, d.preco)}</b>, ou <b>${din(d, Math.abs(dif))} ${dif >= 0 ? 'acima' : 'abaixo'}</b> do ponto médio.</p>${fonteHtml(d)}`];
+    return `<div class="card">
+      <div class="cab"><strong>${titulo}</strong><button class="link" data-folha="${id}">Ver como calculamos</button></div>
+      <div class="trio num"><div><span>Mín.</span><b>${f(min)}</b></div><div><span>Máx.</span><b>${f(max)}</b></div><div><span>Agora</span><b>${f(d.preco)}</b></div></div>
+      <div class="nota num" style="margin-top:8px">Ponto médio: <b>${f(meio)}</b></div>
+      <div class="regua" style="background:var(--ardosia);margin-top:18px"><span class="traco" style="left:50%"></span><span class="bola" style="left:${p}%"></span></div>
+      <div class="leg"><span style="--c:var(--azul)">Preço atual</span><span style="--c:var(--texto)">Ponto médio</span></div>
+      <div class="destaque num">Você está ${din(d, Math.abs(dif))} ${dif >= 0 ? 'acima' : 'abaixo'} do ponto médio</div>
+      <div class="nota">Preço na metade mais ${dif >= 0 ? 'cara' : 'barata'} do range de ${periodo}</div>
+    </div>`;
+  };
+  el.innerHTML = `<h2>Mínimo, máximo e ponto médio</h2><div class="sub">Valores em ${d.moeda}</div>
+    <div class="pilha">${bloco('mm12', 'Últimos 12 meses', d.min52, d.max52, '12 meses')}${bloco('mm30', 'Últimos 30 dias', d.min30, d.max30, '30 dias')}</div>`;
+}
+
+function Fundamentals(el, { ticker }) {
+  const d = DADOS[ticker], dy = d.dividendo / d.preco * 100;
+  const difPL = (d.pl / d.plMedio12 - 1) * 100, difLPA = (d.lpa / d.lpa12Atras - 1) * 100;
+  const selo = (dif, menorMelhor) => Math.abs(dif) < 5 ? ['neutro', '⚠️ Neutro'] : ((dif < 0) === menorMelhor ? ['bom', '✅ Favorável'] : ['ruim', '❌ Desfavorável']);
+  const [cPL, tPL] = selo(difPL, true), [cL, tL] = selo(difLPA, false);
+  const naoPagadora = dy < 0.5;
+  const [cD, tD] = naoPagadora ? ['neutro', 'Não é pagadora de dividendos'] : selo(d.dyDiferenca, false);
+  const frasePL = difPL < -5 ? 'A ação está mais barata em relação ao lucro do que na média do último ano.'
+    : difPL > 5 ? 'A ação está mais cara em relação ao lucro do que na média do último ano.' : 'O preço em relação ao lucro está perto da média do último ano.';
+  el.innerHTML = `<h2>Fundamentos</h2>
+    <details class="acord" open><summary>Fundamentos: os 3 critérios, um a um</summary><div class="dentro">
+      <div class="card crit">
+        <div class="topo-c"><span class="nome">Preço vs Lucro (P/L)</span><span class="st ${cPL}">${tPL}</span></div>
+        <div class="vals num"><div><span>Atual</span><b>${f(d.pl)}</b></div><div><span>Média 12m</span><b>${f(d.plMedio12)}</b></div><div><span>Diferença</span><b style="color:${difPL < 0 ? 'var(--verde)' : 'var(--vermelho)'}">${sinal(difPL)}</b></div></div>
+        <p>Você paga ${din(d, d.pl)} para cada ${d.moeda} 1 de lucro que a empresa gera. Há 12 meses, pagava ${din(d, d.plMedio12)}. ${frasePL}</p>
+        <button class="link" data-folha="f-pl">Ver como calculamos</button>
+      </div>
+      <div class="card crit">
+        <div class="topo-c"><span class="nome">Dividendos</span><span class="st ${cD}">${tD}</span></div>
+        <div class="lista-v num">
+          <div>Dividendo por ação / ano<b>${din(d, d.dividendo)}</b></div>
+          <div>DY atual<b>${f(dy)}%</b></div>
+          <div>DY média 12m<b>${f(d.dyMedio12)}%</b></div>
+          <div>Diferença<b>${sinal(d.dyDiferenca, 0)}</b></div>
+        </div>
+        <div class="exemplo num">Se você investir ${d.moeda} 10.000 hoje, recebe ${din(d, 10000 * d.dividendo / d.preco)} por ano de dividendo.</div>
+        <p>${naoPagadora
+          ? `A ${d.ticker} quase não paga dividendo. Ela pega quase todo o lucro e reinveste na própria empresa, em fábricas e chips de IA. Não é um problema, é o perfil da empresa. Ela é para quem busca crescimento, não renda.`
+          : 'O rendimento dos dividendos é comparado com a média do último ano.'}</p>
+        <button class="link" data-folha="f-dy">Ver como calculamos</button>
+      </div>
+      <div class="card crit">
+        <div class="topo-c"><span class="nome">Crescimento de Lucro (LPA)</span><span class="st ${cL}">${tL}</span></div>
+        <div class="vals num"><div><span>Atual</span><b>${din(d, d.lpa)}</b></div><div><span>12m atrás</span><b>${din(d, d.lpa12Atras)}</b></div><div><span>Diferença</span><b style="color:${cor(difLPA)}">${sinal(difLPA, 0)}</b></div></div>
+        <p>O lucro por ação ${difLPA >= 0 ? 'cresceu' : 'caiu'} de ${din(d, d.lpa12Atras)} para ${din(d, d.lpa)} em relação a 12 meses atrás. Base: últimos 4 trimestres.</p>
+        <button class="link" data-folha="f-lpa">Ver como calculamos</button>
+      </div>
+    </div></details>`;
+  FOLHAS['f-pl'] = () => ['Preço vs Lucro (P/L)', `<p>P/L = Preço ÷ Lucro por ação.</p><code>${f(d.preco)} ÷ ${f(d.lpa)} = ${f(d.pl)}</code>
+    <p>Diferença para a média de 12 meses:</p><code>(${f(d.pl)} − ${f(d.plMedio12)}) ÷ ${f(d.plMedio12)} = ${sinal(difPL)}</code>${fonteHtml(d)}`];
+  FOLHAS['f-dy'] = () => ['Dividendos (DY)', `<p>DY = Dividendo anual por ação ÷ Preço atual.</p><code>${f(d.dividendo)} ÷ ${f(d.preco)} = ${f(dy)}%</code>
+    <p>Em ${d.moeda} 10.000 investidos:</p><code>10.000 × ${f(d.dividendo)} ÷ ${f(d.preco)} = ${din(d, 10000 * d.dividendo / d.preco)} por ano</code>
+    <p>Com DY abaixo de 0,5% a empresa é tratada como não pagadora de dividendos, e o critério não conta contra ela.</p>${fonteHtml(d)}`];
+  FOLHAS['f-lpa'] = () => ['Crescimento de Lucro (LPA)', `<p>LPA = Lucro líquido ÷ Número de ações.</p><code>Lucro ÷ ${f(d.acoes / 1e9)} bi = ${f(d.lpa)}</code>
+    <p>Crescimento em 12 meses:</p><code>(${f(d.lpa)} − ${f(d.lpa12Atras)}) ÷ ${f(d.lpa12Atras)} = ${sinal(difLPA, 0)}</code>${fonteHtml(d)}`];
+}
+
+function FairPrice(el, { ticker }) {
+  const d = DADOS[ticker], dy = d.dividendo / d.preco * 100;
+  const piso = Math.min(d.graham, d.justoPL), teto = Math.max(d.graham, d.justoPL), divergem = teto / piso > 2;
+  const a = piso * 0.6, b = teto * 1.12, pos = v => (v - a) / (b - a) * 100;
+  const dentro = d.preco >= piso && d.preco <= teto, pertoPiso = d.preco - piso < teto - d.preco;
+  const ondeEsta = dentro ? `está dentro dessa faixa, mas mais perto do ${pertoPiso ? 'piso' : 'teto'}` : d.preco < piso ? 'está abaixo dessa faixa' : 'está acima dessa faixa';
+  const t0 = v => f(Math.round(v), 0);
+  el.innerHTML = `<h2>Preço justo <small>referência</small></h2>
+    <div class="pilha">
+      <div class="card">
+        <span class="rot">Faixa justa estimada</span>
+        <div class="num" style="font-size:22px;font-weight:700;margin-top:4px">${d.moeda} ${t0(piso)} a ${d.moeda} ${t0(teto)}</div>
+        <div class="regua" style="background:var(--ardosia);margin-top:22px">
+          <span class="traco" style="left:${pos(d.graham)}%"></span><span class="traco" style="left:${pos(d.justoPL)}%"></span><span class="bola" style="left:${pos(d.preco)}%"></span>
+        </div>
+        <div class="pontas tres num"><span>Graham ${t0(d.graham)}</span><span>Preço ${t0(d.preco)}</span><span>P/L hist. ${t0(d.justoPL)}</span></div>
+        <p class="nota" style="margin:12px 0 10px">Pelo Graham, o justo seria ${d.moeda} ${t0(d.graham)}. Pelo P/L histórico, ${d.moeda} ${t0(d.justoPL)}. O preço atual de ${d.moeda} ${t0(d.preco)} ${ondeEsta}.</p>
+        <button class="link" data-folha="justo">Ver como calculamos</button>
+      </div>
+      <div class="card">
+        <span class="st neutro">${divergem ? 'Sem preço justo confiável' : 'Faixa justa consistente'}</span>
+        <p class="nota" style="margin:10px 0 0">${divergem
+          ? `Os métodos divergem demais (de ${d.moeda} ${t0(piso)} a ${d.moeda} ${t0(teto)}). Por isso, o Fintai não usa preço justo como decisão. Usamos faixa de preço, tendência e fundamentos.`
+          : 'Os métodos apontam para valores próximos, então a faixa serve como referência.'}</p>
+      </div>
+      <details class="acord"><summary>Ver todos os métodos</summary><div class="dentro">
+        <div class="card"><span class="rot">Preço-Teto Bazin · Não se aplica</span>
+          <p class="nota" style="margin:8px 0 10px">${dy < 0.5
+            ? `A ${d.ticker} quase não paga dividendo, então o preço-teto Bazin de ${din(d, d.bazin)} não é uma referência válida. Ignoramos esse método para essa ação.`
+            : `Preço-teto Bazin: ${din(d, d.bazin)}.`}</p>
+          <div class="nota num" style="margin:0 0 10px">Dividendo médio 5 anos ${f(d.divMedio5)} / 6% = ${f(d.bazin)}</div>
+          <button class="link" data-folha="bazin">Ver como calculamos</button></div>
+      </div></details>
+    </div>`;
+  FOLHAS.justo = () => ['Faixa justa estimada', `
+    <p><b>Graham</b></p><code>√(22,5 × LPA ${f(d.lpa)} × VPA ${f(d.vpa)}) = ${f(d.graham)}</code>
+    <p><b>P/L histórico</b></p><code>P/L médio histórico ${f(d.plHistorico)} × LPA ${f(d.lpa)} = ${f(d.justoPL)}</code>
+    <p>O P/L médio histórico (${f(d.plHistorico)}) cobre vários anos; não é o P/L médio de 12 meses (${f(d.plMedio12)}).</p>
+    <p>Quando um método dá mais que o dobro do outro, mostramos a faixa e não um número único.</p>${fonteHtml(d)}`];
+  FOLHAS.bazin = () => ['Preço-Teto Bazin', `
+    <code>Dividendo médio 5 anos ${f(d.divMedio5)} ÷ 6% = ${f(d.bazin)}</code>
+    <p>O <b>${din(d, d.divMedio5)}</b> é a <b>média de 5 anos, não o anual</b>. O dividendo anual atual é <b>${din(d, d.dividendo)}</b>.</p>
+    <p>O método foi feito para empresas que distribuem boa parte do lucro. Com dividendo tão baixo ele quebra: o preço atual fica muito acima do teto, sem que isso diga algo sobre a empresa.</p>${fonteHtml(d)}`];
+}
+
+function Indicators(el, { ticker }) {
+  const d = DADOS[ticker], dy = d.dividendo / d.preco * 100, difPL = (d.pl / d.plMedio12 - 1) * 100, bi = f(d.acoes / 1e9);
+  const por10k = din(d, 10000 * d.dividendo / d.preco);
+  const cartoes = [
+    ['P/L atual', f(d.pl), `${sinal(difPL)} vs. média de 12m`, `Você paga ${din(d, d.pl)} para cada ${d.moeda} 1 de lucro. Conta: ${f(d.preco)} / ${f(d.lpa)} = ${f(d.pl)}`],
+    ['P/L médio 12 meses', f(d.plMedio12), 'com o LPA de cada trimestre', 'Média do P/L dos últimos 4 trimestres.'],
+    ['LPA básico', din(d, d.lpa), 'últimos 12 meses', `Lucro por ação. Cada ação ganhou ${din(d, d.lpa)} em 12 meses. Conta: Lucro / ${bi} bi de ações`],
+    ['Dividendo anual', din(d, d.dividendo), 'pago em 12 meses', `O que pingou na sua conta por ação em 12 meses. Se investir ${d.moeda} 10.000, recebe ${por10k} / ano.`],
+    ['Dividend yield', `${f(dy)}%`, `${f(d.dividendo)} / ${f(d.preco)}`, `Quanto o dividendo representa sobre o preço. ${f(d.dividendo)} / ${f(d.preco)} = ${f(dy)}%. É baixo porque a ${d.ticker} reinveste o lucro, não porque está com problema.`],
+    ['Ações em circulação', `${bi} bi`, 'quantos pedaços a empresa foi dividida', `A ${d.ticker} foi fatiada em ${bi} bilhão de ações.`],
+  ];
+  el.innerHTML = `<h2>Indicadores</h2>
+    <div class="sub">Dados de ${d.data} · Fonte: ${d.fonte} · <button class="link" data-folha="ind">Ver como calculamos</button></div>
+    <div class="grade2">${cartoes.map(([r, v, s, dica]) => `<button class="ind" aria-expanded="false"><span class="rot">${r}</span><span class="v num">${v}</span><span class="s num">${s}</span><span class="dica">${dica}</span></button>`).join('')}</div>`;
+  el.querySelectorAll('.ind').forEach(b => b.addEventListener('click', () => {
+    const abrir = b.getAttribute('aria-expanded') !== 'true';
+    el.querySelectorAll('.ind').forEach(o => o.setAttribute('aria-expanded', 'false')); b.setAttribute('aria-expanded', abrir);
+  }));
+  FOLHAS.ind = () => ['Como calculamos os indicadores', `
+    <p><b>P/L atual</b></p><code>${f(d.preco)} ÷ ${f(d.lpa)} = ${f(d.pl)}</code>
+    <p><b>Dividend yield</b></p><code>${f(d.dividendo)} ÷ ${f(d.preco)} = ${f(dy)}%</code>
+    <p><b>LPA básico</b></p><code>Lucro líquido de 12 meses ÷ ${bi} bi de ações = ${f(d.lpa)}</code>
+    <p><b>P/L médio 12 meses:</b> média do P/L dos últimos 4 trimestres, cada um com o LPA divulgado na época.</p>
+    <p>Toque em um cartão para ver a explicação dele.</p>${fonteHtml(d)}`];
+}
+
+function TotalReturn(el, { ticker, dividendReinvest = true, benchmark }) {
+  const d = DADOS[ticker], dy = d.dividendo / d.preco * 100;
+  let reinveste = dividendReinvest, comp = benchmark || d.comparadorPadrao, dicaAberta = false;
+  const virou = (moeda, v) => `${moeda} ${f(Math.round(10000 * (1 + v / 100) / 10) * 10, 0)}`;
+  function render() {
+    const c = d.comparadores[comp], vals = reinveste ? d.retorno.total : d.retorno.preco;
+    const fmtAcao = v => (reinveste ? sinal(v, 0) : sinal(v, 1)), teto = 1000;
+    const texto = dy < 0.5
+      ? (reinveste ? `Quase nenhuma diferença. A ${d.ticker} paga só ${din(d, d.dividendo)} por ação / ano. Reinvestir ou não, muda menos de 0,2% no seu retorno em 5 anos.`
+                   : `Você recebeu ${din(d, d.divMedio5 * 5)} em 5 anos por ação em dividendos, em dinheiro, e não recomprou.`)
+      : (reinveste ? `Grande diferença. Reinvestir os dividendos faz seu retorno subir de ${sinal(d.retorno.preco[2], 0)} para ${sinal(d.retorno.total[2], 0)} em 5 anos, porque você compra mais ações com o dividendo.`
+                   : 'Você recebeu o dividendo em dinheiro e não recomprou. Perdeu o efeito bola de neve.');
+    const outraMoeda = c.moeda !== d.moeda;
+    const linhas = d.retorno.periodos.map((p, i) => {
+      if (c.v[i] == null) return `<div><b>Retorno acumulado: ${fmtAcao(vals[i])} em ${p}</b><br>${c.nome}: Dados indisponíveis</div>`;
+      const dif = vals[i] - c.v[i], casas = Number.isInteger(Math.round(dif * 10) / 10) ? 0 : 1;
+      return `<div><b>Retorno acumulado: ${fmtAcao(vals[i])} em ${p}</b>${reinveste ? '' : ' (só preço, exemplo)'}<br>
+        ${c.nome}: ${pctFlex(c.v[i])} em ${p} | Diferença: <span class="dif ${dif < 0 ? 'neg' : ''}">${dif >= 0 ? '+' : '-'}${f(Math.abs(dif), casas)} pontos ${dif >= 0 ? 'acima' : 'abaixo'} ${c.artigo}</span>${i === 0 ? '<button class="q" id="qpp" aria-label="O que são pontos percentuais?">?</button>' : ''}
+        ${i === 0 && dicaAberta ? `<span class="dica-q">p.p. = pontos percentuais. É só a conta: ${f(vals[0], reinveste ? 0 : 1)}% - ${f(c.v[0], Number.isInteger(c.v[0]) ? 0 : 1)}% = ${f(Math.abs(dif), casas)} pontos. Não é ${f(Math.abs(dif), casas)}%.</span>` : ''}<br>
+        Se você tivesse investido ${c.moeda} 10.000: ${d.ticker}${outraMoeda ? ` (em ${d.moeda})` : ''} virou ${virou(d.moeda, vals[i])} | ${c.curto} virou ${virou(c.moeda, c.v[i])}</div>`;
+    }).join('');
+    el.innerHTML = `<h2>Retorno acumulado</h2><div class="sub">com dividendos, comparado ao índice</div>
+      <div class="toggle" role="group" aria-label="Reinvestimento de dividendos">
+        <button data-r="1" aria-pressed="${reinveste}">Reinvestindo dividendos</button><button data-r="0" aria-pressed="${!reinveste}">Sem reinvestir</button>
+      </div>
+      <p class="nota" style="margin:10px 2px 0">${texto}</p>
+      <div class="chips" role="group" aria-label="Comparador">${Object.entries(d.comparadores).map(([k, o]) => `<button data-c="${k}" aria-pressed="${k === comp}">${o.nome}</button>`).join('')}</div>
+      <div class="barras">
+        <div class="grade-y">${[0, 200, 400, 600, 800, 1000].map(v => `<div style="bottom:${v / teto * 100}%"><span>${v}%</span></div>`).join('')}</div>
+        <div class="cols">${d.retorno.periodos.map((p, i) => `<div class="col">
+          <div class="b acao" style="height:${Math.min(100, vals[i] / teto * 100)}%"><i class="num">${fmtAcao(vals[i])}</i></div>
+          <div class="b idx" style="height:${c.v[i] == null ? 0 : Math.min(100, Math.max(0, c.v[i]) / teto * 100)}%"><i class="num">${c.v[i] == null ? '—' : pctFlex(c.v[i])}</i></div>
+          <em>${p}</em></div>`).join('')}</div>
+      </div>
+      <div class="leg" style="margin:8px 0 12px"><span style="--c:var(--verde)">${d.ticker}</span><span style="--c:var(--ardosia)">${c.nome}</span></div>
+      ${outraMoeda ? `<div class="aviso" style="margin-bottom:10px">Comparação com ${c.nome} é em moedas diferentes. Para comparar certo, converta o dólar ou use o comparador S&amp;P 500.</div>` : ''}
+      <div class="card resumo num">${linhas}</div>
+      <p class="nota" style="margin:12px 2px 0">Por que 3 anos (${sinal(d.retorno.total[1], 0)}) rendeu mais que 5 anos (${sinal(d.retorno.total[2], 0)})? Porque de 5 anos atrás até 3 anos atrás, a ${d.ticker} ficou quase parada. Todo o foguete foi nos últimos 3 anos, com a IA. Retorno passado não garante retorno futuro.</p>
+      <p class="nota" style="margin:8px 2px 0">Dados até ${d.data} · <button class="link" data-folha="retorno">Ver como calculamos</button></p>`;
+    el.querySelectorAll('[data-r]').forEach(b => b.addEventListener('click', () => { reinveste = b.dataset.r === '1'; render(); }));
+    el.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => { comp = b.dataset.c; render(); const a = el.querySelector(`[data-c="${comp}"]`); a && a.scrollIntoView({ block: 'nearest', inline: 'center' }); }));
+    const q = $('qpp'); q && q.addEventListener('click', () => { dicaAberta = !dicaAberta; render(); });
+  }
+  FOLHAS.retorno = () => ['Retorno acumulado', `
+    <p><b>Reinvestindo dividendos (Total Return)</b></p><code>(Preço final + Dividendos reinvestidos) ÷ Preço inicial − 1</code>
+    <p><b>Sem reinvestir (Price Return)</b></p><code>Preço final ÷ Preço inicial − 1</code>
+    <p><b>Conta de 1 ano</b></p><code>Retorno total com dividendos: (${f(d.preco)} + ${f(d.dividendo)}) / ${f(d.preco1AnoAtras)} - 1 = ${f(((d.preco + d.dividendo) / d.preco1AnoAtras - 1) * 100)}% = ${f(d.retorno.total[0], 0)}% arredondado</code>
+    <p>Preço em ${d.data1AnoAtras}: <b>${din(d, d.preco1AnoAtras)}</b>. Preço em ${d.data}: <b>${din(d, d.preco)}</b>. Diferença de ${f(d.dividendo / d.preco1AnoAtras * 100)} ponto vs o gráfico é o dividendo de ${din(d, d.dividendo)}.</p>
+    <p>Os retornos de "Sem reinvestir" neste protótipo são exemplos.</p>
+    <p>A barra verde usa o primeiro cálculo quando o reinvestimento está ligado e o segundo quando está desligado. Os dois ficam sempre disponíveis.</p>
+    <p><b>Diferença em pontos:</b> retorno da ação menos retorno do comparador.</p>
+    <p>Comparadores brasileiros (Ibovespa, CDI, Selic, IPCA, Poupança) estão em reais e não são convertidos.</p>${fonteHtml(d)}`];
+  render();
+}
+
+function Backtest(el, { ticker, windowYears = 5 }) {
+  const d = DADOS[ticker], z = zonas(d);
+  function render(expandido) {
+    const b = d.backtest[expandido ? 'max' : '5a'], ref = b.referencia;
+    const okC = seloBacktest('compra', b.oportunidade, ref), okV = seloBacktest('venda', b.cara, ref);
+    const virou = v => `${d.moeda} ${f(10000 * (1 + v / 100), 0)}`;
+    const selo = ok => `<span class="selo ${ok ? 'ok' : 'nao'}">${ok ? 'SINAL VALIDADO ✅' : 'SINAL INVALIDADO ❌'}</span>`;
+    const cols = (s, rot) => `<div class="vals num"><div><span>Vezes</span><b>${s.vezes}</b></div><div><span>Retorno 12m</span><b>${sinal(s.retorno, 0)}</b></div><div><span>${rot}</span><b>${s.acerto}%</b></div></div>`;
+    const conclusaoC = okC
+      ? (ref ? `Comprar na Zona de Oportunidade deu ${f(b.oportunidade.retorno / ref.retorno, 1)}x mais retorno que comprar em uma semana qualquer.`
+             : `Comprar na Zona de Oportunidade rendeu em média ${sinal(b.oportunidade.retorno, 0)} em 12 meses.`)
+      : `Comprar na Zona de Oportunidade não rendeu mais do que comprar em uma semana qualquer. NÃO use esse sinal para comprar ${d.ticker}.`;
+    const conclusaoV = okV
+      ? `Depois de entrar na Zona Cara, a ação caiu em ${b.cara.acerto}% das vezes. Vender aqui evitou perdas.`
+      : `Quem vendeu porque estava na Zona Cara, perdeu alta. NÃO use esse sinal para vender ${d.ticker}.`;
+    const dinheiroV = okV
+      ? `${d.moeda} 10.000 virava ${virou(b.cara.retorno)} em média em 12 meses para quem ficou.`
+      : `Quem comprou mesmo na Zona Cara, ainda ganhou em média ${sinal(b.cara.retorno, 0)} em 12 meses. Vender aqui não evitou queda.`;
+    el.innerHTML = `<h2>Os sinais funcionaram no passado? <small>${expandido ? 'teste com todo o histórico' : `teste com até ${windowYears} anos de histórico`}</small></h2>
+      ${expandido ? '<div class="aviso" style="margin-bottom:10px">Backtest expandido para todo o histórico</div>' : ''}
+      <div class="pilha">
+        <div class="card bt">
+          <div class="cab"><strong>Comprar na Zona de Oportunidade</strong>${selo(okC)}</div>
+          ${cols(b.oportunidade, 'Subiu em')}
+          <p>${conclusaoC}</p>
+          <p>${d.moeda} 10.000 virava ${virou(b.oportunidade.retorno)} em média em 12 meses, quando comprava na Zona de Oportunidade.</p>
+        </div>
+        <div class="card bt">
+          <div class="cab"><strong>Preço na Zona Cara</strong>${selo(okV)}</div>
+          ${cols(b.cara, 'Caiu em')}
+          <p>${conclusaoV}</p>
+          <p>${dinheiroV}</p>
+        </div>
+      </div>
+      <p class="nota" style="margin:12px 2px">${ref
+        ? `<b>Referência:</b> comprar em uma semana qualquer rendeu em média ${sinal(ref.retorno, 0)} em 12 meses (subiu em ${ref.subiu}% das vezes) nos últimos ${windowYears} anos. Teste com ${f(b.anos, 1)} anos de histórico, semana a semana, usando só os dados disponíveis em cada data. Retornos com dividendos. Resultado passado não garante resultado futuro.`
+        : '<b>Referência:</b> dados indisponíveis para todo o histórico neste protótipo. Resultado passado não garante resultado futuro.'}
+        <span class="tag-proto">números de protótipo</span></p>
+      <details class="acord"><summary>Como os números são calculados</summary><div class="dentro">
+        <div class="nota">
+          <p style="margin:0 0 8px"><b>Janela:</b> ${expandido ? 'todo o histórico disponível' : `últimos ${windowYears} anos`}, semana a semana.</p>
+          <p style="margin:0 0 8px"><b>Zona de Oportunidade</b> = até ${din(d, z.oportunidade)} hoje (faixa inferior das 52 semanas). <b>Zona Cara</b> = acima de ${din(d, z.cara)} hoje (faixa superior). Em cada semana do passado, as faixas são recalculadas só com os dados que existiam até aquela data, sem olhar o futuro.</p>
+          <p style="margin:0 0 8px"><b>Retorno 12M</b> = (valor 12 meses depois, com dividendos reinvestidos) ÷ (valor na semana do sinal) − 1.</p>
+          <p style="margin:0 0 8px"><b>Sinal validado:</b> acertou em mais de 60% das vezes e rendeu melhor do que a referência (comprar em uma semana qualquer).</p>
+          <p style="margin:0">Um sinal invalidado nunca entra na decisão do topo da tela.</p>
+        </div>
+      </div></details>`;
+  }
+  render(false);
+  return { expandir: render };
+}
+
+/* ------------------------------------------------------------ montagem da tela */
+const TICKER = 'MU';
+DecisionCard($('decisao'), { ticker: TICKER });
+const backtest = Backtest($('backtest'), { ticker: TICKER, windowYears: 5 });
+StockChart($('grafico'), { ticker: TICKER, aoTrocarEscala: k => backtest.expandir(k === 'max') });
+PriceRange($('faixa'), { ticker: TICKER });
+TrendStrength($('tendencia'), { ticker: TICKER });
+MinMaxMidpoint($('minmax'), { ticker: TICKER });
+Fundamentals($('fundamentos'), { ticker: TICKER });
+FairPrice($('justo'), { ticker: TICKER });
+Indicators($('indicadores'), { ticker: TICKER });
+TotalReturn($('retorno'), { ticker: TICKER, dividendReinvest: true, benchmark: 'sp500' });
+
+$('fav').addEventListener('click', e => {
+  const b = e.currentTarget, on = b.getAttribute('aria-pressed') !== 'true';
+  b.setAttribute('aria-pressed', on); b.querySelector('svg').style.fill = on ? '#f2c94c' : 'none';
+});
+</script>
+
+</body>
+</html>

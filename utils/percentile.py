@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 P_OPORTUNIDADE = 30  # zona de oportunidade: até este percentil
-P_COMPRA = 35        # o estado COMPRAR exige preço até este percentil
+P_COMPRA = 30        # o estado COMPRAR exige preço na zona de oportunidade
 P_CARO = 70          # zona cara: a partir deste percentil
 
 
