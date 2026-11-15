@@ -115,13 +115,17 @@ def pacote() -> dict:
                             preco=PRECO, tendencia=direcao)
 
     pl = PRECO / LPA
-    lpa_anos = [(2024, 0.70), (2025, 8.29), (2026, LPA)]
-    receitas = [(2024, 25.11e9), (2025, 37.38e9), (2026, 98.20e9)]
+    # Lucro e receita por ano fiscal: sem os valores reais, ficam vazios ("Sem dado").
+    # Preencha aqui quando tiver os números: [(2024, lpa), (2025, lpa), (2026, lpa)]
+    lpa_anos: list[tuple[int, float]] = []
+    receitas: list[tuple[int, float]] = []
     regra = regra_prejuizo([v for _, v in lpa_anos])
     lucro_pass, anos_lucro = crescimento_anual(lpa_anos)
     rec_pass, anos_rec = crescimento_anual(receitas)
+    # Estimativas do Yahoo: valores de EXEMPLO, marcados na tela, até entrarem os reais
     lucro_longo, receita_prox, lpa_este_ano = 35.0, 28.4, 96.50
     peg_futuro = peg(pl, lucro_longo)
+    arred = lambda v, casas=2: None if v is None else round(v, casas)
 
     comp = lambda nome, curto, artigo, moeda, v: {"nome": nome, "curto": curto, "artigo": artigo, "moeda": moeda, "v": v}
     um_ano = series["1a"]
@@ -133,13 +137,15 @@ def pacote() -> dict:
         "min52": MIN52, "max52": MAX52, "min30": MIN30, "max30": MAX30,
         "mm200": MM200, "tendencia": direcao, "forca": 42,
         "lpaAnos": [{"ano": a, "lpa": v} for a, v in lpa_anos],
-        "regra": {"status": regra["status"], "media": round(regra["media"], 4), "mensagem": regra["mensagem"]},
+        "regra": {"status": regra["status"], "media": arred(regra["media"], 4), "mensagem": regra["mensagem"]},
+        # o que é exemplo meu, e não dado passado pelo dono do app, aparece marcado na tela
+        "exemplos": {"lynchFuturo": True, "simons": True, "backtestMax": True},
         "lynch": {
-            "passado": {"lucro": round(lucro_pass, 2), "anosLucro": anos_lucro,
-                        "receita": round(rec_pass, 2), "anosReceita": anos_rec},
+            "passado": {"lucro": arred(lucro_pass), "anosLucro": anos_lucro,
+                        "receita": arred(rec_pass), "anosReceita": anos_rec},
             "futuro": {"lucroLongo": lucro_longo, "receitaProx": receita_prox, "lpaEsteAno": lpa_este_ano},
-            "pegFuturo": round(peg_futuro, 4), "pegYahoo": 0.31,
-            "lucroTrimestre": 612.0, "receitaTrimestre": 168.0,
+            "pegFuturo": round(peg_futuro, 4), "pegYahoo": None,
+            "lucroTrimestre": None, "receitaTrimestre": None,
             "veredito": veredito(peg_futuro, receita_prox, regra["status"], lucro_longo),
         },
         "simons": modo_simons(hist),
@@ -152,7 +158,7 @@ def pacote() -> dict:
                     "preco": [228.47, 950.7, 930.3]},
         "preco1AnoAtras": um_ano["c"][0], "data1AnoAtras": "13/11/2025",
         "comparadores": {
-            "nasdaq": comp("Nasdaq", "Nasdaq", "do índice", "US$", [19, 92, 88]),
+            "nasdaq": comp("Nasdaq", "Nasdaq", "do índice", "US$", [None, None, None]),   # sem o valor real ainda
             "sp500": comp("S&P 500", "S&P", "do índice", "US$", [14, 78, 73]),
             "ibov": comp("Ibovespa", "Ibovespa", "do índice", "R$", [18, 45, 62]),
             "cdi": comp("CDI", "CDI", "do CDI", "R$", [14.5, 42, 68]),

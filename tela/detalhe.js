@@ -34,6 +34,7 @@ function montar(root, d) {
   const app = root.querySelector('.app');
   const din = (v, casas = 2) => tem(v) ? `${d.moeda} ${f(v, casas)}` : '—';
   const limpar = [];
+  const ex = chave => (d.exemplos && d.exemplos[chave] ? ' <span class="tag-proto">EXEMPLO</span>' : '');
   const FOLHAS = {};
   const fonte = `<p><b>Fonte:</b> ${d.fonte} · atualizado em ${d.atualizado}.</p>`;
   const zOport = d.zOport, zCara = d.zCara;
@@ -78,15 +79,26 @@ function montar(root, d) {
 
   function renderDecisao() {
     const el = $('decisao');
-    let rotulo, classe = '', texto, pilula = '', selo = null, alerta = '';
+    let rotulo, classe = '', texto, pilula = '', selo = null, alerta = '', extra = '';
     if (modo === 'graham') {
       const e = d.decisao; rotulo = e.rotulo; texto = e.texto; pilula = e.zona; selo = seloGraham;
       classe = e.codigo === 'OPORTUNIDADE' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
       alerta = e.alerta || '';
     } else if (modo === 'lynch') {
-      const v = d.lynch.veredito; rotulo = v.titulo;
-      classe = { verde: 'COMPRAR', amarelo: 'CARO', vermelho: 'VENDER' }[v.cor] || '';
-      texto = tem(d.lynch.pegFuturo) ? `PEG = P/L ${f(d.pl)} / Crescimento ${f(d.lynch.futuro.lucroLongo, 1)}% = ${f(d.lynch.pegFuturo)}. ${v.motivo}` : (v.motivo || 'O passado da empresa aparece abaixo.');
+      const e = d.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
+      classe = e.codigo === 'OPORTUNIDADE' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
+      alerta = e.alerta || '';
+      const zona = { OPORTUNIDADE: 'Zona de Oportunidade', AGUARDAR: 'Zona Neutra', CARO: 'Zona Cara' }[e.codigo];
+      const conclusao = v.cor === 'verde'
+        ? (e.codigo === 'OPORTUNIDADE' ? `Lynch aprova o crescimento e o preço está na Zona de Oportunidade${e.validado ? '.' : ', mas comprar nessa zona não foi validado pelo histórico deste ativo.'}`
+          : `Lynch aprova o crescimento, mas o preço está na ${zona}. Por isso: AGUARDAR.`)
+        : v.cor === 'amarelo' ? `Lynch fica de olho no crescimento, e o preço está na ${zona}.${e.codigo === 'OPORTUNIDADE' ? '' : ' Por isso: AGUARDAR.'}`
+        : v.cor === 'vermelho' ? `Lynch não compra pelo crescimento, qualquer que seja o preço. O preço está na ${zona}.`
+        : `Sem PEG para avaliar o crescimento. O preço está na ${zona}.`;
+      const stV = { verde: 'bom', vermelho: 'ruim' }[v.cor] || 'neutro';
+      extra = `<div class="lynch-linha"><span class="st ${stV}">${v.titulo}</span>${ex('lynchFuturo')}
+        ${tem(d.lynch.pegFuturo) ? `<div class="nota num" style="margin-top:8px">PEG = P/L ${f(d.pl)} / Crescimento ${f(d.lynch.futuro.lucroLongo, 1)}% = ${f(d.lynch.pegFuturo)}</div>` : ''}
+        <div class="destaque">${conclusao}</div></div>`;
     } else {
       const sm = d.simons; rotulo = sm.acao;
       classe = sm.acao === 'MOVIMENTO CURTO' ? 'COMPRAR' : sm.acao === 'OBSERVA' ? 'CARO' : '';
@@ -105,7 +117,8 @@ function montar(root, d) {
       <div class="ponto" id="d-texto"></div>
       ${pilula ? `<span class="pilula">${pilula}</span>` : ''}
       ${alerta ? `<div class="nota" style="margin-top:10px;color:var(--ambar)">${alerta}</div>` : ''}
-      ${selo ? `<div style="margin-top:12px"><span class="selo ${selo[0]}">${selo[1]}</span></div>` : ''}
+      ${selo ? `<div style="margin-top:12px"><span class="selo ${selo[0]}">${selo[1]}</span>${modo === 'simons' ? ex('simons') : ''}</div>` : ''}
+      ${extra}
     </div>`;
     el.firstElementChild.insertBefore(nome, el.firstElementChild.children[1]);
     $('d-rotulo').textContent = rotulo; $('d-texto').textContent = texto;
@@ -150,8 +163,8 @@ function montar(root, d) {
       const X = i => x0 + (x1 - x0) * (n === 1 ? 0 : i / (n - 1));
       ctx.font = '11px Inter, system-ui, sans-serif'; ctx.textBaseline = 'middle';
 
-      // zonas, linhas e rótulos: só no modo Graham
-      if (modo === 'graham') {
+      // zonas, linhas e rótulos: nos modos Graham e Lynch
+      if (modo !== 'simons') {
       ctx.save(); ctx.beginPath(); ctx.rect(x0, yTop - 6, x1 - x0, yPlot - yTop + 6); ctx.clip();
       ctx.fillStyle = '#2fbf8a1c'; ctx.fillRect(x0, Y(zOport), x1 - x0, 4000);
       ctx.fillStyle = '#f06a6a1a'; ctx.fillRect(x0, Y(zCara) - 4000, x1 - x0, 4000);
@@ -163,7 +176,7 @@ function montar(root, d) {
         { y: Y(zCara) + 9, t: `Neutro até ${f(zCara)}`, c: '#aab4c6' },
         { y: Y(zCara) - 9, t: `Caro acima de ${f(zCara)}`, c: '#f06a6a' },
       ];
-      if (justoY !== null) {
+      if (justoY !== null && modo === 'graham') {
         const yj = Y(justoY);
         ctx.setLineDash([6, 5]); ctx.strokeStyle = '#f2994a'; ctx.lineWidth = 1.2;
         ctx.beginPath(); ctx.moveTo(x0, yj); ctx.lineTo(x1, yj); ctx.stroke(); ctx.setLineDash([]);
@@ -234,7 +247,7 @@ function montar(root, d) {
       });
 
       // mini-legenda das zonas
-      if (modo === 'graham') {
+      if (modo !== 'simons') {
       ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.font = '10px Inter, system-ui, sans-serif';
       ctx.fillStyle = '#0e1420cc'; ctx.beginPath(); ctx.roundRect(x0 + 1, yPlot - 43, 84, 42, 7); ctx.fill();
       [['Caro', '#f06a6a'], ['Neutro', '#8c99b0'], ['Oportunidade', '#2fbf8a']].forEach(([t, c], k) => {
@@ -602,7 +615,10 @@ function montar(root, d) {
   (function TotalReturn(el) {
     const idx = d.retorno.periodos.map((_, i) => i).filter(i => tem(d.retorno.total[i]));
     if (!idx.length) { el.innerHTML = `<h2>Retorno acumulado</h2><div class="card nota">Histórico curto demais para calcular retornos.</div>`; return; }
-    let reinveste = true, comp = d.comparadores[d.comparadorPadrao] ? d.comparadorPadrao : Object.keys(d.comparadores)[0], dicaAberta = false;
+    const comDado = k => d.comparadores[k] && d.comparadores[k].v.some(tem);
+    // abre no comparador da bolsa da ação; se ele não tiver dado, no primeiro que tiver
+    let reinveste = true, dicaAberta = false,
+      comp = comDado(d.comparadorPadrao) ? d.comparadorPadrao : (Object.keys(d.comparadores).find(comDado) || Object.keys(d.comparadores)[0]);
     const virou = (moeda, v) => `${moeda} ${f(Math.round(10000 * (1 + v / 100) / 10) * 10, 0)}`;
     const ult = idx[idx.length - 1], pUlt = d.retorno.periodos[ult];
     function render() {
@@ -720,7 +736,7 @@ function montar(root, d) {
           <div class="card bt"><div class="cab"><strong>Preço na Zona Cara</strong>${selo(c, b.vendaValidada)}</div>
             ${cols(c, 'Caiu em')}<p>${venda[0]}</p><p>${venda[1]}</p></div>
         </div>
-        <p class="nota" style="margin:12px 2px"><b>Referência:</b> comprar em uma semana qualquer rendeu em média ${sinal(ref.retorno, 0)} em 12 meses (subiu em ${f(ref.subiu, 0)}% das vezes) ${periodo}. Teste com ${f(b.anos, 1)} anos de histórico, semana a semana, usando só os dados disponíveis em cada data. Retornos com dividendos. Resultado passado não garante resultado futuro.</p>
+        <p class="nota" style="margin:12px 2px"><b>Referência:</b> comprar em uma semana qualquer rendeu em média ${sinal(ref.retorno, 0)} em 12 meses (subiu em ${f(ref.subiu, 0)}% das vezes) ${periodo}. Teste com ${f(b.anos, 1)} anos de histórico, semana a semana, usando só os dados disponíveis em cada data. Retornos com dividendos. Resultado passado não garante resultado futuro.${expandido ? ex('backtestMax') : ''}</p>
         <details class="acord"><summary>Como os números são calculados</summary><div class="dentro"><div class="nota">
           <p style="margin:0 0 8px"><b>Janela:</b> ${expandido ? 'todo o histórico disponível' : 'últimos 5 anos'}, semana a semana. Entram as semanas que já têm 12 meses de resultado.</p>
           <p style="margin:0 0 8px"><b>Zona de Oportunidade</b> = até ${din(zOport)} hoje (faixa inferior das 52 semanas). <b>Zona Cara</b> = acima de ${din(zCara)} hoje (faixa superior). Em cada semana do passado, as faixas são recalculadas só com os dados que existiam até aquela data, sem olhar o futuro.</p>
@@ -770,9 +786,9 @@ function montar(root, d) {
             ${lpas ? `<div class="lista-v num">${lpas}${media}</div>` : `<div class="nota" style="margin-top:8px">Sem dado</div>`}
             ${rg.status === 'excluido' ? '<div class="destaque">Ano de prejuízo excluído</div>' : ''}
             ${rg.status === 'recorrente' ? '<div class="destaque" style="color:var(--vermelho)">Sem PEG - Lynch não compra empresa sem lucro</div>' : ''}
-            <div class="lista-v num" style="margin-bottom:0"><div>Lucro<b>${pc(L.passado.lucro)}</b></div><div>Receita<b>${pc(L.passado.receita)}</b></div></div>
+            <div class="lista-v num" style="margin-bottom:0"><div>Lucro${L.passado.anosLucro ? ` (em ${L.passado.anosLucro} ${L.passado.anosLucro === 1 ? 'ano' : 'anos'})` : ''}<b>${pc(L.passado.lucro)}</b></div><div>Receita${L.passado.anosReceita ? ` (em ${L.passado.anosReceita} ${L.passado.anosReceita === 1 ? 'ano' : 'anos'})` : ''}<b>${pc(L.passado.receita)}</b></div></div>
           </div>
-          <div class="card"><span class="rot">Futuro</span><div class="nota">O que o Yahoo fornece de estimativa</div>
+          <div class="card"><span class="rot">Futuro</span>${ex('lynchFuturo')}<div class="nota">O que o Yahoo fornece de estimativa</div>
             ${semEstimativa ? '<div class="destaque">Sem PEG - Sem estimativa no Yahoo para este ativo</div>' : ''}
             ${fut('Lucro - Longo prazo', tem(F.lucroLongo) ? `${sinal(F.lucroLongo, 1)} ao ano` : 'Sem dado', 'Estimativa longo prazo Yahoo')}
             ${fut('Receita - Próximo ano fiscal', tem(F.receitaProx) ? sinal(F.receitaProx, 1) : 'Sem dado', 'Próximo ano fiscal Yahoo')}
@@ -780,7 +796,7 @@ function montar(root, d) {
           </div>
         </div>
         <div class="card" style="margin-top:10px;border-left:3px solid ${corV}">
-          <div class="cab"><span class="rot">PEG do Futuro</span><span class="st ${stV}">${v.titulo}</span></div>
+          <div class="cab"><span class="rot">PEG do Futuro${ex('lynchFuturo')}</span><span class="st ${stV}">${v.titulo}</span></div>
           <div class="num" style="font-size:26px;font-weight:700;margin:6px 0 2px;color:${corV}">${tem(L.pegFuturo) ? f(L.pegFuturo) : '—'}</div>
           <div class="nota num">${tem(L.pegFuturo) ? `PEG = P/L ${f(d.pl)} / Crescimento ${f(F.lucroLongo, 1)}% = ${f(L.pegFuturo)}` : 'PEG do Futuro = P/L dividido pelo Crescimento Longo Prazo do Lucro'}</div>
           ${v.motivo ? `<div class="destaque">${v.motivo}</div>` : ''}
@@ -792,7 +808,7 @@ function montar(root, d) {
       const dias = `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'}`;
       el.innerHTML = `<h2>Movimento curto <small>últimos 10 dias</small></h2>
         <div class="card">
-          <div class="nota num" style="margin-bottom:10px">Janela: últimos ${sm.pregoes} dias - de ${sm.janelaDe} a ${sm.janelaAte}</div>
+          <div class="nota num" style="margin-bottom:10px">${ex('simons') ? ex('simons') + ' ' : ''}Janela: últimos ${sm.pregoes} dias - de ${sm.janelaDe} a ${sm.janelaAte}</div>
           <div class="lista-v num" style="margin:0">
           <div>Hoje<b>${dias} de queda seguidos</b></div>
           <div>Queda nos ${dias}<b>${sm.dias ? sinal(sm.queda) : '—'}</b></div>
