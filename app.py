@@ -16,12 +16,15 @@ import calculos
 import tela.dados
 import utils.benchmarks
 import utils.formato
+import utils.lynch
 import utils.percentile
 import utils.signals
+import utils.simons
 
 # O Streamlit Cloud pode manter versões antigas dos módulos na memória depois de uma
 # atualização; recarregar (na ordem das dependências) mantém tudo na mesma versão.
-for _modulo in (utils.formato, utils.percentile, utils.signals, utils.benchmarks, calculos, tela.dados):
+for _modulo in (utils.formato, utils.percentile, utils.signals, utils.benchmarks, utils.lynch,
+                utils.simons, calculos, tela.dados):
     importlib.reload(_modulo)
 
 from calculos import calcular, normalizar_ticker, retorno_periodo
@@ -81,7 +84,8 @@ def baixar(ticker: str) -> dict:
     hist = tk.history(period="max", interval="1d", auto_adjust=False)
     if hist is None or hist.empty:
         raise ValueError(f"Não encontrei dados para {ticker}. Confira o código.")
-    d = {"hist": hist, "info": {}, "lpa_tri": None, "lucro_tri": None, "lpa_anual": None, "intraday": {}}
+    d = {"hist": hist, "info": {}, "lpa_tri": None, "lucro_tri": None, "lpa_anual": None, "intraday": {},
+         "receita_anual": None, "est_lucro": None, "est_receita": None, "est_cresc": None}
 
     def tentar(funcao):
         try:
@@ -93,6 +97,11 @@ def baixar(ticker: str) -> dict:
     d["lpa_tri"] = tentar(lambda: tk.get_earnings_dates(limit=28)["Reported EPS"].dropna())
     d["lucro_tri"] = tentar(lambda: _linha(tk.quarterly_income_stmt, ["Net Income", "Net Income Common Stockholders"]))
     d["lpa_anual"] = tentar(lambda: _linha(tk.income_stmt, ["Basic EPS", "Diluted EPS"]))
+    d["receita_anual"] = tentar(lambda: _linha(tk.income_stmt, ["Total Revenue", "Operating Revenue"]))
+    # estimativas dos analistas (modo Lynch)
+    d["est_lucro"] = tentar(lambda: tk.earnings_estimate)
+    d["est_receita"] = tentar(lambda: tk.revenue_estimate)
+    d["est_cresc"] = tentar(lambda: tk.growth_estimates)
     for chave, periodo, intervalo in (("hoje", "1d", "5m"), ("1s", "5d", "30m"), ("1m", "1mo", "60m")):
         d["intraday"][chave] = tentar(lambda: tk.history(period=periodo, interval=intervalo, auto_adjust=False))
     return d
@@ -281,6 +290,5 @@ for aba, t in zip(abas, tickers):
         except Exception as e:
             st.error(f"{t}: {e}")
 
-st.markdown("<div class='rodape'>Dados do Yahoo Finance e do Banco Central, com possível atraso. "
-            "Ferramenta de estudo, não é recomendação de investimento.</div>",
+st.markdown("<div class='rodape'>Ferramenta de estudo, não é recomendação de investimento.</div>",
             unsafe_allow_html=True)

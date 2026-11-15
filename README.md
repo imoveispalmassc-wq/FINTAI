@@ -18,6 +18,8 @@ e comparação com o índice.
   como componente do Streamlit.
 - `utils/percentile.py`: posição do preço na faixa de 52 semanas e zonas de preço.
 - `utils/signals.py`: decisão de estado, selo do teste histórico, backtest de 5 anos.
+- `utils/lynch.py`: regra de prejuízo em 3 anos (modos Graham e Lynch), crescimento e PEG do futuro.
+- `utils/simons.py`: sequência de quedas e régua fixa do modo Simons.
 - `utils/benchmarks.py`: CDI, Selic, IPCA e Poupança pelo SGS do Banco Central.
 - `calculos.py`: médias, tendência, P/L médio, dividendos e preço justo.
 - `prototipos/fintai-micron.html`: protótipo da tela com dados de exemplo (Micron).

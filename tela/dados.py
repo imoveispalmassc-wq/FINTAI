@@ -11,8 +11,11 @@ import pandas as pd
 
 from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, pl_medio_12m,
                       pl_medio_longo, preco_justo_graham, preco_teto_bazin)
+from utils.lynch import crescimento_anual, peg, regra_prejuizo, veredito
 from utils.signals import (backtest_percentil, decidir_estado, fundamento_quebrou,
                            selo_backtest)
+from utils.simons import SELO as SELO_SIMONS
+from utils.simons import leitura, sequencia_de_quedas
 
 SIMBOLO = {"BRL": "R$", "USD": "US$", "EUR": "€", "GBP": "£"}
 ROTULO_PERIODOS = ["1 ano", "3 anos", "5 anos"]
@@ -68,6 +71,7 @@ def series_do_grafico(hist: pd.DataFrame, intraday: dict) -> dict:
     cinco = cinco_d.resample("W-FRI").agg(regra).dropna(subset=["Close"])
     tudo = h.resample("MS").agg(regra).dropna(subset=["Close"])
     return {
+        "10d": _serie(h.tail(11), "dia", "em 10 dias", soPreco=True),
         "hoje": _serie(intraday.get("hoje"), "hora", "no dia", base=anterior),
         "1s": _serie(intraday.get("1s"), "dia", "em 7 dias"),
         "1m": _serie(intraday.get("1m"), "dia", "em 30 dias"),
@@ -113,6 +117,59 @@ def fundamentos(d: dict, r: Resultado) -> dict:
     )
 
 
+def _pontos_anuais(serie) -> list[tuple[int, float]]:
+    """Série anual do Yahoo -> [(ano, valor)], do mais antigo ao mais novo (até 4 anos)."""
+    if serie is None or not len(serie):
+        return []
+    s = serie.dropna().sort_index()
+    return [(int(ts.year), float(v)) for ts, v in s.items()][-4:]
+
+
+def _estimativa(df, linhas, coluna):
+    """Crescimento estimado pelos analistas (fração no Yahoo -> %). Devolve (valor, linha usada)."""
+    if df is None or getattr(df, "empty", True) or coluna not in df.columns:
+        return None, None
+    for linha in linhas:
+        if linha in df.index:
+            v = _n(df.loc[linha, coluna])
+            if v is not None:
+                return v * 100, linha
+    return None, None
+
+
+def modo_lynch(d: dict, pl, regra: dict) -> dict:
+    """Passado (demonstrativos anuais), futuro (estimativas de analistas no Yahoo) e PEG do futuro."""
+    info = d["info"]
+    lpas, receitas = _pontos_anuais(d.get("lpa_anual")), _pontos_anuais(d.get("receita_anual"))
+    lucro_pass, anos_lucro = (None, 0) if regra["status"] == "recorrente" else \
+        crescimento_anual(lpas, excluir_negativos=regra["status"] == "excluido")
+    rec_pass, anos_rec = crescimento_anual(receitas)
+    lucro_fut, base_lucro = _estimativa(d.get("est_cresc"), ["LTG"], "stockTrend")
+    if lucro_fut is None:
+        lucro_fut, base_lucro = _estimativa(d.get("est_lucro"), ["+1y"], "growth")
+    rec_fut, base_rec = _estimativa(d.get("est_receita"), ["+1y"], "growth")
+    rotulo = {"LTG": "longo prazo, ao ano", "+1y": "próximo ano fiscal"}
+    peg_futuro = None if regra["status"] == "recorrente" else peg(pl, lucro_fut)
+    receita = rec_fut if rec_fut is not None else rec_pass
+    fracao = lambda chave: None if info.get(chave) is None else _n(info[chave] * 100, 2)
+    return {
+        "passado": {"lucro": _n(lucro_pass, 2), "anosLucro": anos_lucro,
+                    "receita": _n(rec_pass, 2), "anosReceita": anos_rec},
+        "futuro": {"lucro": _n(lucro_fut, 2), "baseLucro": rotulo.get(base_lucro, ""),
+                   "receita": _n(rec_fut, 2), "baseReceita": rotulo.get(base_rec, "")},
+        "pegFuturo": _n(peg_futuro, 4),
+        "pegYahoo": _n(info.get("trailingPegRatio") or info.get("pegRatio"), 4),
+        "lucroTrimestre": fracao("earningsGrowth"), "receitaTrimestre": fracao("revenueGrowth"),
+        "veredito": veredito(peg_futuro, receita, regra["status"], lucro_fut),
+    }
+
+
+def modo_simons(hist: pd.DataFrame) -> dict:
+    fech = _sem_fuso(hist)["Close"].dropna()
+    dias, queda = sequencia_de_quedas(fech)
+    return {"dias": dias, "queda": _n(queda, 2), **leitura(dias), "selo": SELO_SIMONS}
+
+
 def _backtest(hist, anos, nome):
     try:
         b = backtest_percentil(hist, anos)
@@ -143,12 +200,16 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
 
     bt5, btmax = _backtest(hist, 5, curto), _backtest(hist, None, curto)
     quebrou, motivo = fundamento_quebrou(f["lucros"], f["dl_ebitda"])
+    # direção da tendência: só a posição do preço em relação à média de 200 dias
+    direcao = "—" if r.mm200 is None else ("Alta" if r.preco_atual > r.mm200 else "Baixa")
+    lpa_anos = _pontos_anuais(d.get("lpa_anual"))[-3:]
+    regra = regra_prejuizo([v for _, v in lpa_anos])
     estado = decidir_estado(
         r.percentil, r.minimo_1a, r.maximo_1a,
         compra_validada=bool(bt5 and bt5["compraValidada"]),
         venda_validada=bool(bt5 and bt5["vendaValidada"]),
         quebrou=quebrou, motivo_quebra=motivo, simbolo=moeda,
-        preco=r.preco_atual, tendencia=r.tendencia)
+        preco=r.preco_atual, tendencia=direcao)
 
     after = None
     if info.get("postMarketPrice") and info.get("postMarketChangePercent") is not None:
@@ -173,7 +234,11 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "preco": _n(r.preco_atual, 4), "varDia": _n(r.variacao_dia, 2), "after": after,
         "min52": _n(r.minimo_1a, 4), "max52": _n(r.maximo_1a, 4),
         "min30": _n(r.minimo_30d, 4), "max30": _n(r.maximo_30d, 4),
-        "mm200": _n(r.mm200, 4), "tendencia": r.tendencia, "forca": _n(r.ifr, 0),
+        "mm200": _n(r.mm200, 4), "tendencia": direcao, "forca": _n(r.ifr, 0),
+        "lpaAnos": [{"ano": a, "lpa": _n(v, 4)} for a, v in lpa_anos],
+        "regra": {"status": regra["status"], "media": _n(regra["media"], 4), "mensagem": regra["mensagem"]},
+        "lynch": modo_lynch(d, f["pl"], regra),
+        "simons": modo_simons(hist),
         "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "plMetodo": f["metodo"],
         "lpa": _n(f["lpa"], 4), "lpaAgora": _n(f["lpa_agora"], 4), "lpa12Atras": _n(f["lpa_antes"], 4),
         "baseLpa": f["base_lpa"],

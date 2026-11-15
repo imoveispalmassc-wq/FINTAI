@@ -61,28 +61,60 @@ function montar(root, d) {
   /* ---------------- topo e decisão */
   $('t-nome').textContent = d.nome;
   $('t-bolsa').textContent = d.bolsa ? `${d.bolsa} (${d.ticker})` : d.ticker;
-  (function DecisionCard(el) {
-    const e = d.decisao;
+  let modo = 'graham';
+  try { modo = sessionStorage.getItem('fintai-modo') || 'graham'; } catch (e) { /* sem armazenamento */ }
+  if (!['graham', 'lynch', 'simons'].includes(modo)) modo = 'graham';
+  let aoMudarModo = () => {};
+  const TEXTO_MODO = {
+    graham: 'Modo longo prazo. Para segurar por anos. Pode demorar anos até comprar.',
+    lynch: 'Modo longo prazo. Para quem entende a empresa e o crescimento. Não é para movimento curto.',
+    simons: 'Modo movimento curto. Para aproveitar repique de 1 a 5 dias. Não é para segurar anos.',
+  };
+  // selo do modo Graham: vem do teste real das zonas em 5 anos
+  const bt5 = d.backtest['5a'];
+  const seloGraham = !bt5 ? ['sem', 'SEM TESTE - Histórico curto para 5 anos']
+    : !bt5.oportunidade.vezes ? ['sem', 'SEM CASOS - Preço não esteve na Zona de Oportunidade em 5 anos']
+    : bt5.compraValidada ? ['ok', 'VALIDADO - Ganhou do buy-and-hold em 5 anos']
+    : bt5.oportunidade.retorno < bt5.referencia.retorno ? ['nao', 'INVALIDADO - Perdeu pro buy-and-hold em 5 anos']
+    : ['nao', 'INVALIDADO - Não ganhou do buy-and-hold em 5 anos'];
+
+  function renderDecisao() {
+    const el = $('decisao');
+    let rotulo, classe = '', texto, pilula = '', selo = null;
+    if (modo === 'graham') {
+      const e = d.decisao; rotulo = e.rotulo; classe = e.codigo; texto = e.texto; pilula = e.zona; selo = seloGraham;
+    } else if (modo === 'lynch') {
+      const v = d.lynch.veredito; rotulo = v.titulo;
+      classe = { verde: 'COMPRAR', amarelo: 'CARO', vermelho: 'VENDER' }[v.cor] || '';
+      texto = (tem(d.lynch.pegFuturo) ? `PEG do Futuro: ${f(d.lynch.pegFuturo)}. ` : '') + v.motivo;
+    } else {
+      const sm = d.simons; rotulo = sm.acao;
+      classe = sm.acao === 'MOVIMENTO CURTO' ? 'COMPRAR' : sm.acao === 'OBSERVA' ? 'CARO' : '';
+      texto = sm.dias ? `Hoje: ${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda seguidos, ${sinal(sm.queda)} acumulado. ${sm.detalhe}.`
+        : 'Sem queda no último pregão. Nada a fazer no movimento curto.';
+      selo = ['sem', sm.selo];
+    }
     const nome = document.createElement('div'); nome.className = 'razao'; nome.textContent = `${d.razao} · ${d.ticker}`;
     el.innerHTML = `<div class="decisao">
       <div class="meta">Último pregão ${d.data} · ${d.codMoeda} · ${d.fonte}</div>
       <div class="linha"><span class="preco num">${din(d.preco)}</span>
         ${tem(d.varDia) ? `<span class="var num" style="color:${cor(d.varDia)}">${seta(d.varDia)} ${sinal(d.varDia)} no dia</span>` : ''}</div>
       ${d.after ? `<div class="after num" style="color:${cor(d.after.variacao)}">After Market: ${din(d.after.preco)} ${seta(d.after.variacao)} ${sinal(d.after.variacao)}${d.after.hora ? ` | ${d.after.hora}` : ''}</div>` : ''}
-      <div><span class="badge ${e.codigo}">${e.rotulo}</span></div>
+      <div><span class="badge ${classe}" id="d-rotulo"></span></div>
       <div class="ponto" id="d-texto"></div>
-      <span class="pilula">${e.zona}</span>
+      ${pilula ? `<span class="pilula">${pilula}</span>` : ''}
+      ${selo ? `<div style="margin-top:12px"><span class="selo ${selo[0]}">${selo[1]}</span></div>` : ''}
     </div>`;
     el.firstElementChild.prepend(nome);
-    $('d-texto').textContent = e.texto;
-  })($('decisao'));
+    $('d-rotulo').textContent = rotulo; $('d-texto').textContent = texto;
+  }
 
   /* ---------------- gráfico */
   let backtest;
   (function StockChart(el) {
-    const ESCALAS = [['hoje', 'Hoje'], ['1s', '1S'], ['1m', '1M'], ['1a', '1A'], ['5a', '5A'], ['max', 'Máx.']];
+    const ESCALAS = [['10d', '10D'], ['hoje', 'Hoje'], ['1s', '1S'], ['1m', '1M'], ['1a', '1A'], ['5a', '5A'], ['max', 'Máx.']];
     const series = d.series;
-    let escala = series['1a'] ? '1a' : (ESCALAS.find(([k]) => series[k]) || [null])[0];
+    let escala = series['1a'] ? '1a' : (ESCALAS.find(([k]) => k !== '10d' && series[k]) || [null])[0];
     if (!escala) { el.innerHTML = `<div class="aviso">${INDISP}</div>`; return; }
     let velas = false, prog = 1, toque = null, toqueY = 0, raf = 0;
     // média dos valores arredondados que a tela mostra: (452 + 1.661) / 2 = 1.056,5 -> 1.057
@@ -116,7 +148,8 @@ function montar(root, d) {
       const X = i => x0 + (x1 - x0) * (n === 1 ? 0 : i / (n - 1));
       ctx.font = '11px Inter, system-ui, sans-serif'; ctx.textBaseline = 'middle';
 
-      // zonas ao fundo
+      // zonas, linhas e rótulos: só no modo Graham
+      if (modo === 'graham') {
       ctx.save(); ctx.beginPath(); ctx.rect(x0, yTop - 6, x1 - x0, yPlot - yTop + 6); ctx.clip();
       ctx.fillStyle = '#2fbf8a1c'; ctx.fillRect(x0, Y(zOport), x1 - x0, 4000);
       ctx.fillStyle = '#f06a6a1a'; ctx.fillRect(x0, Y(zCara) - 4000, x1 - x0, 4000);
@@ -141,6 +174,7 @@ function montar(root, d) {
       rotulos.forEach(r => { ctx.fillStyle = r.c; ctx.fillText(r.t, r.y > yPlot - 48 ? x0 + 92 : x0 + 6, r.y); });
       ctx.font = '11px Inter, system-ui, sans-serif';
       ctx.restore();
+      }
 
       // eixo Y
       const yPreco = Y(d.preco);
@@ -195,12 +229,30 @@ function montar(root, d) {
       });
 
       // mini-legenda das zonas
+      if (modo === 'graham') {
       ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.font = '10px Inter, system-ui, sans-serif';
       ctx.fillStyle = '#0e1420cc'; ctx.beginPath(); ctx.roundRect(x0 + 1, yPlot - 43, 84, 42, 7); ctx.fill();
       [['Caro', '#f06a6a'], ['Neutro', '#8c99b0'], ['Oportunidade', '#2fbf8a']].forEach(([t, c], k) => {
         const y = yPlot - 34 + k * 12; ctx.fillStyle = c; ctx.fillRect(x0 + 6, y - 3, 6, 6);
         ctx.fillStyle = css('--suave'); ctx.fillText(t, x0 + 16, y);
       });
+      }
+
+      // modo Simons: dias de queda marcados, contador e termômetro
+      if (modo === 'simons' && escala === '10d') {
+        const sm = d.simons;
+        ctx.fillStyle = css('--vermelho');
+        for (let k = 0; k < sm.dias && k < n; k++) { const i = n - 1 - k; ctx.beginPath(); ctx.arc(X(i), Y(s.c[i]), 4, 0, 7); ctx.fill(); }
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '600 11px Inter, system-ui, sans-serif';
+        const rot = `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda`, lw = ctx.measureText(rot).width;
+        ctx.fillStyle = '#0e1420cc'; ctx.beginPath(); ctx.roundRect(x0 + 44, 8, lw + 96, 26, 8); ctx.fill();
+        ctx.fillStyle = css('--texto'); ctx.fillText(rot, x0 + 52, 21);
+        for (let k = 0; k < 5; k++) {
+          ctx.beginPath(); ctx.arc(x0 + 66 + lw + k * 14, 21, 4.5, 0, 7);
+          if (k < sm.nivel) { ctx.fillStyle = css('--azul'); ctx.fill(); }
+          ctx.strokeStyle = css('--azul'); ctx.lineWidth = 1.5; ctx.stroke();
+        }
+      }
 
       // toque: cursor e balão com a variação
       if (toque !== null) {
@@ -215,7 +267,7 @@ function montar(root, d) {
         ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(txt, bx + bw2 / 2, by + 11.5);
       }
       // toque perto da linha laranja: explica de onde ela vem
-      if (toque !== null && justoY !== null && Math.abs(toqueY - Y(justoY)) < 16) {
+      if (modo === 'graham' && toque !== null && justoY !== null && Math.abs(toqueY - Y(justoY)) < 16) {
         const l1 = `Média de ${metodosJusto.map(m => `${m[0]} ${f(Math.round(m[1]), 0)}`).join(' e ')}.`;
         const l2 = justoDivergem ? 'Divergência grande, não usar como alvo.' : 'Não validado por teste histórico, não usar como alvo.';
         ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.textAlign = 'left';
@@ -259,6 +311,13 @@ function montar(root, d) {
       <p>Na escala "Hoje", a variação é em relação ao fechamento do pregão anterior.</p>
       <p>O retorno com dividendos fica na seção Retorno acumulado.</p>${fonte}`];
     legenda(); desenhar();
+    aoMudarModo = () => {
+      const b10 = el.querySelector('[data-e="10d"]');
+      if (b10) b10.hidden = modo !== 'simons' || !series['10d'];
+      if (modo === 'simons' && series['10d']) trocar('10d');
+      else if (escala === '10d') trocar('1a');
+      else desenhar();
+    };
   })($('grafico'));
 
   /* ---------------- faixa de preço */
@@ -288,25 +347,25 @@ function montar(root, d) {
     const leitura = !tem(d.forca) ? '' : d.forca >= 70 ? 'Sobrecomprada. Subiu rápido demais, pode corrigir.'
       : d.forca <= 30 ? 'Sobrevendida. Caiu rápido demais, pode repicar.' : 'Neutra. Sem pressão de compra nem de venda.';
     const fundo = 'linear-gradient(90deg,var(--verde) 0 30%,var(--ardosia) 30% 70%,var(--ambar) 70% 100%)';
-    // Força da tendência: distância do preço para a média de 200 dias, numa régua de -10% a +15%
-    const LIM_FORTE = 5, RMIN = -10, RMAX = 15, pt = v => (v - RMIN) / (RMAX - RMIN) * 100;
-    const fundoT = `linear-gradient(90deg,var(--vermelho) 0 ${pt(0)}%,var(--ardosia) ${pt(0)}% ${pt(LIM_FORTE)}%,var(--verde) ${pt(LIM_FORTE)}% 100%)`;
+    // Força da tendência: distância do preço para a média de 200 dias, numa régua de -10% a +20%
+    const FRACA = 3, FORTE = 10, RMIN = -10, RMAX = 20, pt = v => (v - RMIN) / (RMAX - RMIN) * 100;
+    const fundoT = `linear-gradient(90deg,var(--vermelho) 0 ${pt(0)}%,var(--ambar) ${pt(0)}% ${pt(FRACA)}%,var(--ardosia) ${pt(FRACA)}% ${pt(FORTE)}%,var(--verde) ${pt(FORTE)}% 100%)`;
     let textoT = '';
     if (tem(dist)) {
       const cair = (d.preco - d.mm200) / d.preco * 100, subir = (d.mm200 / d.preco - 1) * 100;
+      const grau = dist > FORTE ? 'forte' : dist >= FRACA ? 'média' : 'fraca';
       textoT = dist < 0 ? `Perdeu força. A ${f(Math.abs(dist))}% abaixo da média de 200d. Precisa subir ${f(subir, 1)}% para voltar acima dela.`
-        : dist <= LIM_FORTE ? `${d.tendencia === 'Alta' ? 'Alta fraca' : 'Neutra'}. A ${f(dist)}% acima da média de 200d. Se cair ${f(cair, 1)}% perde a tendência.`
-        : `Forte. A ${f(dist)}% acima da média de 200d. Teria de cair ${f(cair, 1)}% para perder a tendência.`;
+        : `Alta ${grau}. A ${f(dist)}% acima da média de 200d. Se cair ${f(cair, 1)}% perde a tendência.`;
     }
     const barraT = !tem(dist) ? '' : `<div class="card">
-          <strong>Força da tendência</strong>
+          <span class="rot">Força da tendência</span>
           <div class="regua" style="background:${fundoT}"><span class="bola" style="left:${Math.max(0, Math.min(100, pt(dist)))}%"></span></div>
-          <div class="pontas tres"><span>Perdeu força</span><span>Neutra</span><span>Forte</span></div>
+          <div class="leg"><span style="--c:var(--vermelho)">Perdeu força</span><span style="--c:var(--ambar)">Fraca</span><span style="--c:var(--ardosia)">Média</span><span style="--c:var(--verde)">Forte</span></div>
           <div class="destaque num">${textoT}</div>
         </div>`;
     el.innerHTML = `<h2>Tendência e força</h2>
       <div class="pilha">
-        <div class="card duas"><div class="esq"><span class="rot">Tendência</span><small>média de 200 dias</small></div><div class="dir" style="color:${corT}">${tem(d.mm200) ? d.tendencia : '—'}</div></div>
+        <div class="card duas"><div class="esq"><span class="rot">Direção da tendência</span><small>${!tem(d.mm200) ? INDISP : d.tendencia === 'Alta' ? 'preço acima da média de 200 dias' : 'preço abaixo da média de 200 dias'}</small></div><div class="dir" style="color:${corT}">${tem(d.mm200) ? d.tendencia : '—'}</div></div>
         ${barraT}
         <div class="card duas"><div class="esq"><span class="rot">Média de 200 dias</span><small class="num">${tem(dist) ? `preço ${sinal(dist)} da média` : INDISP}</small></div><div class="dir num">${din(d.mm200)}</div></div>
         <div class="card forca">
@@ -326,8 +385,8 @@ function montar(root, d) {
       <ul><li><b>Até 30:</b> sobrevendida (muita venda).</li><li><b>De 30 a 70:</b> neutra (equilíbrio).</li><li><b>Acima de 70:</b> sobrecomprada (muita compra).</li></ul>
       <code>IFR = 100 − 100 ÷ (1 + média das altas ÷ média das quedas)</code>
       ${tem(d.forca) ? `<p>Valor de hoje: <b>${f(d.forca, 0)}</b>.</p>` : ''}
-      <p><b>Tendência:</b> Alta quando a média de 200 dias sobe e o preço está acima dela; Baixa quando cai e o preço está abaixo; senão Lateral.</p>
-      <p><b>Força da tendência:</b> distância do preço para a média de 200 dias. Abaixo da média: perdeu força. De 0% a +5%: neutra. Mais de +5%: forte.</p>
+      <p><b>Direção da tendência:</b> Alta com o preço acima da média de 200 dias; Baixa com o preço abaixo.</p>
+      <p><b>Força da tendência:</b> distância do preço até a média de 200 dias. Abaixo da média: perdeu força. De 0% a 3% acima: fraca. De 3% a 10%: média. Mais de 10%: forte.</p>
       ${tem(d.mm200) ? `<code>(${f(d.preco)} − ${f(d.mm200)}) ÷ ${f(d.mm200)} = ${sinal((d.preco / d.mm200 - 1) * 100)}</code>` : ''}${fonte}`];
   })($('tendencia'));
 
@@ -658,6 +717,80 @@ function montar(root, d) {
     render(false);
     return render;
   })($('backtest'));
+
+  /* ---------------- bloco de cada modo */
+  function renderBloco() {
+    const el = $('modo-bloco');
+    if (modo === 'graham') {
+      const rg = d.regra, anos = d.lpaAnos;
+      const linhas = anos.map(a => `<div>${a.ano}<b style="color:${a.lpa < 0 ? 'var(--vermelho)' : 'inherit'}">${din(a.lpa)}</b></div>`).join('');
+      const destaque = rg.status === 'ok' ? `Média de ${anos.length} ${anos.length === 1 ? 'ano' : 'anos'}: ${din(rg.media)}`
+        : rg.status === 'excluido' ? 'Ano de prejuízo excluído' : rg.status === 'recorrente' ? rg.mensagem : INDISP;
+      const nota = rg.status === 'excluido' ? `Média dos anos com lucro: ${din(rg.media)}.`
+        : rg.status === 'recorrente' ? 'Dois ou mais anos de prejuízo nos últimos 3 anos.'
+        : rg.status === 'ok' ? 'Nenhum ano de prejuízo nos últimos 3 anos.' : 'O Yahoo Finance não traz o lucro anual deste ativo.';
+      el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos</small></h2>
+        <div class="card">${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}</div>` : ''}
+          <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
+          <div class="nota">${nota}</div></div>`;
+    } else if (modo === 'lynch') {
+      const L = d.lynch, v = L.veredito, pc = x => tem(x) ? `${sinal(x, 1)} ao ano` : INDISP;
+      const corV = { verde: 'var(--verde)', amarelo: 'var(--ambar)', vermelho: 'var(--vermelho)' }[v.cor] || 'var(--suave)';
+      const stV = { verde: 'bom', vermelho: 'ruim' }[v.cor] || 'neutro';
+      const mini = (r, val) => `<div class="ind"><span class="rot">${r}</span><span class="v num" style="font-size:18px">${val}</span></div>`;
+      el.innerHTML = `<h2>Crescimento <small>passado x futuro</small></h2>
+        <div class="grade2">
+          ${mini('P/L', tem(d.pl) ? f(d.pl) : '—')}${mini('PEG (Yahoo)', tem(L.pegYahoo) ? f(L.pegYahoo) : '—')}
+          ${mini('Receita no trimestre', tem(L.receitaTrimestre) ? sinal(L.receitaTrimestre, 1) : '—')}${mini('Lucro no trimestre', tem(L.lucroTrimestre) ? sinal(L.lucroTrimestre, 1) : '—')}
+        </div>
+        <div class="nota" style="margin:6px 2px 12px">Trimestre mais recente contra o mesmo trimestre do ano anterior.</div>
+        <div class="duas-col">
+          <div class="card"><span class="rot">Passado</span><div class="nota">Últimos ${Math.max(L.passado.anosLucro, L.passado.anosReceita) || 3} anos</div>
+            <div class="lista-v num"><div>Lucro<b>${pc(L.passado.lucro)}</b></div><div>Receita<b>${pc(L.passado.receita)}</b></div></div></div>
+          <div class="card"><span class="rot">Futuro</span><div class="nota">Estimativa dos analistas</div>
+            <div class="lista-v num"><div>Lucro<b>${pc(L.futuro.lucro)}</b></div><div>Receita<b>${pc(L.futuro.receita)}</b></div></div>
+            <div class="nota">${[L.futuro.baseLucro && `Lucro: ${L.futuro.baseLucro}`, L.futuro.baseReceita && `Receita: ${L.futuro.baseReceita}`].filter(Boolean).join(' · ')}</div></div>
+        </div>
+        ${d.regra.status === 'excluido' ? '<div class="nota" style="margin:8px 2px 0">Ano de prejuízo excluído</div>' : ''}
+        <div class="card" style="margin-top:10px;border-left:3px solid ${corV}">
+          <div class="cab"><span class="rot">PEG do Futuro</span><span class="st ${stV}">${v.titulo}</span></div>
+          <div class="num" style="font-size:26px;font-weight:700;margin:6px 0 2px;color:${corV}">${tem(L.pegFuturo) ? f(L.pegFuturo) : '—'}</div>
+          <div class="nota num">${tem(L.pegFuturo) ? `P/L ${f(d.pl)} dividido pelo Crescimento Futuro ${f(L.futuro.lucro, 1)}% ao ano` : 'PEG do Futuro = P/L dividido pelo Crescimento Futuro'}</div>
+          ${v.motivo ? `<div class="destaque">${v.motivo}</div>` : ''}
+        </div>
+        <div class="aviso" style="margin-top:10px">PEG do futuro usa estimativa. Se a empresa não entregar esse crescimento, a tese cai.</div>`;
+    } else {
+      const sm = d.simons, bolas = Array.from({ length: 5 }, (_, k) => `<i class="${k < sm.nivel ? 'on' : ''}"></i>`).join('');
+      const REGUA = [[1, 51, 'Não faz nada'], [2, 54, 'Observa'], [3, 58, 'Movimento curto pequeno'], [4, 61, 'Movimento curto médio'], [5, 64, 'Movimento curto maior']];
+      el.innerHTML = `<h2>Movimento curto <small>últimos 10 dias</small></h2>
+        <div class="card"><div class="lista-v num" style="margin:0">
+          <div>Hoje<b>${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda</b></div>
+          <div>Queda acumulada<b>${sm.dias ? sinal(sm.queda) : '—'}</b></div>
+          <div>Termômetro<b><span class="termo">${bolas}</span> ${sm.nivel} de 5</b></div>
+          <div>Probabilidade de repique amanhã<b>${tem(sm.prob) ? sm.prob + '%' : '—'}</b></div>
+          <div>Ação<b>${sm.acao}</b></div>
+        </div></div>
+        <div class="card" style="margin-top:8px"><span class="rot">Régua fixa</span>
+          <div class="lista-v num" style="margin-bottom:0">${REGUA.map(([n, p, a]) => `<div style="${n === sm.nivel ? 'color:var(--texto);font-weight:700' : ''}">${n} ${n === 1 ? 'dia' : 'dias'}: ${p}%<b style="${n === sm.nivel ? '' : 'color:var(--suave);font-weight:500'}">${a}</b></div>`).join('')}</div></div>
+        <div style="margin-top:10px"><span class="selo sem">${sm.selo}</span></div>
+        <p class="nota" style="margin:10px 2px 0">A probabilidade vem da régua fixa, igual para qualquer ação. Ela ainda não foi testada com o histórico deste ativo.</p>`;
+    }
+  }
+
+  const SECOES = { faixa: ['graham'], tendencia: ['graham', 'lynch', 'simons'], minmax: ['graham', 'simons'],
+    fundamentos: ['graham', 'lynch'], justo: ['graham'], indicadores: ['graham', 'lynch'], retorno: ['graham', 'lynch'], backtest: ['graham'] };
+  function renderModo() {
+    $('modo-texto').textContent = TEXTO_MODO[modo];
+    root.querySelectorAll('.modos button').forEach(b => b.setAttribute('aria-pressed', b.dataset.modo === modo));
+    Object.entries(SECOES).forEach(([id, modos]) => { $(id).hidden = !modos.includes(modo); });
+    renderDecisao(); renderBloco(); aoMudarModo();
+  }
+  root.querySelectorAll('.modos button').forEach(b => { b.onclick = () => {
+    modo = b.dataset.modo;
+    try { sessionStorage.setItem('fintai-modo', modo); } catch (e) { /* sem armazenamento */ }
+    renderModo();
+  }; });
+  renderModo();
 
   return () => limpar.forEach(fn => fn());
 }
