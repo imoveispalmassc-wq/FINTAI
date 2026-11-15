@@ -80,7 +80,7 @@ def fundamento_quebrou(lucros_trimestrais: pd.Series | None,
 # ------------------------------------------------------------ estado
 @dataclass(frozen=True)
 class Estado:
-    codigo: str   # OPORTUNIDADE | AGUARDAR | CARO
+    codigo: str   # COMPRAR | AGUARDAR | CARO
     rotulo: str
     texto: str
     zona: str     # Zona de oportunidade | Zona neutra | Zona cara
@@ -93,37 +93,27 @@ def decidir_estado(percentil: float, minimo: float, maximo: float, *,
                    quebrou: bool = False, motivo_quebra: str = "",
                    simbolo: str = "R$", preco: float | None = None,
                    tendencia: str = "") -> Estado:
-    """Botão do modo Graham, pela posição do preço na faixa de 52 semanas.
+    """Decisão pela posição do preço na faixa de 52 semanas, igual para qualquer ativo.
 
-    - Preço <= Oportunidade (mínima + 25% da amplitude): ZONA DE OPORTUNIDADE, com
-      "VALIDADO" ou "NÃO VALIDADO" conforme o teste histórico deste ativo.
-    - Preço entre Oportunidade e Cara: AGUARDAR - Neutro.
-    - Preço > Cara (máxima - 25% da amplitude): CARO - AGUARDAR.
+    - Preço <= Ponto de oportunidade (mínima + 30% da amplitude): COMPRAR - Oportunidade
+    - Preço entre o Ponto e o Fim da Neutra:                      AGUARDAR - Neutro
+    - Preço > Fim da Neutra (mínima + 70% da amplitude):          CARO - Evitar
 
-    Os textos nunca citam a posição numérica na faixa nem mandam vender.
+    O texto é sempre o ponto de oportunidade calculado para o ativo. Os avisos (zona não
+    validada pelo histórico, fundamento quebrado) vão em `alerta` e não mudam o botão.
+    A posição numérica na faixa nunca aparece no texto.
     """
-    alerta = f"Atenção: {motivo_quebra}." if quebrou and motivo_quebra else ""
     alvo = preco_no_percentil(minimo, maximo, P_OPORTUNIDADE)
-    teto = preco_no_percentil(minimo, maximo, P_CARO)
+    texto = f"Ponto de oportunidade em {simbolo} {num(alvo)}"
+    avisos = [f"Atenção: {motivo_quebra}."] if quebrou and motivo_quebra else []
     if percentil <= P_OPORTUNIDADE:
-        if compra_validada:
-            return Estado("OPORTUNIDADE", "ZONA DE OPORTUNIDADE - VALIDADO",
-                          "Preço na Zona de Oportunidade, e comprar nessa zona foi validado "
-                          "pelo histórico deste ativo.", "Zona de oportunidade", True, alerta)
-        return Estado("OPORTUNIDADE", "ZONA DE OPORTUNIDADE - NÃO VALIDADO",
-                      "Preço na Zona de Oportunidade, mas comprar nessa zona não foi validado "
-                      "pelo histórico deste ativo.", "Zona de oportunidade", False, alerta)
+        if not compra_validada:
+            avisos.append("Comprar nessa zona não foi validado pelo histórico deste ativo.")
+        return Estado("COMPRAR", "COMPRAR - Oportunidade", texto, "Zona de oportunidade",
+                      compra_validada, " ".join(avisos))
     if percentil > P_CARO:
-        return Estado("CARO", "CARO - AGUARDAR",
-                      f"Caro para comprar agora. Volta à Zona Neutra abaixo de {simbolo} {num(teto)}.",
-                      "Zona cara", False, alerta)
-    if preco is None:
-        texto = f"Ponto de oportunidade em {simbolo} {num(alvo)}."
-    else:
-        alta = "Tendência de alta não significa preço barato. " if tendencia == "Alta" else ""
-        texto = (f"Preço {num(preco)} está na Zona Neutra ({num(alvo)} a {num(teto)}). {alta}"
-                 f"Aguardar queda até {num(alvo)} para ter margem.")
-    return Estado("AGUARDAR", "AGUARDAR - Neutro", texto, "Zona neutra", False, alerta)
+        return Estado("CARO", "CARO - Evitar", texto, "Zona cara", False, " ".join(avisos))
+    return Estado("AGUARDAR", "AGUARDAR - Neutro", texto, "Zona neutra", False, " ".join(avisos))
 
 
 # ------------------------------------------------------------ critérios de fundamentos

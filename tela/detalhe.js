@@ -82,17 +82,17 @@ function montar(root, d) {
     let rotulo, classe = '', texto, pilula = '', selo = null, alerta = '', extra = '';
     if (modo === 'graham') {
       const e = d.decisao; rotulo = e.rotulo; texto = e.texto; pilula = e.zona; selo = seloGraham;
-      classe = e.codigo === 'OPORTUNIDADE' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
+      classe = e.codigo === 'COMPRAR' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
       alerta = e.alerta || '';
     } else if (modo === 'lynch') {
       const e = d.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
-      classe = e.codigo === 'OPORTUNIDADE' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
+      classe = e.codigo === 'COMPRAR' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
       alerta = e.alerta || '';
-      const zona = { OPORTUNIDADE: 'Zona de Oportunidade', AGUARDAR: 'Zona Neutra', CARO: 'Zona Cara' }[e.codigo];
+      const zona = { COMPRAR: 'Zona de Oportunidade', AGUARDAR: 'Zona Neutra', CARO: 'Zona Cara' }[e.codigo];
       const conclusao = v.cor === 'verde'
-        ? (e.codigo === 'OPORTUNIDADE' ? `Lynch aprova o crescimento e o preço está na Zona de Oportunidade${e.validado ? '.' : ', mas comprar nessa zona não foi validado pelo histórico deste ativo.'}`
+        ? (e.codigo === 'COMPRAR' ? 'Lynch aprova o crescimento e o preço está na Zona de Oportunidade.'
           : `Lynch aprova o crescimento, mas o preço está na ${zona}. Por isso: AGUARDAR.`)
-        : v.cor === 'amarelo' ? `Lynch fica de olho no crescimento, e o preço está na ${zona}.${e.codigo === 'OPORTUNIDADE' ? '' : ' Por isso: AGUARDAR.'}`
+        : v.cor === 'amarelo' ? `Lynch fica de olho no crescimento, e o preço está na ${zona}.${e.codigo === 'COMPRAR' ? '' : ' Por isso: AGUARDAR.'}`
         : v.cor === 'vermelho' ? `Lynch não compra pelo crescimento, qualquer que seja o preço. O preço está na ${zona}.`
         : `Sem PEG para avaliar o crescimento. O preço está na ${zona}.`;
       const stV = { verde: 'bom', vermelho: 'ruim' }[v.cor] || 'neutro';
@@ -399,15 +399,13 @@ function montar(root, d) {
         <div class="card forca">
           <div class="cab"><div><strong>Força</strong><div class="nota">Últimos 14 dias</div></div><button class="link" data-folha="forca">Ver como calculamos</button></div>
           ${tem(d.forca) ? `<div class="regua" style="background:${fundo}">
-            <span class="balao num" id="fbalao" style="left:${d.forca}%" hidden>${f(d.forca, 0)}</span>
-            <button class="bola" id="fbola" style="left:${d.forca}%" aria-label="Mostrar o valor da força" aria-expanded="false"></button>
+            <span class="balao num" style="left:${d.forca}%">${f(d.forca, 0)}</span>
+            <span class="bola" style="left:${d.forca}%"></span>
           </div>
           <div class="pontas tres"><span>Muita venda</span><span>Equilíbrio</span><span>Muita compra</span></div>
           <div class="destaque">${leitura}</div>` : `<div class="nota" style="margin-top:8px">${INDISP}</div>`}
         </div>
       </div>`;
-    const bola = $('fbola');
-    if (bola) bola.onclick = () => { const b = $('fbalao'); b.hidden = !b.hidden; bola.setAttribute('aria-expanded', !b.hidden); };
     FOLHAS.forca = () => ['Como calculamos a força', `
       <p>A força é o <b>IFR (RSI) de 14 dias</b>: compara o tamanho das altas com o das quedas nos últimos 14 pregões, numa escala de 0 a 100.</p>
       <ul><li><b>Até 30:</b> sobrevendida (muita venda).</li><li><b>De 30 a 70:</b> neutra (equilíbrio).</li><li><b>Acima de 70:</b> sobrecomprada (muita compra).</li></ul>

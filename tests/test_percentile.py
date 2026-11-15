@@ -25,8 +25,8 @@ def test_percentil_faixa_sem_largura():
 
 def test_zonas_csmg3():
     z = zonas(MINIMO, MAXIMO)
-    assert round(z.oportunidade_ate, 2) == 44.96   # mínima + 25% da amplitude
-    assert round(z.cara_acima, 2) == 60.20         # máxima - 25% da amplitude
+    assert round(z.oportunidade_ate, 2) == 46.48   # mínima + 30% da amplitude
+    assert round(z.cara_acima, 2) == 58.68         # mínima + 70% da amplitude
 
 
 def test_preco_no_percentil_e_inverso_do_percentil():
@@ -34,8 +34,8 @@ def test_preco_no_percentil_e_inverso_do_percentil():
     assert preco_no_percentil(MINIMO, MAXIMO, p) == pytest.approx(PRECO)
 
 
-@pytest.mark.parametrize("p,zona", [(0, "Oportunidade"), (25, "Oportunidade"), (26, "Neutra"),
-                                    (58, "Neutra"), (75, "Neutra"), (75.1, "Cara"), (100, "Cara")])
+@pytest.mark.parametrize("p,zona", [(0, "Oportunidade"), (30, "Oportunidade"), (31, "Neutra"),
+                                    (58, "Neutra"), (70, "Neutra"), (70.1, "Cara"), (100, "Cara")])
 def test_nome_da_zona(p, zona):
     assert nome_da_zona(p) == zona
 
@@ -47,3 +47,23 @@ def test_percentil_movel_nao_olha_o_futuro():
     assert p.iloc[2] == 50   # 15 na faixa 10–20
     assert p.iloc[3] == 100  # 30 é a máxima da janela 20,15,30
     assert p.iloc[4] == 0    # 12 é a mínima da janela 15,30,12
+
+
+def test_validacao_da_regra_com_a_faixa_da_mu():
+    """Mínima 192,59 e máxima 1.255,00 têm de dar ponto 511,31 e fim da neutra 936,28."""
+    z = zonas(192.59, 1255.00)
+    assert round(z.oportunidade_ate, 2) == 511.31
+    assert round(z.cara_acima, 2) == 936.28
+
+
+@pytest.mark.parametrize("minimo,maximo", [(192.59, 1255.00), (187.37, 291.24), (29.02, 39.90)])
+def test_ponto_de_oportunidade_muda_com_o_ativo(minimo, maximo):
+    z = zonas(minimo, maximo)
+    assert z.oportunidade_ate == pytest.approx(minimo + 0.30 * (maximo - minimo))
+    assert z.cara_acima == pytest.approx(minimo + 0.70 * (maximo - minimo))
+    assert minimo < z.oportunidade_ate < z.cara_acima < maximo
+
+
+def test_tres_ativos_dao_tres_pontos_diferentes():
+    pontos = {round(zonas(a, b).oportunidade_ate, 2) for a, b in [(192.59, 1255.00), (187.37, 291.24), (29.02, 39.90)]}
+    assert len(pontos) == 3

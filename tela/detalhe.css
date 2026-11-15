@@ -221,3 +221,4 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .fut .duas span { color: var(--suave); font-size: 13px; }
 .fut .duas b { font-size: 14px; text-align: right; }
 .lynch-linha { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--borda); }
+.card.forca .regua { margin-top: 40px; }

@@ -16,29 +16,33 @@ def estado(percentil, **kw):
 
 
 # ------------------------------------------------------------ estado
-def test_csmg3_fica_em_aguardar():
+def test_aguardar_entre_o_ponto_e_o_fim_da_neutra():
     e = estado(percentil_na_faixa(55.15, MINIMO, MAXIMO), compra_validada=True)
     assert (e.codigo, e.rotulo, e.zona) == ("AGUARDAR", "AGUARDAR - Neutro", "Zona neutra")
-    assert e.texto == "Ponto de oportunidade em R$ 44,96."
+    assert e.texto == "Ponto de oportunidade em R$ 46,48"
+    assert estado(31).codigo == "AGUARDAR" and estado(70).codigo == "AGUARDAR"
 
 
-def test_zona_de_oportunidade_diz_se_foi_validada():
-    nao = estado(20, compra_validada=False)
-    assert nao.rotulo == "ZONA DE OPORTUNIDADE - NÃO VALIDADO" and not nao.validado
-    assert nao.texto == ("Preço na Zona de Oportunidade, mas comprar nessa zona não foi validado "
-                         "pelo histórico deste ativo.")
-    sim = estado(25, compra_validada=True)
-    assert sim.rotulo == "ZONA DE OPORTUNIDADE - VALIDADO" and sim.validado
-    assert estado(26, compra_validada=True).codigo == "AGUARDAR"
+def test_comprar_ate_o_ponto_de_oportunidade():
+    sim = estado(30, compra_validada=True)
+    assert (sim.codigo, sim.rotulo, sim.zona) == ("COMPRAR", "COMPRAR - Oportunidade", "Zona de oportunidade")
+    assert sim.validado and sim.alerta == ""
+    nao = estado(10, compra_validada=False)
+    assert nao.codigo == "COMPRAR" and not nao.validado
+    assert nao.alerta == "Comprar nessa zona não foi validado pelo histórico deste ativo."
 
 
-def test_caro_so_acima_do_limite_e_nunca_fala_em_venda():
-    assert estado(75).codigo == "AGUARDAR"          # no limite ainda é neutra
-    for p in (75.1, 85, 100):
+def test_caro_acima_do_fim_da_neutra():
+    for p in (70.1, 85, 100):
         e = estado(p, venda_validada=True)
-        assert (e.codigo, e.rotulo) == ("CARO", "CARO - AGUARDAR")
-        assert "Caro para comprar agora" in e.texto
-        assert "vend" not in (e.rotulo + e.texto).lower()
+        assert (e.codigo, e.rotulo, e.zona) == ("CARO", "CARO - Evitar", "Zona cara")
+
+
+def test_texto_e_sempre_o_ponto_de_oportunidade_do_ativo():
+    for p in (5, 50, 95):
+        assert estado(p).texto == "Ponto de oportunidade em R$ 46,48"
+    mu = decidir_estado(55, 192.59, 1255.0, compra_validada=False, simbolo="US$", preco=778.31, tendencia="Alta")
+    assert mu.texto == "Ponto de oportunidade em US$ 511,31"
 
 
 def test_fundamento_quebrado_vira_alerta_e_nao_muda_o_botao():
@@ -51,9 +55,9 @@ def test_fundamento_quebrado_vira_alerta_e_nao_muda_o_botao():
 @pytest.mark.parametrize("compra,quebrou", [(False, False), (True, False), (True, True)])
 def test_textos_nunca_citam_percentil_nem_venda(p, compra, quebrou):
     e = estado(p, compra_validada=compra, venda_validada=True, quebrou=quebrou, motivo_quebra="x")
-    texto = (e.rotulo + e.texto + e.zona).lower()
-    assert "percentil" not in texto and "vend" not in texto
-    assert e.codigo in ("OPORTUNIDADE", "AGUARDAR", "CARO")
+    texto = (e.rotulo + e.texto + e.zona + e.alerta).lower()
+    assert "percentil" not in texto and "vend" not in texto and "%" not in texto
+    assert e.codigo in ("COMPRAR", "AGUARDAR", "CARO")
 
 
 # ------------------------------------------------------------ fundamento quebrou
@@ -149,14 +153,3 @@ def test_backtest_janela_de_5_anos():
 def test_backtest_avisa_historico_insuficiente():
     b = backtest_percentil(_hist(np.linspace(10, 30, 900)), anos=5)   # ~3,5 anos
     assert b["insuficiente"] and b["anos"] < 5
-
-
-def test_aguardar_explica_a_zona_neutra():
-    # faixa de exemplo: mínima 192,59, máxima 1.255,00 -> oportunidade 458,19, cara 989,40
-    e = decidir_estado(percentil_na_faixa(778.31, 192.59, 1255.0), 192.59, 1255.0,
-                       compra_validada=True, simbolo="US$", preco=778.31, tendencia="Alta")
-    assert e.codigo == "AGUARDAR"
-    assert e.texto == ("Preço 778,31 está na Zona Neutra (458,19 a 989,40). Tendência de alta não "
-                       "significa preço barato. Aguardar queda até 458,19 para ter margem.")
-    sem_alta = decidir_estado(55, 192.59, 1255.0, compra_validada=True, preco=778.31, tendencia="Baixa")
-    assert "Tendência de alta" not in sem_alta.texto and "Aguardar queda até 458,19" in sem_alta.texto
