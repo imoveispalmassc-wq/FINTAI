@@ -10,6 +10,11 @@ e comparação com o índice.
     pip install -r requirements.txt
     streamlit run app.py
 
+## Regras
+
+As regras de dados e de cálculo do projeto estão em `CLAUDE.md`: todo número vem de fonte
+confiável (Yahoo Finance ou Banco Central), nada é inventado nem travado por ativo.
+
 ## Estrutura
 
 - `app.py`: página do Streamlit, busca de dados (Yahoo Finance e Banco Central) e cache.

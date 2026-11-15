@@ -148,22 +148,40 @@ def modo_lynch(d: dict, pl, regra: dict) -> dict:
     # Futuro: só o que o Yahoo realmente fornece, cada linha com a sua base
     lucro_fut, _ = _estimativa(d.get("est_cresc"), ["LTG"], "stockTrend")      # longo prazo, ao ano
     rec_fut, _ = _estimativa(d.get("est_receita"), ["+1y"], "growth")          # próximo ano fiscal
-    lpa_este_ano = None                                                        # LPA estimado do ano atual
+    # LPA estimado do ano fiscal em curso: média do consenso, faixa e número de analistas
+    lpa_este_ano = baixa = alta = analistas = None
     est = d.get("est_lucro")
     if est is not None and not getattr(est, "empty", True) and "avg" in est.columns and "0y" in est.index:
-        lpa_este_ano = _n(est.loc["0y", "avg"], 4)
+        linha = est.loc["0y"]
+        lpa_este_ano = _n(linha.get("avg"), 4)
+        baixa, alta = _n(linha.get("low"), 4), _n(linha.get("high"), 4)
+        analistas = _n(linha.get("numberOfAnalysts"), 0)
+    analistas_rec = None
+    er = d.get("est_receita")
+    if er is not None and not getattr(er, "empty", True) and "+1y" in er.index and "numberOfAnalysts" in er.columns:
+        analistas_rec = _n(er.loc["+1y", "numberOfAnalysts"], 0)
     peg_futuro = None if regra["status"] == "recorrente" else peg(pl, lucro_fut)
     receita = rec_fut if rec_fut is not None else rec_pass
     fracao = lambda chave: None if info.get(chave) is None else _n(info[chave] * 100, 2)
     return {
         "passado": {"lucro": _n(lucro_pass, 2), "anosLucro": anos_lucro,
                     "receita": _n(rec_pass, 2), "anosReceita": anos_rec},
-        "futuro": {"lucroLongo": _n(lucro_fut, 2), "receitaProx": _n(rec_fut, 2), "lpaEsteAno": lpa_este_ano},
+        "futuro": {"lucroLongo": _n(lucro_fut, 2), "receitaProx": _n(rec_fut, 2), "lpaEsteAno": lpa_este_ano,
+                   "lpaBaixa": baixa, "lpaAlta": alta, "analistas": analistas, "analistasReceita": analistas_rec},
         "pegFuturo": _n(peg_futuro, 4),
         "pegYahoo": _n(info.get("trailingPegRatio") or info.get("pegRatio"), 4),
         "lucroTrimestre": fracao("earningsGrowth"), "receitaTrimestre": fracao("revenueGrowth"),
-        "veredito": veredito(peg_futuro, receita, regra["status"], lucro_fut),
+        "veredito": _veredito_com_fonte(peg_futuro, receita, regra["status"], lucro_fut,
+                                        tem_estimativa=any(v is not None for v in (rec_fut, lpa_este_ano))),
     }
+
+
+def _veredito_com_fonte(peg_futuro, receita, status, lucro_fut, tem_estimativa: bool) -> dict:
+    """Sem PEG: diz qual dado falta no Yahoo, em vez de afirmar que não há estimativa nenhuma."""
+    v = veredito(peg_futuro, receita, status, lucro_fut)
+    if v["cor"] == "cinza" and tem_estimativa:
+        v = {**v, "titulo": "Sem PEG - Yahoo não tem o crescimento de longo prazo deste ativo"}
+    return v
 
 
 def modo_simons(hist: pd.DataFrame) -> dict:

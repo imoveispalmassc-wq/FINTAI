@@ -123,9 +123,13 @@ def pacote() -> dict:
     lucro_pass, anos_lucro = crescimento_anual(lpa_anos)
     rec_pass, anos_rec = crescimento_anual(receitas)
     # Estimativas do Yahoo: valores de EXEMPLO, marcados na tela, até entrarem os reais
-    # LPA estimado do ano fiscal 2027: valor real do app (Yahoo), 15/11/2026
-    lucro_longo, receita_prox, lpa_este_ano = 35.0, 28.4, 176.50
+    # Só valores com fonte. LPA estimado do ano fiscal 2027: consenso do Yahoo visto no app em 15/11/2026.
+    # Crescimento de longo prazo e receita do próximo ano: sem o valor real, ficam vazios.
+    lucro_longo, receita_prox, lpa_este_ano = None, None, 176.50
     peg_futuro = peg(pl, lucro_longo)
+    sem_peg = veredito(peg_futuro, receita_prox, regra["status"], lucro_longo)
+    if sem_peg["cor"] == "cinza":
+        sem_peg = {**sem_peg, "titulo": "Sem PEG - Yahoo não tem o crescimento de longo prazo deste ativo"}
     arred = lambda v, casas=2: None if v is None else round(v, casas)
 
     comp = lambda nome, curto, artigo, moeda, v: {"nome": nome, "curto": curto, "artigo": artigo, "moeda": moeda, "v": v}
@@ -140,14 +144,15 @@ def pacote() -> dict:
         "lpaAnos": [{"ano": a, "lpa": v} for a, v in lpa_anos],
         "regra": {"status": regra["status"], "media": arred(regra["media"], 4), "mensagem": regra["mensagem"]},
         # o que é exemplo meu, e não dado passado pelo dono do app, aparece marcado na tela
-        "exemplos": {"lucroLongo": True, "receitaProx": True, "simons": True, "backtestMax": True},
+        "exemplos": {"simons": True, "backtestMax": True},
         "lynch": {
             "passado": {"lucro": arred(lucro_pass), "anosLucro": anos_lucro,
                         "receita": arred(rec_pass), "anosReceita": anos_rec},
-            "futuro": {"lucroLongo": lucro_longo, "receitaProx": receita_prox, "lpaEsteAno": lpa_este_ano},
-            "pegFuturo": round(peg_futuro, 4), "pegYahoo": None,
+            "futuro": {"lucroLongo": lucro_longo, "receitaProx": receita_prox, "lpaEsteAno": lpa_este_ano,
+                       "lpaBaixa": None, "lpaAlta": None, "analistas": None, "analistasReceita": None},
+            "pegFuturo": arred(peg_futuro, 4), "pegYahoo": None,
             "lucroTrimestre": None, "receitaTrimestre": None,
-            "veredito": veredito(peg_futuro, receita_prox, regra["status"], lucro_longo),
+            "veredito": sem_peg,
         },
         "simons": modo_simons(hist),
         "pl": round(pl, 4), "plMedio12": 26.00, "plMetodo": "trimestral",

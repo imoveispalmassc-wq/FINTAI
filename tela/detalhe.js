@@ -773,13 +773,19 @@ function montar(root, d) {
       const anoProj = anos.length ? anos[anos.length - 1].ano + 1 : null;
       const ultimo = anos.length ? anos[anos.length - 1].lpa : null;
       const varProj = tem(proj) && tem(ultimo) && ultimo > 0 ? (proj / ultimo - 1) * 100 : null;
+      const Fu = d.lynch && d.lynch.futuro ? d.lynch.futuro : {};
+      const consenso = !tem(proj) ? '' : `Consenso${tem(Fu.analistas) ? ` de ${f(Fu.analistas, 0)} ${Fu.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance`
+        + (tem(Fu.lpaBaixa) && tem(Fu.lpaAlta) ? `, de ${din(Fu.lpaBaixa)} a ${din(Fu.lpaAlta)}` : '')
+        + (tem(Fu.analistas) && Fu.analistas < 3 ? '. Poucos analistas: estimativa pouco confiável' : '');
       const linhaProj = anoProj ? `<div class="proj"><span>${anoProj} <span class="tag-proj">projeção</span>${ex('lpaEsteAno')}</span><b>${tem(proj) ? din(proj) : 'Sem estimativa'}</b></div>` : '';
       el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>
         <div class="card">${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}${linhaProj}</div>` : ''}
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
-          <div class="nota">${nota}${anoProj ? ` ${tem(proj) ? `Projeção ${anoProj}: estimativa dos analistas no Yahoo${tem(varProj) ? `, ${sinal(varProj, 0)} sobre ${anos[anos.length - 1].ano}` : ''}. Não entra na média.` : `Sem estimativa no Yahoo para ${anoProj}.`}` : ''}</div></div>`;
+          <div class="nota">${nota}${anoProj ? ` ${tem(proj) ? `Projeção ${anoProj}: ${consenso}${tem(varProj) ? `; ${sinal(varProj, 0)} sobre ${anos[anos.length - 1].ano}` : ''}. Não entra na média.` : `Sem estimativa no Yahoo para ${anoProj}.`}` : ''}</div></div>`;
     } else if (modo === 'lynch') {
       const L = d.lynch, v = L.veredito, F = L.futuro, pc = x => tem(x) ? `${sinal(x, 1)} ao ano` : 'Sem dado';
+      // crescimento acima de 100% ao ano vem de base quase zero: mostra quantas vezes multiplicou
+      const cresc = (x, anos) => !tem(x) ? 'Sem dado' : x > 100 && anos ? `${f(Math.pow(1 + x / 100, anos), 1)}x no período` : pc(x);
       const corV = { verde: 'var(--verde)', amarelo: 'var(--ambar)', vermelho: 'var(--vermelho)' }[v.cor] || 'var(--suave)';
       const stV = { verde: 'bom', vermelho: 'ruim' }[v.cor] || 'neutro';
       const mini = (r, val) => `<div class="ind"><span class="rot">${r}</span><span class="v num" style="font-size:18px">${val}</span></div>`;
@@ -800,13 +806,14 @@ function montar(root, d) {
             ${lpas ? `<div class="lista-v num">${lpas}${media}</div>` : `<div class="nota" style="margin-top:8px">Sem dado</div>`}
             ${rg.status === 'excluido' ? '<div class="destaque">Ano de prejuízo excluído</div>' : ''}
             ${rg.status === 'recorrente' ? '<div class="destaque" style="color:var(--vermelho)">Sem PEG - Lynch não compra empresa sem lucro</div>' : ''}
-            <div class="lista-v num" style="margin-bottom:0"><div>Lucro${L.passado.anosLucro ? ` (em ${L.passado.anosLucro} ${L.passado.anosLucro === 1 ? 'ano' : 'anos'})` : ''}<b>${pc(L.passado.lucro)}</b></div><div>Receita${L.passado.anosReceita ? ` (em ${L.passado.anosReceita} ${L.passado.anosReceita === 1 ? 'ano' : 'anos'})` : ''}<b>${pc(L.passado.receita)}</b></div></div>
+            <div class="lista-v num" style="margin-bottom:0"><div>Lucro${L.passado.anosLucro ? ` (em ${L.passado.anosLucro} ${L.passado.anosLucro === 1 ? 'ano' : 'anos'})` : ''}<b>${cresc(L.passado.lucro, L.passado.anosLucro)}</b></div><div>Receita${L.passado.anosReceita ? ` (em ${L.passado.anosReceita} ${L.passado.anosReceita === 1 ? 'ano' : 'anos'})` : ''}<b>${cresc(L.passado.receita, L.passado.anosReceita)}</b></div></div>
+            ${[L.passado.lucro, L.passado.receita].some(x => tem(x) && x > 100) ? '<div class="nota" style="margin-top:8px">Base inicial muito baixa: o valor multiplicou no período, e o crescimento ao ano não serve para comparar.</div>' : ''}
           </div>
           <div class="card"><span class="rot">Futuro</span><div class="nota">O que o Yahoo fornece de estimativa</div>
             ${semEstimativa ? '<div class="destaque">Sem PEG - Sem estimativa no Yahoo para este ativo</div>' : ''}
             ${fut('Lucro - Longo prazo', tem(F.lucroLongo) ? `${sinal(F.lucroLongo, 1)} ao ano` : 'Sem dado', 'Estimativa longo prazo Yahoo', 'lucroLongo')}
-            ${fut('Receita - Próximo ano fiscal', tem(F.receitaProx) ? sinal(F.receitaProx, 1) : 'Sem dado', 'Próximo ano fiscal Yahoo', 'receitaProx')}
-            ${fut('Lucro - Este ano', tem(F.lpaEsteAno) ? `LPA estimado ${din(F.lpaEsteAno)}` : 'Sem dado', 'Estimativa ano atual Yahoo', 'lpaEsteAno')}
+            ${fut('Receita - Próximo ano fiscal', tem(F.receitaProx) ? sinal(F.receitaProx, 1) : 'Sem dado', `Próximo ano fiscal Yahoo${tem(F.analistasReceita) ? ` · ${f(F.analistasReceita, 0)} analistas` : ''}`, 'receitaProx')}
+            ${fut('Lucro - Este ano', tem(F.lpaEsteAno) ? `LPA estimado ${din(F.lpaEsteAno)}` : 'Sem dado', `Estimativa ano atual Yahoo${tem(F.analistas) ? ` · ${f(F.analistas, 0)} analistas` : ''}${tem(F.lpaBaixa) && tem(F.lpaAlta) ? ` · de ${din(F.lpaBaixa)} a ${din(F.lpaAlta)}` : ''}`, 'lpaEsteAno')}
           </div>
         </div>
         <div class="card" style="margin-top:10px;border-left:3px solid ${corV}">
