@@ -85,7 +85,8 @@ function montar(root, d) {
     let escala = series['1a'] ? '1a' : (ESCALAS.find(([k]) => series[k]) || [null])[0];
     if (!escala) { el.innerHTML = `<div class="aviso">${INDISP}</div>`; return; }
     let velas = false, prog = 1, toque = null, toqueY = 0, raf = 0;
-    const justoY = metodosJusto.length >= 2 ? metodosJusto.reduce((a, m) => a + m[1], 0) / metodosJusto.length : null;
+    // média dos valores arredondados que a tela mostra: (452 + 1.661) / 2 = 1.056,5 -> 1.057
+    const justoY = metodosJusto.length >= 2 ? Math.round(metodosJusto.reduce((a, m) => a + Math.round(m[1]), 0) / metodosJusto.length) : null;
     const justoDivergem = metodosJusto.length >= 2 && metodosJusto[metodosJusto.length - 1][1] / metodosJusto[0][1] > 2;
 
     el.innerHTML = `<div class="grafico" id="gbox">
@@ -122,18 +123,23 @@ function montar(root, d) {
       // tracejados das zonas, com o valor de cada limite
       const tracejado = (y, c) => { ctx.setLineDash([5, 4]); ctx.strokeStyle = c; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke(); ctx.setLineDash([]); };
       tracejado(Y(zOport), '#2fbf8a'); tracejado(Y(zCara), '#8c99b0');
-      ctx.textAlign = 'right'; ctx.font = '10.5px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#2fbf8a'; ctx.fillText(`Oportunidade até ${f(zOport)}`, x1 - 6, Y(zOport) + 9);
-      ctx.fillStyle = '#aab4c6'; ctx.fillText(`Neutro até ${f(zCara)}`, x1 - 6, Y(zCara) + 9);
-      ctx.fillStyle = '#f06a6a'; ctx.fillText(`Caro acima de ${f(zCara)}`, x1 - 6, Y(zCara) - 9);
-      ctx.font = '11px Inter, system-ui, sans-serif';
+      const rotulos = [
+        { y: Y(zOport) - 9, t: `Oportunidade até ${f(zOport)}`, c: '#2fbf8a' },
+        { y: Y(zCara) + 9, t: `Neutro até ${f(zCara)}`, c: '#aab4c6' },
+        { y: Y(zCara) - 9, t: `Caro acima de ${f(zCara)}`, c: '#f06a6a' },
+      ];
       if (justoY !== null) {
         const yj = Y(justoY);
         ctx.setLineDash([6, 5]); ctx.strokeStyle = '#f2994a'; ctx.lineWidth = 1.2;
         ctx.beginPath(); ctx.moveTo(x0, yj); ctx.lineTo(x1, yj); ctx.stroke(); ctx.setLineDash([]);
-        ctx.fillStyle = '#f2994a'; ctx.textAlign = 'left';
-        ctx.fillText(`Média dos métodos: ${d.moeda} ${f(Math.round(justoY), 0)} - não validado`, x0 + 6, yj - 9);
+        rotulos.push({ y: yj - 9, t: `Média dos métodos: ${d.moeda} ${f(justoY, 0)} - não validado`, c: '#f2994a' });
       }
+      // todos à esquerda; de baixo para cima, afasta os que ficariam um em cima do outro
+      rotulos.sort((a, b) => b.y - a.y);
+      rotulos.forEach((r, k) => { if (k && rotulos[k - 1].y - r.y < 12) r.y = rotulos[k - 1].y - 12; });
+      ctx.textAlign = 'left'; ctx.font = '10.5px Inter, system-ui, sans-serif';
+      rotulos.forEach(r => { ctx.fillStyle = r.c; ctx.fillText(r.t, r.y > yPlot - 48 ? x0 + 92 : x0 + 6, r.y); });
+      ctx.font = '11px Inter, system-ui, sans-serif';
       ctx.restore();
 
       // eixo Y
@@ -282,9 +288,26 @@ function montar(root, d) {
     const leitura = !tem(d.forca) ? '' : d.forca >= 70 ? 'Sobrecomprada. Subiu rápido demais, pode corrigir.'
       : d.forca <= 30 ? 'Sobrevendida. Caiu rápido demais, pode repicar.' : 'Neutra. Sem pressão de compra nem de venda.';
     const fundo = 'linear-gradient(90deg,var(--verde) 0 30%,var(--ardosia) 30% 70%,var(--ambar) 70% 100%)';
+    // Força da tendência: distância do preço para a média de 200 dias, numa régua de -10% a +15%
+    const LIM_FORTE = 5, RMIN = -10, RMAX = 15, pt = v => (v - RMIN) / (RMAX - RMIN) * 100;
+    const fundoT = `linear-gradient(90deg,var(--vermelho) 0 ${pt(0)}%,var(--ardosia) ${pt(0)}% ${pt(LIM_FORTE)}%,var(--verde) ${pt(LIM_FORTE)}% 100%)`;
+    let textoT = '';
+    if (tem(dist)) {
+      const cair = (d.preco - d.mm200) / d.preco * 100, subir = (d.mm200 / d.preco - 1) * 100;
+      textoT = dist < 0 ? `Perdeu força. A ${f(Math.abs(dist))}% abaixo da média de 200d. Precisa subir ${f(subir, 1)}% para voltar acima dela.`
+        : dist <= LIM_FORTE ? `${d.tendencia === 'Alta' ? 'Alta fraca' : 'Neutra'}. A ${f(dist)}% acima da média de 200d. Se cair ${f(cair, 1)}% perde a tendência.`
+        : `Forte. A ${f(dist)}% acima da média de 200d. Teria de cair ${f(cair, 1)}% para perder a tendência.`;
+    }
+    const barraT = !tem(dist) ? '' : `<div class="card">
+          <strong>Força da tendência</strong>
+          <div class="regua" style="background:${fundoT}"><span class="bola" style="left:${Math.max(0, Math.min(100, pt(dist)))}%"></span></div>
+          <div class="pontas tres"><span>Perdeu força</span><span>Neutra</span><span>Forte</span></div>
+          <div class="destaque num">${textoT}</div>
+        </div>`;
     el.innerHTML = `<h2>Tendência e força</h2>
       <div class="pilha">
         <div class="card duas"><div class="esq"><span class="rot">Tendência</span><small>média de 200 dias</small></div><div class="dir" style="color:${corT}">${tem(d.mm200) ? d.tendencia : '—'}</div></div>
+        ${barraT}
         <div class="card duas"><div class="esq"><span class="rot">Média de 200 dias</span><small class="num">${tem(dist) ? `preço ${sinal(dist)} da média` : INDISP}</small></div><div class="dir num">${din(d.mm200)}</div></div>
         <div class="card forca">
           <div class="cab"><div><strong>Força</strong><div class="nota">Últimos 14 dias</div></div><button class="link" data-folha="forca">Ver como calculamos</button></div>
@@ -303,7 +326,9 @@ function montar(root, d) {
       <ul><li><b>Até 30:</b> sobrevendida (muita venda).</li><li><b>De 30 a 70:</b> neutra (equilíbrio).</li><li><b>Acima de 70:</b> sobrecomprada (muita compra).</li></ul>
       <code>IFR = 100 − 100 ÷ (1 + média das altas ÷ média das quedas)</code>
       ${tem(d.forca) ? `<p>Valor de hoje: <b>${f(d.forca, 0)}</b>.</p>` : ''}
-      <p><b>Tendência:</b> Alta quando a média de 200 dias sobe e o preço está acima dela; Baixa quando cai e o preço está abaixo; senão Lateral.</p>${fonte}`];
+      <p><b>Tendência:</b> Alta quando a média de 200 dias sobe e o preço está acima dela; Baixa quando cai e o preço está abaixo; senão Lateral.</p>
+      <p><b>Força da tendência:</b> distância do preço para a média de 200 dias. Abaixo da média: perdeu força. De 0% a +5%: neutra. Mais de +5%: forte.</p>
+      ${tem(d.mm200) ? `<code>(${f(d.preco)} − ${f(d.mm200)}) ÷ ${f(d.mm200)} = ${sinal((d.preco / d.mm200 - 1) * 100)}</code>` : ''}${fonte}`];
   })($('tendencia'));
 
   /* ---------------- mínimo, máximo e ponto médio */
@@ -602,7 +627,17 @@ function montar(root, d) {
             : [`Vender na Zona Cara não se validou no histórico. NÃO use esse sinal para vender ${d.ticker}.`,
                `Depois de entrar na Zona Cara, a ação rendeu em média ${sinal(c.retorno, 0)} em 12 meses.`];
       const periodo = expandido ? 'em todo o histórico' : `nos últimos ${f(Math.min(b.anos, 5), b.insuficiente ? 1 : 0)} anos`;
+      const Periodo = periodo.charAt(0).toUpperCase() + periodo.slice(1);
+      let resumoBt = '';
+      if (o.vezes && c.vezes) {
+        if (b.compraValidada && b.vendaValidada) resumoBt = `${Periodo} as duas zonas ajudaram: comprar barato rendeu mais que a média e o preço caiu depois da Zona Cara.`;
+        else if (b.compraValidada) resumoBt = `${Periodo} só a Zona de Oportunidade ajudou. Não use a Zona Cara como sinal de venda para ${d.ticker}.`;
+        else if (b.vendaValidada) resumoBt = `${Periodo} só a Zona Cara ajudou. Não use a Zona de Oportunidade como sinal de compra para ${d.ticker}.`;
+        else if (o.retorno < ref.retorno && c.retorno > ref.retorno) resumoBt = `${Periodo} as zonas não ajudaram: comprar barato rendeu menos que a média e comprar caro rendeu mais. Não use esses sinais para ${d.ticker}.`;
+        else resumoBt = `${Periodo} as zonas não se validaram. Não use esses sinais para ${d.ticker}.`;
+      }
       el.innerHTML = `<h2>Os sinais funcionaram no passado? <small>${sub}</small></h2>
+        ${resumoBt ? `<p class="nota" style="margin:-4px 2px 12px;color:var(--texto)">${resumoBt}</p>` : ''}
         ${expandido ? '<div class="aviso" style="margin-bottom:10px">Backtest expandido para todo o histórico</div>' : ''}
         ${!expandido && b.insuficiente ? `<div class="aviso" style="margin-bottom:10px">Histórico insuficiente para backtest de 5 anos. Mostrando ${f(b.anos, 1)} anos disponíveis.</div>` : ''}
         <div class="pilha">
