@@ -123,7 +123,8 @@ def pacote() -> dict:
     lucro_pass, anos_lucro = crescimento_anual(lpa_anos)
     rec_pass, anos_rec = crescimento_anual(receitas)
     # Estimativas do Yahoo: valores de EXEMPLO, marcados na tela, até entrarem os reais
-    lucro_longo, receita_prox, lpa_este_ano = 35.0, 28.4, 96.50
+    # LPA estimado do ano fiscal 2027: valor real do app (Yahoo), 15/11/2026
+    lucro_longo, receita_prox, lpa_este_ano = 35.0, 28.4, 176.50
     peg_futuro = peg(pl, lucro_longo)
     arred = lambda v, casas=2: None if v is None else round(v, casas)
 
@@ -139,7 +140,7 @@ def pacote() -> dict:
         "lpaAnos": [{"ano": a, "lpa": v} for a, v in lpa_anos],
         "regra": {"status": regra["status"], "media": arred(regra["media"], 4), "mensagem": regra["mensagem"]},
         # o que é exemplo meu, e não dado passado pelo dono do app, aparece marcado na tela
-        "exemplos": {"lynchFuturo": True, "simons": True, "backtestMax": True},
+        "exemplos": {"lucroLongo": True, "receitaProx": True, "simons": True, "backtestMax": True},
         "lynch": {
             "passado": {"lucro": arred(lucro_pass), "anosLucro": anos_lucro,
                         "receita": arred(rec_pass), "anosReceita": anos_rec},

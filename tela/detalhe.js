@@ -96,7 +96,7 @@ function montar(root, d) {
         : v.cor === 'vermelho' ? `Lynch não compra pelo crescimento, qualquer que seja o preço. O preço está na ${zona}.`
         : `Sem PEG para avaliar o crescimento. O preço está na ${zona}.`;
       const stV = { verde: 'bom', vermelho: 'ruim' }[v.cor] || 'neutro';
-      extra = `<div class="lynch-linha"><span class="st ${stV}">${v.titulo}</span>${ex('lynchFuturo')}
+      extra = `<div class="lynch-linha"><span class="st ${stV}">${v.titulo}</span>${ex('lucroLongo') || ex('receitaProx')}
         ${tem(d.lynch.pegFuturo) ? `<div class="nota num" style="margin-top:8px">PEG = P/L ${f(d.pl)} / Crescimento ${f(d.lynch.futuro.lucroLongo, 1)}% = ${f(d.lynch.pegFuturo)}</div>` : ''}
         <div class="destaque">${conclusao}</div></div>`;
     } else {
@@ -773,7 +773,7 @@ function montar(root, d) {
       const anoProj = anos.length ? anos[anos.length - 1].ano + 1 : null;
       const ultimo = anos.length ? anos[anos.length - 1].lpa : null;
       const varProj = tem(proj) && tem(ultimo) && ultimo > 0 ? (proj / ultimo - 1) * 100 : null;
-      const linhaProj = anoProj ? `<div class="proj"><span>${anoProj} <span class="tag-proj">projeção</span>${ex('lynchFuturo')}</span><b>${tem(proj) ? din(proj) : 'Sem estimativa'}</b></div>` : '';
+      const linhaProj = anoProj ? `<div class="proj"><span>${anoProj} <span class="tag-proj">projeção</span>${ex('lpaEsteAno')}</span><b>${tem(proj) ? din(proj) : 'Sem estimativa'}</b></div>` : '';
       el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>
         <div class="card">${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}${linhaProj}</div>` : ''}
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
@@ -787,7 +787,7 @@ function montar(root, d) {
       const lpas = anos.map(a => `<div>${a.ano}<b style="color:${a.lpa < 0 ? 'var(--vermelho)' : 'inherit'}">${din(a.lpa)}</b></div>`).join('');
       const media = rg.status === 'ok' ? `<div>Média de ${anos.length} ${anos.length === 1 ? 'ano' : 'anos'}<b>${din(rg.media)}</b></div>`
         : rg.status === 'excluido' ? `<div>Média (ano de prejuízo excluído)<b>${din(rg.media)}</b></div>` : '';
-      const fut = (titulo, valor, base) => `<div class="fut"><div class="duas"><span>${titulo}</span><b class="num">${valor}</b></div><div class="nota">Base: ${base}</div></div>`;
+      const fut = (titulo, valor, base, chave) => `<div class="fut"><div class="duas"><span>${titulo}${ex(chave)}</span><b class="num">${valor}</b></div><div class="nota">Base: ${base}</div></div>`;
       const semEstimativa = !tem(F.lucroLongo) && !tem(F.receitaProx) && !tem(F.lpaEsteAno);
       el.innerHTML = `<h2>Crescimento <small>passado x futuro</small></h2>
         <div class="grade2">
@@ -802,15 +802,15 @@ function montar(root, d) {
             ${rg.status === 'recorrente' ? '<div class="destaque" style="color:var(--vermelho)">Sem PEG - Lynch não compra empresa sem lucro</div>' : ''}
             <div class="lista-v num" style="margin-bottom:0"><div>Lucro${L.passado.anosLucro ? ` (em ${L.passado.anosLucro} ${L.passado.anosLucro === 1 ? 'ano' : 'anos'})` : ''}<b>${pc(L.passado.lucro)}</b></div><div>Receita${L.passado.anosReceita ? ` (em ${L.passado.anosReceita} ${L.passado.anosReceita === 1 ? 'ano' : 'anos'})` : ''}<b>${pc(L.passado.receita)}</b></div></div>
           </div>
-          <div class="card"><span class="rot">Futuro</span>${ex('lynchFuturo')}<div class="nota">O que o Yahoo fornece de estimativa</div>
+          <div class="card"><span class="rot">Futuro</span><div class="nota">O que o Yahoo fornece de estimativa</div>
             ${semEstimativa ? '<div class="destaque">Sem PEG - Sem estimativa no Yahoo para este ativo</div>' : ''}
-            ${fut('Lucro - Longo prazo', tem(F.lucroLongo) ? `${sinal(F.lucroLongo, 1)} ao ano` : 'Sem dado', 'Estimativa longo prazo Yahoo')}
-            ${fut('Receita - Próximo ano fiscal', tem(F.receitaProx) ? sinal(F.receitaProx, 1) : 'Sem dado', 'Próximo ano fiscal Yahoo')}
-            ${fut('Lucro - Este ano', tem(F.lpaEsteAno) ? `LPA estimado ${din(F.lpaEsteAno)}` : 'Sem dado', 'Estimativa ano atual Yahoo')}
+            ${fut('Lucro - Longo prazo', tem(F.lucroLongo) ? `${sinal(F.lucroLongo, 1)} ao ano` : 'Sem dado', 'Estimativa longo prazo Yahoo', 'lucroLongo')}
+            ${fut('Receita - Próximo ano fiscal', tem(F.receitaProx) ? sinal(F.receitaProx, 1) : 'Sem dado', 'Próximo ano fiscal Yahoo', 'receitaProx')}
+            ${fut('Lucro - Este ano', tem(F.lpaEsteAno) ? `LPA estimado ${din(F.lpaEsteAno)}` : 'Sem dado', 'Estimativa ano atual Yahoo', 'lpaEsteAno')}
           </div>
         </div>
         <div class="card" style="margin-top:10px;border-left:3px solid ${corV}">
-          <div class="cab"><span class="rot">PEG do Futuro${ex('lynchFuturo')}</span><span class="st ${stV}">${v.titulo}</span></div>
+          <div class="cab"><span class="rot">PEG do Futuro${ex('lucroLongo')}</span><span class="st ${stV}">${v.titulo}</span></div>
           <div class="num" style="font-size:26px;font-weight:700;margin:6px 0 2px;color:${corV}">${tem(L.pegFuturo) ? f(L.pegFuturo) : '—'}</div>
           <div class="nota num">${tem(L.pegFuturo) ? `PEG = P/L ${f(d.pl)} / Crescimento ${f(F.lucroLongo, 1)}% = ${f(L.pegFuturo)}` : 'PEG do Futuro = P/L dividido pelo Crescimento Longo Prazo do Lucro'}</div>
           ${v.motivo ? `<div class="destaque">${v.motivo}</div>` : ''}
