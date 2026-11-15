@@ -517,6 +517,9 @@ function montar(root, d) {
       else texto = (tem(d.dividendos5Anos) ? `Você recebeu ${din(d.dividendos5Anos)} em 5 anos por ação em dividendos, em dinheiro, e não recomprou.` : 'Você recebeu o dividendo em dinheiro e não recomprou.')
         + (tem(dif5) && dif5 >= 10 ? ' Perdeu o efeito bola de neve.' : '');
       const outraMoeda = c.moeda !== d.moeda;
+      // mesma conta das linhas do resumo: US$ 10.000 investidos, arredondado à dezena
+      const em10k = v => Math.round(10000 * (1 + v / 100) / 10) * 10;
+      const difDinheiro = tem(d.retorno.total[0]) && tem(d.retorno.preco[0]) ? em10k(d.retorno.total[0]) - em10k(d.retorno.preco[0]) : 0;
 
       // escala das barras (aceita retornos negativos)
       const todos = idx.flatMap(i => [vals[i], c.v[i]]).filter(tem);
@@ -555,7 +558,7 @@ function montar(root, d) {
         <div class="leg" style="margin:8px 0 12px"><span style="--c:var(--verde)">${d.ticker}</span><span style="--c:var(--ardosia)">${c.nome}</span></div>
         ${outraMoeda ? `<div class="aviso" style="margin-bottom:10px">Comparação com ${c.nome} é em moedas diferentes (${d.moeda} e ${c.moeda}). Para comparar certo, converta a moeda ou use o comparador ${padrao.nome}.</div>` : ''}
         <div class="card resumo num">${linhas}</div>
-        ${tem(d.retorno.total[0]) && tem(d.retorno.preco[0]) ? `<p class="nota num" style="margin:12px 2px 0">Em 1 ano: <b>${sinal(d.retorno.preco[0], 2)}</b> só preço e <b>${sinal(d.retorno.total[0], 2)}</b> com dividendos. Diferença de ${f(d.retorno.total[0] - d.retorno.preco[0], 2)} ponto é o dividendo.</p>` : ''}
+        ${tem(d.retorno.total[0]) && tem(d.retorno.preco[0]) ? `<p class="nota num" style="margin:12px 2px 0">Em 1 ano: <b>${sinal(d.retorno.preco[0], 2)}</b> só preço e <b>${sinal(d.retorno.total[0], 2)}</b> com dividendos reinvestidos.${difDinheiro > 0 && d.dividendo > 0 ? ` Diferença de ${d.moeda} ${f(difDinheiro, 0)} é o dividendo de ${din(d.dividendo)} recomprado em ações nas datas de pagamento (preço ajustado Yahoo).` : ''}</p>` : ''}
         <p class="nota" style="margin:12px 2px 0">${porque}Retorno passado não garante retorno futuro.</p>
         <p class="nota" style="margin:8px 2px 0">Dados até ${d.data} · <button class="link" data-folha="retorno">Ver como calculamos</button></p>`;
       el.querySelectorAll('[data-r]').forEach(b => { b.onclick = () => { reinveste = b.dataset.r === '1'; render(); }; });
