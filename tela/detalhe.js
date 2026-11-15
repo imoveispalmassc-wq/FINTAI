@@ -226,7 +226,7 @@ function montar(root, d) {
       let ultimo = '';
       if (escala === '10d') {
         ctx.font = '9.5px Inter, system-ui, sans-serif';
-        for (let i = 0; i < n; i++) ctx.fillText(i === n - 1 ? 'Hoje' : String(i - (n - 1)), Math.min(X(i), x1 - 10), H - 5);
+        for (let i = 0; i < n; i++) ctx.fillText(i === n - 1 ? 'Hoje' : String(i - (n - 1)), Math.max(x0 + 10, Math.min(X(i), x1 - 10)), H - 5);
       } else [0.06, 0.31, 0.56, 0.81].forEach(fr => {
         const i = Math.round((n - 1) * fr), txt = ROTULO_X[s.rot](new Date(s.t[i]));
         if (txt !== ultimo) ctx.fillText(txt, X(i), H - 5);
