@@ -253,6 +253,12 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .proj b { color: var(--azul) !important; }
 .tag-proj { display: inline-block; padding: 0 6px; border-radius: 999px; border: 1px solid var(--azul); color: var(--azul); font-size: 10.5px; margin-left: 4px; vertical-align: 1px; }
 .marca-baixo.so-valor { height: 22px; }
+.marca-cima span.esq { left: 0; transform: none; text-align: left; }
+.marca-cima span.dir { left: auto; right: 0; transform: none; text-align: right; }
+.marca-cima.limites { height: 18px; margin-top: 2px; }
+.marca-cima.limites span { color: var(--texto); font-size: 12px; font-weight: 600; }
+.marca-cima.limites span.esq, .marca-cima.limites span.dir { color: var(--suave); font-weight: 500; }
+.regua .traco { background: var(--texto); }
 
 /* ---- página avulsa (fora do Streamlit) ---- */
 html { background: var(--bg); }
@@ -654,14 +660,21 @@ function montar(root, d) {
         <div class="zona" style="--c:var(--ambar)"><span class="rot">Zona cara</span><b class="num">acima de ${din(zCara)}</b></div>
         <div class="card">
           <span class="rot" style="color:var(--azul);font-weight:700">Você está aqui</span>
-          <div class="zonas-rot num" style="grid-template-columns:${a}fr ${b - a}fr ${100 - b}fr">
-            <span style="color:var(--verde)"><b>Oportunidade</b>até ${f(zOport)}</span>
-            <span style="color:#aab4c6"><b>Neutra</b>${f(zOport)} a ${f(zCara)}</span>
-            <span style="color:var(--ambar)"><b>Cara</b>acima de ${f(zCara)}</span>
+          <div class="zonas-rot" style="grid-template-columns:${a}fr ${b - a}fr ${100 - b}fr">
+            <span style="color:var(--verde)"><b>Oportunidade</b></span>
+            <span style="color:#aab4c6"><b>Neutra</b></span>
+            <span style="color:var(--ambar)"><b>Cara</b></span>
           </div>
-          <div class="regua" style="background:${fundo};margin-top:8px"><span class="bola" style="left:${p}%"></span></div>
+          <div class="marca-cima limites num">
+            <span class="esq">${f(d.min52)}</span><span style="left:${a}%">${f(zOport)}</span>
+            <span style="left:${b}%">${f(zCara)}</span><span class="dir">${f(d.max52)}</span>
+          </div>
+          <div class="regua" style="background:${fundo};margin-top:4px">
+            <span class="traco" style="left:${a}%"></span><span class="traco" style="left:${b}%"></span>
+            <span class="bola" style="left:${p}%"></span>
+          </div>
           <div class="marca-baixo so-valor num"><span style="left:${Math.min(Math.max(p, 10), 90)}%">${f(d.preco)}</span></div>
-          <div class="pontas num"><span>Mín. 52 sem. ${f(d.min52)}</span><span>Máx. 52 sem. ${f(d.max52)}</span></div>
+          <div class="nota" style="margin-top:2px">Mínima e máxima das últimas 52 semanas nas pontas da barra.</div>
         </div>
       </div>`;
   })($('faixa'));
@@ -732,10 +745,9 @@ function montar(root, d) {
         <p>Preço agora: <b>${din(d.preco)}</b>, ou <b>${din(Math.abs(dif))} ${dif >= 0 ? 'acima' : 'abaixo'}</b> do ponto médio.</p>${fonte}`];
       return `<div class="card">
         <div class="cab"><strong>${titulo}</strong><button class="link" data-folha="${id}">Ver como calculamos</button></div>
-        <div class="marca-cima num"><span style="left:50%">Ponto médio<b>${f(meio)}</b></span></div>
+        <div class="marca-cima num"><span class="esq">Mín.<b>${f(min)}</b></span><span style="left:50%">Ponto médio<b>${f(meio)}</b></span><span class="dir">Máx.<b>${f(max)}</b></span></div>
         <div class="regua" style="background:var(--ardosia);margin-top:6px"><span class="traco" style="left:50%"></span><span class="bola" style="left:${p}%"></span></div>
         <div class="marca-baixo num"><span style="left:${Math.min(Math.max(p, 10), 90)}%">Agora<b>${f(d.preco)}</b></span></div>
-        <div class="pontas num ext"><span>Mín.<b>${f(min)}</b></span><span>Máx.<b>${f(max)}</b></span></div>
         <div class="destaque num">Você está ${din(Math.abs(dif))} ${dif >= 0 ? 'acima' : 'abaixo'} do ponto médio</div>
         <div class="nota">Preço na metade mais ${dif >= 0 ? 'cara' : 'barata'} do range de ${periodo}</div>
       </div>`;

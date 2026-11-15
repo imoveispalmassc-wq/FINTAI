@@ -241,3 +241,9 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .proj b { color: var(--azul) !important; }
 .tag-proj { display: inline-block; padding: 0 6px; border-radius: 999px; border: 1px solid var(--azul); color: var(--azul); font-size: 10.5px; margin-left: 4px; vertical-align: 1px; }
 .marca-baixo.so-valor { height: 22px; }
+.marca-cima span.esq { left: 0; transform: none; text-align: left; }
+.marca-cima span.dir { left: auto; right: 0; transform: none; text-align: right; }
+.marca-cima.limites { height: 18px; margin-top: 2px; }
+.marca-cima.limites span { color: var(--texto); font-size: 12px; font-weight: 600; }
+.marca-cima.limites span.esq, .marca-cima.limites span.dir { color: var(--suave); font-weight: 500; }
+.regua .traco { background: var(--texto); }
