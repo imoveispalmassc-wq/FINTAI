@@ -1,7 +1,6 @@
 /* Tela de detalhes da ação. Lê tudo de um único pacote de dados (montado em tela/dados.py):
    nenhum número é digitado aqui. Dado ausente vira "Dados indisponíveis". */
 
-const P_OPORTUNIDADE = 30, P_CARO = 70;
 const INDISP = 'Dados indisponíveis';
 
 const tem = v => v !== null && v !== undefined && Number.isFinite(v);
@@ -37,8 +36,7 @@ function montar(root, d) {
   const limpar = [];
   const FOLHAS = {};
   const fonte = `<p><b>Fonte:</b> ${d.fonte} · atualizado em ${d.atualizado}.</p>`;
-  const zOport = d.min52 + (d.max52 - d.min52) * P_OPORTUNIDADE / 100;
-  const zCara = d.min52 + (d.max52 - d.min52) * P_CARO / 100;
+  const zOport = d.zOport, zCara = d.zCara;
   const dy = tem(d.dividendo) && d.preco ? d.dividendo / d.preco * 100 : null;
   const naoPagadora = tem(dy) && dy < 0.5;
   const metodosJusto = [['Graham', d.graham], ['P/L histórico', d.justoPL]]
@@ -80,22 +78,25 @@ function montar(root, d) {
 
   function renderDecisao() {
     const el = $('decisao');
-    let rotulo, classe = '', texto, pilula = '', selo = null;
+    let rotulo, classe = '', texto, pilula = '', selo = null, alerta = '';
     if (modo === 'graham') {
-      const e = d.decisao; rotulo = e.rotulo; classe = e.codigo; texto = e.texto; pilula = e.zona; selo = seloGraham;
+      const e = d.decisao; rotulo = e.rotulo; texto = e.texto; pilula = e.zona; selo = seloGraham;
+      classe = e.codigo === 'OPORTUNIDADE' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
+      alerta = e.alerta || '';
     } else if (modo === 'lynch') {
       const v = d.lynch.veredito; rotulo = v.titulo;
       classe = { verde: 'COMPRAR', amarelo: 'CARO', vermelho: 'VENDER' }[v.cor] || '';
-      texto = (tem(d.lynch.pegFuturo) ? `PEG do Futuro: ${f(d.lynch.pegFuturo)}. ` : '') + v.motivo;
+      texto = tem(d.lynch.pegFuturo) ? `PEG = P/L ${f(d.pl)} / Crescimento ${f(d.lynch.futuro.lucroLongo, 1)}% = ${f(d.lynch.pegFuturo)}. ${v.motivo}` : (v.motivo || 'O passado da empresa aparece abaixo.');
     } else {
       const sm = d.simons; rotulo = sm.acao;
       classe = sm.acao === 'MOVIMENTO CURTO' ? 'COMPRAR' : sm.acao === 'OBSERVA' ? 'CARO' : '';
-      texto = sm.dias ? `Hoje: ${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda seguidos, ${sinal(sm.queda)} acumulado. ${sm.detalhe}.`
+      texto = sm.dias ? `Hoje: ${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda seguidos, ${sinal(sm.queda)} na sequência. ${sm.detalhe}.`
         : 'Sem queda no último pregão. Nada a fazer no movimento curto.';
       selo = ['sem', sm.selo];
     }
     const nome = document.createElement('div'); nome.className = 'razao'; nome.textContent = `${d.razao} · ${d.ticker}`;
     el.innerHTML = `<div class="decisao">
+      <div class="modo-texto">${TEXTO_MODO[modo]}</div>
       <div class="meta">Último pregão ${d.data} · ${d.codMoeda} · ${d.fonte}</div>
       <div class="linha"><span class="preco num">${din(d.preco)}</span>
         ${tem(d.varDia) ? `<span class="var num" style="color:${cor(d.varDia)}">${seta(d.varDia)} ${sinal(d.varDia)} no dia</span>` : ''}</div>
@@ -103,9 +104,10 @@ function montar(root, d) {
       <div><span class="badge ${classe}" id="d-rotulo"></span></div>
       <div class="ponto" id="d-texto"></div>
       ${pilula ? `<span class="pilula">${pilula}</span>` : ''}
+      ${alerta ? `<div class="nota" style="margin-top:10px;color:var(--ambar)">${alerta}</div>` : ''}
       ${selo ? `<div style="margin-top:12px"><span class="selo ${selo[0]}">${selo[1]}</span></div>` : ''}
     </div>`;
-    el.firstElementChild.prepend(nome);
+    el.firstElementChild.insertBefore(nome, el.firstElementChild.children[1]);
     $('d-rotulo').textContent = rotulo; $('d-texto').textContent = texto;
   }
 
@@ -222,7 +224,10 @@ function montar(root, d) {
       // eixo X: 4 rótulos curtos, sem sobrepor
       ctx.font = '10.5px Inter, system-ui, sans-serif'; ctx.fillStyle = css('--suave'); ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
       let ultimo = '';
-      [0.06, 0.31, 0.56, 0.81].forEach(fr => {
+      if (escala === '10d') {
+        ctx.font = '9.5px Inter, system-ui, sans-serif';
+        for (let i = 0; i < n; i++) ctx.fillText(i === n - 1 ? 'Hoje' : String(i - (n - 1)), Math.min(X(i), x1 - 10), H - 5);
+      } else [0.06, 0.31, 0.56, 0.81].forEach(fr => {
         const i = Math.round((n - 1) * fr), txt = ROTULO_X[s.rot](new Date(s.t[i]));
         if (txt !== ultimo) ctx.fillText(txt, X(i), H - 5);
         ultimo = txt;
@@ -241,8 +246,11 @@ function montar(root, d) {
       // modo Simons: dias de queda marcados, contador e termômetro
       if (modo === 'simons' && escala === '10d') {
         const sm = d.simons;
-        ctx.fillStyle = css('--vermelho');
-        for (let k = 0; k < sm.dias && k < n; k++) { const i = n - 1 - k; ctx.beginPath(); ctx.arc(X(i), Y(s.c[i]), 4, 0, 7); ctx.fill(); }
+        for (let i = 0; i < n; i++) {   // um ponto por pregão; vermelho na sequência atual de queda
+          const naQueda = i > n - 1 - sm.dias;
+          ctx.fillStyle = naQueda ? css('--vermelho') : css('--azul');
+          ctx.beginPath(); ctx.arc(X(i), Y(s.c[i]), naQueda ? 4 : 2.6, 0, 7); ctx.fill();
+        }
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '600 11px Inter, system-ui, sans-serif';
         const rot = `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda`, lw = ctx.measureText(rot).width;
         ctx.fillStyle = '#0e1420cc'; ctx.beginPath(); ctx.roundRect(x0 + 44, 8, lw + 96, 26, 8); ctx.fill();
@@ -323,7 +331,7 @@ function montar(root, d) {
   /* ---------------- faixa de preço */
   (function PriceRange(el) {
     const p = posicao(d.preco, d.min52, d.max52), larg = d.max52 - d.min52;
-    const a = larg > 0 ? (zOport - d.min52) / larg * 100 : 30, b = larg > 0 ? (zCara - d.min52) / larg * 100 : 70;
+    const a = larg > 0 ? (zOport - d.min52) / larg * 100 : 25, b = larg > 0 ? (zCara - d.min52) / larg * 100 : 75;
     const fundo = `linear-gradient(90deg,var(--verde) 0 ${a}%,var(--ardosia) ${a}% ${b}%,var(--ambar) ${b}% 100%)`;
     el.innerHTML = `<h2>Faixa de preço <small>Últimas 52 semanas</small></h2>
       <div class="pilha">
@@ -347,21 +355,28 @@ function montar(root, d) {
     const leitura = !tem(d.forca) ? '' : d.forca >= 70 ? 'Sobrecomprada. Subiu rápido demais, pode corrigir.'
       : d.forca <= 30 ? 'Sobrevendida. Caiu rápido demais, pode repicar.' : 'Neutra. Sem pressão de compra nem de venda.';
     const fundo = 'linear-gradient(90deg,var(--verde) 0 30%,var(--ardosia) 30% 70%,var(--ambar) 70% 100%)';
-    // Força da tendência: distância do preço para a média de 200 dias, numa régua de -10% a +20%
-    const FRACA = 3, FORTE = 10, RMIN = -10, RMAX = 20, pt = v => (v - RMIN) / (RMAX - RMIN) * 100;
+    // Força da tendência: distância do preço até a média de 200 dias, numa escala de -5% a +15%.
+    // O zero (a própria média) fica no início da faixa Fraca: tudo à direita dele está ACIMA da média.
+    const FRACA = 3, FORTE = 10, RMIN = -5, RMAX = 15, pt = v => (v - RMIN) / (RMAX - RMIN) * 100;
     const fundoT = `linear-gradient(90deg,var(--vermelho) 0 ${pt(0)}%,var(--ambar) ${pt(0)}% ${pt(FRACA)}%,var(--ardosia) ${pt(FRACA)}% ${pt(FORTE)}%,var(--verde) ${pt(FORTE)}% 100%)`;
-    let textoT = '';
+    let textoT = '', ondeT = '';
     if (tem(dist)) {
       const cair = (d.preco - d.mm200) / d.preco * 100, subir = (d.mm200 / d.preco - 1) * 100;
       const grau = dist > FORTE ? 'forte' : dist >= FRACA ? 'média' : 'fraca';
       textoT = dist < 0 ? `Perdeu força. A ${f(Math.abs(dist))}% abaixo da média de 200d. Precisa subir ${f(subir, 1)}% para voltar acima dela.`
         : `Alta ${grau}. A ${f(dist)}% acima da média de 200d. Se cair ${f(cair, 1)}% perde a tendência.`;
+      ondeT = `Preço ${f(d.preco)} está ${f(Math.abs(dist))}% ${dist >= 0 ? 'ACIMA' : 'ABAIXO'} da média de 200d de ${f(d.mm200)}`;
     }
     const barraT = !tem(dist) ? '' : `<div class="card">
           <span class="rot">Força da tendência</span>
-          <div class="regua" style="background:${fundoT}"><span class="bola" style="left:${Math.max(0, Math.min(100, pt(dist)))}%"></span></div>
-          <div class="leg"><span style="--c:var(--vermelho)">Perdeu força</span><span style="--c:var(--ambar)">Fraca</span><span style="--c:var(--ardosia)">Média</span><span style="--c:var(--verde)">Forte</span></div>
+          <div class="regua" style="background:${fundoT}">
+            <span class="traco" style="left:${pt(0)}%"></span>
+            <span class="bola" style="left:${Math.max(0, Math.min(100, pt(dist)))}%"></span>
+          </div>
+          <div class="escala-t num"><span style="left:0">-5%</span><span style="left:${pt(0)}%">0% = Média de 200d</span><span style="left:${pt(FORTE)}%;transform:translateX(-50%)">+10%</span><span style="right:0">+15%</span></div>
+          <div class="leg"><span style="--c:var(--vermelho)">Perdeu força: abaixo de 0%</span><span style="--c:var(--ambar)">Fraca: 0% a 3%</span><span style="--c:var(--ardosia)">Média: 3% a 10%</span><span style="--c:var(--verde)">Forte: +10% ou mais</span></div>
           <div class="destaque num">${textoT}</div>
+          <div class="nota num">${ondeT}</div>
         </div>`;
     el.innerHTML = `<h2>Tendência e força</h2>
       <div class="pilha">
@@ -734,38 +749,54 @@ function montar(root, d) {
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
           <div class="nota">${nota}</div></div>`;
     } else if (modo === 'lynch') {
-      const L = d.lynch, v = L.veredito, pc = x => tem(x) ? `${sinal(x, 1)} ao ano` : INDISP;
+      const L = d.lynch, v = L.veredito, F = L.futuro, pc = x => tem(x) ? `${sinal(x, 1)} ao ano` : 'Sem dado';
       const corV = { verde: 'var(--verde)', amarelo: 'var(--ambar)', vermelho: 'var(--vermelho)' }[v.cor] || 'var(--suave)';
       const stV = { verde: 'bom', vermelho: 'ruim' }[v.cor] || 'neutro';
       const mini = (r, val) => `<div class="ind"><span class="rot">${r}</span><span class="v num" style="font-size:18px">${val}</span></div>`;
+      const rg = d.regra, anos = d.lpaAnos;
+      const lpas = anos.map(a => `<div>${a.ano}<b style="color:${a.lpa < 0 ? 'var(--vermelho)' : 'inherit'}">${din(a.lpa)}</b></div>`).join('');
+      const media = rg.status === 'ok' ? `<div>Média de ${anos.length} ${anos.length === 1 ? 'ano' : 'anos'}<b>${din(rg.media)}</b></div>`
+        : rg.status === 'excluido' ? `<div>Média (ano de prejuízo excluído)<b>${din(rg.media)}</b></div>` : '';
+      const fut = (titulo, valor, base) => `<div class="fut"><div class="duas"><span>${titulo}</span><b class="num">${valor}</b></div><div class="nota">Base: ${base}</div></div>`;
+      const semEstimativa = !tem(F.lucroLongo) && !tem(F.receitaProx) && !tem(F.lpaEsteAno);
       el.innerHTML = `<h2>Crescimento <small>passado x futuro</small></h2>
         <div class="grade2">
           ${mini('P/L', tem(d.pl) ? f(d.pl) : '—')}${mini('PEG (Yahoo)', tem(L.pegYahoo) ? f(L.pegYahoo) : '—')}
           ${mini('Receita no trimestre', tem(L.receitaTrimestre) ? sinal(L.receitaTrimestre, 1) : '—')}${mini('Lucro no trimestre', tem(L.lucroTrimestre) ? sinal(L.lucroTrimestre, 1) : '—')}
         </div>
         <div class="nota" style="margin:6px 2px 12px">Trimestre mais recente contra o mesmo trimestre do ano anterior.</div>
-        <div class="duas-col">
-          <div class="card"><span class="rot">Passado</span><div class="nota">Últimos ${Math.max(L.passado.anosLucro, L.passado.anosReceita) || 3} anos</div>
-            <div class="lista-v num"><div>Lucro<b>${pc(L.passado.lucro)}</b></div><div>Receita<b>${pc(L.passado.receita)}</b></div></div></div>
-          <div class="card"><span class="rot">Futuro</span><div class="nota">Estimativa dos analistas</div>
-            <div class="lista-v num"><div>Lucro<b>${pc(L.futuro.lucro)}</b></div><div>Receita<b>${pc(L.futuro.receita)}</b></div></div>
-            <div class="nota">${[L.futuro.baseLucro && `Lucro: ${L.futuro.baseLucro}`, L.futuro.baseReceita && `Receita: ${L.futuro.baseReceita}`].filter(Boolean).join(' · ')}</div></div>
+        <div class="pilha">
+          <div class="card"><span class="rot">Passado</span><div class="nota">Últimos 3 anos · lucro por ação de cada ano</div>
+            ${lpas ? `<div class="lista-v num">${lpas}${media}</div>` : `<div class="nota" style="margin-top:8px">Sem dado</div>`}
+            ${rg.status === 'excluido' ? '<div class="destaque">Ano de prejuízo excluído</div>' : ''}
+            ${rg.status === 'recorrente' ? '<div class="destaque" style="color:var(--vermelho)">Sem PEG - Lynch não compra empresa sem lucro</div>' : ''}
+            <div class="lista-v num" style="margin-bottom:0"><div>Lucro<b>${pc(L.passado.lucro)}</b></div><div>Receita<b>${pc(L.passado.receita)}</b></div></div>
+          </div>
+          <div class="card"><span class="rot">Futuro</span><div class="nota">O que o Yahoo fornece de estimativa</div>
+            ${semEstimativa ? '<div class="destaque">Sem PEG - Sem estimativa no Yahoo para este ativo</div>' : ''}
+            ${fut('Lucro - Longo prazo', tem(F.lucroLongo) ? `${sinal(F.lucroLongo, 1)} ao ano` : 'Sem dado', 'Estimativa longo prazo Yahoo')}
+            ${fut('Receita - Próximo ano fiscal', tem(F.receitaProx) ? sinal(F.receitaProx, 1) : 'Sem dado', 'Próximo ano fiscal Yahoo')}
+            ${fut('Lucro - Este ano', tem(F.lpaEsteAno) ? `LPA estimado ${din(F.lpaEsteAno)}` : 'Sem dado', 'Estimativa ano atual Yahoo')}
+          </div>
         </div>
-        ${d.regra.status === 'excluido' ? '<div class="nota" style="margin:8px 2px 0">Ano de prejuízo excluído</div>' : ''}
         <div class="card" style="margin-top:10px;border-left:3px solid ${corV}">
           <div class="cab"><span class="rot">PEG do Futuro</span><span class="st ${stV}">${v.titulo}</span></div>
           <div class="num" style="font-size:26px;font-weight:700;margin:6px 0 2px;color:${corV}">${tem(L.pegFuturo) ? f(L.pegFuturo) : '—'}</div>
-          <div class="nota num">${tem(L.pegFuturo) ? `P/L ${f(d.pl)} dividido pelo Crescimento Futuro ${f(L.futuro.lucro, 1)}% ao ano` : 'PEG do Futuro = P/L dividido pelo Crescimento Futuro'}</div>
+          <div class="nota num">${tem(L.pegFuturo) ? `PEG = P/L ${f(d.pl)} / Crescimento ${f(F.lucroLongo, 1)}% = ${f(L.pegFuturo)}` : 'PEG do Futuro = P/L dividido pelo Crescimento Longo Prazo do Lucro'}</div>
           ${v.motivo ? `<div class="destaque">${v.motivo}</div>` : ''}
         </div>
         <div class="aviso" style="margin-top:10px">PEG do futuro usa estimativa. Se a empresa não entregar esse crescimento, a tese cai.</div>`;
     } else {
       const sm = d.simons, bolas = Array.from({ length: 5 }, (_, k) => `<i class="${k < sm.nivel ? 'on' : ''}"></i>`).join('');
       const REGUA = [[1, 51, 'Não faz nada'], [2, 54, 'Observa'], [3, 58, 'Movimento curto pequeno'], [4, 61, 'Movimento curto médio'], [5, 64, 'Movimento curto maior']];
+      const dias = `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'}`;
       el.innerHTML = `<h2>Movimento curto <small>últimos 10 dias</small></h2>
-        <div class="card"><div class="lista-v num" style="margin:0">
-          <div>Hoje<b>${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda</b></div>
-          <div>Queda acumulada<b>${sm.dias ? sinal(sm.queda) : '—'}</b></div>
+        <div class="card">
+          <div class="nota num" style="margin-bottom:10px">Janela: últimos ${sm.pregoes} dias - de ${sm.janelaDe} a ${sm.janelaAte}</div>
+          <div class="lista-v num" style="margin:0">
+          <div>Hoje<b>${dias} de queda seguidos</b></div>
+          <div>Queda nos ${dias}<b>${sm.dias ? sinal(sm.queda) : '—'}</b></div>
+          <div>Variação nos ${sm.pregoes} dias<b>${sinal(sm.variacao10)}</b></div>
           <div>Termômetro<b><span class="termo">${bolas}</span> ${sm.nivel} de 5</b></div>
           <div>Probabilidade de repique amanhã<b>${tem(sm.prob) ? sm.prob + '%' : '—'}</b></div>
           <div>Ação<b>${sm.acao}</b></div>
@@ -773,14 +804,13 @@ function montar(root, d) {
         <div class="card" style="margin-top:8px"><span class="rot">Régua fixa</span>
           <div class="lista-v num" style="margin-bottom:0">${REGUA.map(([n, p, a]) => `<div style="${n === sm.nivel ? 'color:var(--texto);font-weight:700' : ''}">${n} ${n === 1 ? 'dia' : 'dias'}: ${p}%<b style="${n === sm.nivel ? '' : 'color:var(--suave);font-weight:500'}">${a}</b></div>`).join('')}</div></div>
         <div style="margin-top:10px"><span class="selo sem">${sm.selo}</span></div>
-        <p class="nota" style="margin:10px 2px 0">A probabilidade vem da régua fixa, igual para qualquer ação. Ela ainda não foi testada com o histórico deste ativo.</p>`;
+        <p class="nota" style="margin:10px 2px 0">"Queda nos ${dias}" conta só a sequência atual de queda. "Variação nos ${sm.pregoes} dias" vai do primeiro dia da janela até hoje. A probabilidade vem da régua fixa, igual para qualquer ação, ainda não testada com o histórico deste ativo.</p>`;
     }
   }
 
   const SECOES = { faixa: ['graham'], tendencia: ['graham', 'lynch', 'simons'], minmax: ['graham', 'simons'],
     fundamentos: ['graham', 'lynch'], justo: ['graham'], indicadores: ['graham', 'lynch'], retorno: ['graham', 'lynch'], backtest: ['graham'] };
   function renderModo() {
-    $('modo-texto').textContent = TEXTO_MODO[modo];
     root.querySelectorAll('.modos button').forEach(b => b.setAttribute('aria-pressed', b.dataset.modo === modo));
     Object.entries(SECOES).forEach(([id, modos]) => { $(id).hidden = !modos.includes(modo); });
     renderDecisao(); renderBloco(); aoMudarModo();

@@ -25,8 +25,8 @@ def test_percentil_faixa_sem_largura():
 
 def test_zonas_csmg3():
     z = zonas(MINIMO, MAXIMO)
-    assert round(z.oportunidade_ate, 2) == 46.48
-    assert round(z.cara_acima, 2) == 58.68
+    assert round(z.oportunidade_ate, 2) == 44.96   # mínima + 25% da amplitude
+    assert round(z.cara_acima, 2) == 60.20         # máxima - 25% da amplitude
 
 
 def test_preco_no_percentil_e_inverso_do_percentil():
@@ -34,8 +34,8 @@ def test_preco_no_percentil_e_inverso_do_percentil():
     assert preco_no_percentil(MINIMO, MAXIMO, p) == pytest.approx(PRECO)
 
 
-@pytest.mark.parametrize("p,zona", [(0, "Oportunidade"), (30, "Oportunidade"), (31, "Neutra"),
-                                    (58, "Neutra"), (69.9, "Neutra"), (70, "Cara"), (100, "Cara")])
+@pytest.mark.parametrize("p,zona", [(0, "Oportunidade"), (25, "Oportunidade"), (26, "Neutra"),
+                                    (58, "Neutra"), (75, "Neutra"), (75.1, "Cara"), (100, "Cara")])
 def test_nome_da_zona(p, zona):
     assert nome_da_zona(p) == zona
 

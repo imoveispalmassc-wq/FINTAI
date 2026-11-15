@@ -9,9 +9,9 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-P_OPORTUNIDADE = 30  # zona de oportunidade: até este percentil
-P_COMPRA = 30        # o estado COMPRAR exige preço na zona de oportunidade
-P_CARO = 70          # zona cara: a partir deste percentil
+P_OPORTUNIDADE = 25  # zona de oportunidade: mínima + 25% da amplitude de 52 semanas
+P_COMPRA = 25        # o teste histórico de compra usa a mesma zona de oportunidade
+P_CARO = 75          # zona cara: máxima - 25% da amplitude
 
 
 def percentil_na_faixa(preco: float, minimo: float, maximo: float) -> float:
@@ -43,7 +43,7 @@ def zonas(minimo: float, maximo: float) -> Zonas:
 def nome_da_zona(percentil: float) -> str:
     if percentil <= P_OPORTUNIDADE:
         return "Oportunidade"
-    if percentil >= P_CARO:
+    if percentil > P_CARO:
         return "Cara"
     return "Neutra"
 

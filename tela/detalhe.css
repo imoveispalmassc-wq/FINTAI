@@ -210,3 +210,13 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .termo { display: inline-flex; gap: 5px; vertical-align: -2px; margin-right: 6px; }
 .termo i { width: 13px; height: 13px; border-radius: 50%; border: 2px solid var(--azul); }
 .termo i.on { background: var(--azul); }
+.modo-linha { margin-bottom: 0; }
+#grafico .grafico { margin-top: 6px; }
+#decisao { margin-top: 14px; }
+.decisao .modo-texto { margin: 0 0 12px; padding-bottom: 12px; border-bottom: 1px solid var(--borda); }
+.escala-t { position: relative; height: 16px; color: var(--suave); font-size: 11px; margin: 0 6px; }
+.escala-t span { position: absolute; top: 0; white-space: nowrap; }
+.fut { padding: 10px 0; border-bottom: 1px solid #26314766; }
+.fut:last-child { border-bottom: 0; padding-bottom: 0; }
+.fut .duas span { color: var(--suave); font-size: 13px; }
+.fut .duas b { font-size: 14px; text-align: right; }

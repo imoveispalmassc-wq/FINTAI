@@ -12,6 +12,7 @@ import pandas as pd
 from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, pl_medio_12m,
                       pl_medio_longo, preco_justo_graham, preco_teto_bazin)
 from utils.lynch import crescimento_anual, peg, regra_prejuizo, veredito
+from utils.percentile import zonas
 from utils.signals import (backtest_percentil, decidir_estado, fundamento_quebrou,
                            selo_backtest)
 from utils.simons import SELO as SELO_SIMONS
@@ -144,19 +145,20 @@ def modo_lynch(d: dict, pl, regra: dict) -> dict:
     lucro_pass, anos_lucro = (None, 0) if regra["status"] == "recorrente" else \
         crescimento_anual(lpas, excluir_negativos=regra["status"] == "excluido")
     rec_pass, anos_rec = crescimento_anual(receitas)
-    lucro_fut, base_lucro = _estimativa(d.get("est_cresc"), ["LTG"], "stockTrend")
-    if lucro_fut is None:
-        lucro_fut, base_lucro = _estimativa(d.get("est_lucro"), ["+1y"], "growth")
-    rec_fut, base_rec = _estimativa(d.get("est_receita"), ["+1y"], "growth")
-    rotulo = {"LTG": "longo prazo, ao ano", "+1y": "próximo ano fiscal"}
+    # Futuro: só o que o Yahoo realmente fornece, cada linha com a sua base
+    lucro_fut, _ = _estimativa(d.get("est_cresc"), ["LTG"], "stockTrend")      # longo prazo, ao ano
+    rec_fut, _ = _estimativa(d.get("est_receita"), ["+1y"], "growth")          # próximo ano fiscal
+    lpa_este_ano = None                                                        # LPA estimado do ano atual
+    est = d.get("est_lucro")
+    if est is not None and not getattr(est, "empty", True) and "avg" in est.columns and "0y" in est.index:
+        lpa_este_ano = _n(est.loc["0y", "avg"], 4)
     peg_futuro = None if regra["status"] == "recorrente" else peg(pl, lucro_fut)
     receita = rec_fut if rec_fut is not None else rec_pass
     fracao = lambda chave: None if info.get(chave) is None else _n(info[chave] * 100, 2)
     return {
         "passado": {"lucro": _n(lucro_pass, 2), "anosLucro": anos_lucro,
                     "receita": _n(rec_pass, 2), "anosReceita": anos_rec},
-        "futuro": {"lucro": _n(lucro_fut, 2), "baseLucro": rotulo.get(base_lucro, ""),
-                   "receita": _n(rec_fut, 2), "baseReceita": rotulo.get(base_rec, "")},
+        "futuro": {"lucroLongo": _n(lucro_fut, 2), "receitaProx": _n(rec_fut, 2), "lpaEsteAno": lpa_este_ano},
         "pegFuturo": _n(peg_futuro, 4),
         "pegYahoo": _n(info.get("trailingPegRatio") or info.get("pegRatio"), 4),
         "lucroTrimestre": fracao("earningsGrowth"), "receitaTrimestre": fracao("revenueGrowth"),
@@ -167,7 +169,11 @@ def modo_lynch(d: dict, pl, regra: dict) -> dict:
 def modo_simons(hist: pd.DataFrame) -> dict:
     fech = _sem_fuso(hist)["Close"].dropna()
     dias, queda = sequencia_de_quedas(fech)
-    return {"dias": dias, "queda": _n(queda, 2), **leitura(dias), "selo": SELO_SIMONS}
+    janela = fech.tail(11)   # de -10 pregões até hoje
+    return {"dias": dias, "queda": _n(queda, 2), **leitura(dias), "selo": SELO_SIMONS,
+            "janelaDe": f"{janela.index[0]:%d/%m/%Y}", "janelaAte": f"{janela.index[-1]:%d/%m/%Y}",
+            "pregoes": len(janela) - 1,
+            "variacao10": _n((janela.iloc[-1] / janela.iloc[0] - 1) * 100, 2)}
 
 
 def _backtest(hist, anos, nome):
@@ -210,6 +216,8 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         venda_validada=bool(bt5 and bt5["vendaValidada"]),
         quebrou=quebrou, motivo_quebra=motivo, simbolo=moeda,
         preco=r.preco_atual, tendencia=direcao)
+
+    faixa = zonas(r.minimo_1a, r.maximo_1a)
 
     after = None
     if info.get("postMarketPrice") and info.get("postMarketChangePercent") is not None:
@@ -255,6 +263,8 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "data1AnoAtras": f"{pd.Timestamp(um_ano['t'][0], unit='ms'):%d/%m/%Y}" if um_ano else None,
         "comparadores": comparadores, "comparadorPadrao": padrao,
         "backtest": {"5a": bt5, "max": btmax},
-        "decisao": {"codigo": estado.codigo, "rotulo": estado.rotulo, "texto": estado.texto, "zona": estado.zona},
+        "decisao": {"codigo": estado.codigo, "rotulo": estado.rotulo, "texto": estado.texto, "zona": estado.zona,
+                    "validado": estado.validado, "alerta": estado.alerta},
+        "zOport": _n(faixa.oportunidade_ate, 4), "zCara": _n(faixa.cara_acima, 4),
         "series": series,
     }

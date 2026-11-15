@@ -73,7 +73,7 @@ def veredito(peg_futuro: float | None, receita: float | None, status_prejuizo: s
         if lucro_futuro is not None and lucro_futuro <= 0:
             return {"cor": "vermelho", "titulo": "Lynch não compra",
                     "motivo": "Os analistas estimam lucro em queda, então não há PEG."}
-        return {"cor": "cinza", "titulo": "Sem PEG", "motivo": "Dados indisponíveis para calcular o PEG do futuro."}
+        return {"cor": "cinza", "titulo": "Sem PEG - Sem estimativa no Yahoo para este ativo", "motivo": ""}
     if peg_futuro > 2:
         return {"cor": "vermelho", "titulo": "Lynch não compra", "motivo": "PEG maior que 2."}
     if peg_futuro < 1 and receita is not None and receita > 10:
