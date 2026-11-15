@@ -352,11 +352,15 @@ function montar(root, d) {
         <div class="zona" style="--c:var(--ardosia)"><span class="rot">Zona neutra</span><b class="num">${f(zOport)} a ${f(zCara)}</b></div>
         <div class="zona" style="--c:var(--ambar)"><span class="rot">Zona cara</span><b class="num">acima de ${din(zCara)}</b></div>
         <div class="card">
-          <div class="regua" style="background:${fundo}">
-            <span class="aqui" style="left:${Math.min(Math.max(p, 18), 82)}%">VOCÊ ESTÁ AQUI</span><span class="bola" style="left:${p}%"></span>
+          <span class="rot" style="color:var(--azul);font-weight:700">Você está aqui</span>
+          <div class="zonas-rot num" style="grid-template-columns:${a}fr ${b - a}fr ${100 - b}fr">
+            <span style="color:var(--verde)"><b>Oportunidade</b>até ${f(zOport)}</span>
+            <span style="color:#aab4c6"><b>Neutra</b>${f(zOport)} a ${f(zCara)}</span>
+            <span style="color:var(--ambar)"><b>Cara</b>acima de ${f(zCara)}</span>
           </div>
+          <div class="regua" style="background:${fundo};margin-top:8px"><span class="bola" style="left:${p}%"></span></div>
+          <div class="marca-baixo so-valor num"><span style="left:${Math.min(Math.max(p, 10), 90)}%">${f(d.preco)}</span></div>
           <div class="pontas num"><span>Mín. 52 sem. ${f(d.min52)}</span><span>Máx. 52 sem. ${f(d.max52)}</span></div>
-          <div class="leg num"><span style="--c:var(--verde)">Oportunidade até ${f(zOport)}</span><span style="--c:var(--ardosia)">Neutra</span><span style="--c:var(--ambar)">Cara acima de ${f(zCara)}</span></div>
         </div>
       </div>`;
   })($('faixa'));
@@ -427,10 +431,10 @@ function montar(root, d) {
         <p>Preço agora: <b>${din(d.preco)}</b>, ou <b>${din(Math.abs(dif))} ${dif >= 0 ? 'acima' : 'abaixo'}</b> do ponto médio.</p>${fonte}`];
       return `<div class="card">
         <div class="cab"><strong>${titulo}</strong><button class="link" data-folha="${id}">Ver como calculamos</button></div>
-        <div class="trio num"><div><span>Mín.</span><b>${f(min)}</b></div><div><span>Máx.</span><b>${f(max)}</b></div><div><span>Agora</span><b>${f(d.preco)}</b></div></div>
-        <div class="nota num" style="margin-top:8px">Ponto médio: <b>${f(meio)}</b></div>
-        <div class="regua" style="background:var(--ardosia);margin-top:18px"><span class="traco" style="left:50%"></span><span class="bola" style="left:${p}%"></span></div>
-        <div class="leg"><span style="--c:var(--azul)">Preço atual</span><span style="--c:var(--texto)">Ponto médio</span></div>
+        <div class="marca-cima num"><span style="left:50%">Ponto médio<b>${f(meio)}</b></span></div>
+        <div class="regua" style="background:var(--ardosia);margin-top:6px"><span class="traco" style="left:50%"></span><span class="bola" style="left:${p}%"></span></div>
+        <div class="marca-baixo num"><span style="left:${Math.min(Math.max(p, 10), 90)}%">Agora<b>${f(d.preco)}</b></span></div>
+        <div class="pontas num ext"><span>Mín.<b>${f(min)}</b></span><span>Máx.<b>${f(max)}</b></span></div>
         <div class="destaque num">Você está ${din(Math.abs(dif))} ${dif >= 0 ? 'acima' : 'abaixo'} do ponto médio</div>
         <div class="nota">Preço na metade mais ${dif >= 0 ? 'cara' : 'barata'} do range de ${periodo}</div>
       </div>`;
@@ -758,10 +762,16 @@ function montar(root, d) {
       const nota = rg.status === 'excluido' ? `Média dos anos com lucro: ${din(rg.media)}.`
         : rg.status === 'recorrente' ? 'Dois ou mais anos de prejuízo nos últimos 3 anos.'
         : rg.status === 'ok' ? 'Nenhum ano de prejuízo nos últimos 3 anos.' : 'O Yahoo Finance não traz o lucro anual deste ativo.';
-      el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos</small></h2>
-        <div class="card">${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}</div>` : ''}
+      // projeção: LPA estimado pelos analistas para o ano fiscal em curso (o seguinte ao último divulgado)
+      const proj = d.lynch && d.lynch.futuro ? d.lynch.futuro.lpaEsteAno : null;
+      const anoProj = anos.length ? anos[anos.length - 1].ano + 1 : null;
+      const ultimo = anos.length ? anos[anos.length - 1].lpa : null;
+      const varProj = tem(proj) && tem(ultimo) && ultimo > 0 ? (proj / ultimo - 1) * 100 : null;
+      const linhaProj = anoProj ? `<div class="proj"><span>${anoProj} <span class="tag-proj">projeção</span>${ex('lynchFuturo')}</span><b>${tem(proj) ? din(proj) : 'Sem estimativa'}</b></div>` : '';
+      el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>
+        <div class="card">${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}${linhaProj}</div>` : ''}
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
-          <div class="nota">${nota}</div></div>`;
+          <div class="nota">${nota}${anoProj ? ` ${tem(proj) ? `Projeção ${anoProj}: estimativa dos analistas no Yahoo${tem(varProj) ? `, ${sinal(varProj, 0)} sobre ${anos[anos.length - 1].ano}` : ''}. Não entra na média.` : `Sem estimativa no Yahoo para ${anoProj}.`}` : ''}</div></div>`;
     } else if (modo === 'lynch') {
       const L = d.lynch, v = L.veredito, F = L.futuro, pc = x => tem(x) ? `${sinal(x, 1)} ao ano` : 'Sem dado';
       const corV = { verde: 'var(--verde)', amarelo: 'var(--ambar)', vermelho: 'var(--vermelho)' }[v.cor] || 'var(--suave)';

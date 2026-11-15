@@ -117,7 +117,7 @@ def pacote() -> dict:
     pl = PRECO / LPA
     # Lucro e receita por ano fiscal: sem os valores reais, ficam vazios ("Sem dado").
     # Preencha aqui quando tiver os números: [(2024, lpa), (2025, lpa), (2026, lpa)]
-    lpa_anos: list[tuple[int, float]] = []
+    lpa_anos: list[tuple[int, float]] = [(2024, 0.70), (2025, 7.65), (2026, 75.38)]   # do app real, 15/11/2026
     receitas: list[tuple[int, float]] = []
     regra = regra_prejuizo([v for _, v in lpa_anos])
     lucro_pass, anos_lucro = crescimento_anual(lpa_anos)
