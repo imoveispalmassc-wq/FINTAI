@@ -49,6 +49,7 @@ ARQ_VISTOS = RAIZ / ".guidance_cache" / "vistos.json"   # persistido pelo cache 
 CVM = "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC"
 CABECALHO = {"User-Agent": "fintai-guidance/1.0 (+https://github.com/imoveispalmassc-wq/fintai)"}
 LIMITE_MUDANCA = 0.50        # variação do LPA projetado acima disso vai para revisão
+IDADE_MAXIMA_DIAS = 120      # documento mais velho que isso (mais de um trimestre) vai para revisão
 MAX_DOCUMENTOS = 6           # documentos lidos por ticker, do mais novo para o mais antigo
 MODELO = "claude-opus-5-5"
 
@@ -132,7 +133,7 @@ def extrair_por_padroes(texto: str, ano_alvo: int) -> Extracao | None:
             if not f:
                 break
             # depois da primeira faixa, só contam as faixas coladas a ela (mesma linha de tabela,
-            # ex.: "22 a 26  18 a 22" = anterior e revisada); texto no meio encerra a menção
+            # ex.: "18 a 22  9 a 11" = anterior e revisada); texto no meio encerra a menção
             if achou and janela[pos:f.start()].strip(" ;,/|()") != "":
                 break
             mult = mult_de(f)
@@ -205,7 +206,7 @@ release de resultados entregue à CVM) e extrai o guidance (projeção oficial) 
 Regras:
 - Use só o que está escrito no documento. Não estime nem complete nada.
 - Se houver projeção anterior e revisada, use a VIGENTE (a mais recente/revisada).
-- lucro_min_reais e lucro_max_reais em reais, por extenso (R$ 18 bilhões = 18000000000).
+- lucro_min_reais e lucro_max_reais em reais, por extenso (R$ 9 bilhões = 9000000000).
   Se o guidance for um valor único, repita-o nos dois campos.
 - payout_fracao: fração do lucro distribuída (30% = 0.30), só se o documento disser; senão null.
 - trecho: copie EXATAMENTE, palavra por palavra, a frase ou linha de tabela de onde tirou a faixa de lucro.
@@ -357,6 +358,17 @@ def _data_br(data: str) -> str:
         return data
 
 
+def _data(texto: str | None) -> dt.date | None:
+    """'2026-11-11', '2026-11-11 10:00' ou '11/11/2026' -> date."""
+    texto = (texto or "").strip()
+    for formato, tam in (("%Y-%m-%d", 10), ("%d/%m/%Y", 10)):
+        try:
+            return dt.datetime.strptime(texto[:tam], formato).date()
+        except ValueError:
+            continue
+    return None
+
+
 def _lpa(o: dict) -> float | None:
     try:
         return (float(o["lucro_min"]) + float(o["lucro_max"])) / 2 / float(o["acoes"])
@@ -381,6 +393,12 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
     for doc in buscar_docs(cnpj, hoje)[:MAX_DOCUMENTOS]:
         if anterior and anterior.get("documento") == doc["link"]:
             item["motivo"] = "guidance já atualizado com o documento mais recente"
+            return item
+        data_doc, data_ant = _data(doc["data"]), _data((anterior or {}).get("data"))
+        if data_doc and data_ant and data_doc < data_ant:
+            # documentos vêm do mais novo para o mais antigo: daqui para trás, tudo é anterior
+            # ao guidance que já está no app (ex.: a faixa de maio depois da revisão de novembro)
+            item["motivo"] = f"documento de {_data_br(doc['data'])} é mais antigo que o guidance atual ({anterior['data']}): descartado"
             return item
         try:
             pdf, texto = ler_pdf(doc["link"])
@@ -414,9 +432,14 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
         lpa_novo, lpa_ant = _lpa(novo), _lpa(anterior or {})
         mudou_muito = bool(lpa_ant and lpa_novo and abs(lpa_novo / lpa_ant - 1) > LIMITE_MUDANCA)
         motivos = list(ex.motivos)
+        idade = (hoje - data_doc).days if data_doc else None
+        velho = idade is None or idade > IDADE_MAXIMA_DIAS
+        if velho:
+            motivos.append(f"documento de {_data_br(doc['data'])}, com mais de {IDADE_MAXIMA_DIAS} dias: "
+                           "pode existir guidance mais novo que o robô não leu")
         if mudou_muito:
             motivos.append(f"LPA projetado mudou {abs(lpa_novo / lpa_ant - 1):.0%} (limite {LIMITE_MUDANCA:.0%})")
-        revisar = ex.metodo == "API do Claude" or ex.confianca != "alta" or mudou_muito
+        revisar = ex.metodo == "API do Claude" or ex.confianca != "alta" or mudou_muito or velho
         item.update(acao="pr" if revisar else "commit", novo=novo,
                     motivo="; ".join(motivos) or "padrões de texto, confiança alta")
         return item

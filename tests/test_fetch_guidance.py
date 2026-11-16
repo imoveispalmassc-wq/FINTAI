@@ -8,13 +8,22 @@ from utils.fetch_guidance import Extracao, extrair_por_padroes, numero_br, plane
 
 HOJE = dt.date(2026, 11, 16)
 
+# Linha do tempo do guidance de 2026 do Banco do Brasil (lucro líquido ajustado):
+#   fev/2026: R$ 22 a 26 bi (payout 30%)  ->  13/05/2026: R$ 18 a 22 bi  ->  11/11/2026: R$ 9 a 11 bi (payout 25%)
+# O vigente é o de 11/11/2026. A faixa de maio (18 a 22) é antiga e nunca pode ir para o app.
 FATO_BB_FEV = """BANCO DO BRASIL S.A. FATO RELEVANTE Divulgação de Projeções Corporativas 2026.
 O Banco do Brasil informa as projeções corporativas para 2026: Lucro Líquido Ajustado entre
 R$ 22 bilhões e R$ 26 bilhões. Margem Financeira Bruta: crescimento entre 4% e 8%.
 O Conselho de Administração aprovou payout de 30% para o exercício de 2026."""
 
-TABELA_BB_REVISADA = """Projeções Corporativas 2026 (R$ bilhões) Anterior Revisado
-Lucro Líquido Ajustado 22 a 26 18 a 22  Custo do Crédito 53 a 58 65 a 70"""
+FATO_BB_MAI = """BANCO DO BRASIL S.A. Projeções Corporativas 2026: Lucro Líquido Ajustado entre
+R$ 18 bilhões e R$ 22 bilhões."""
+
+FATO_BB_NOV = """BANCO DO BRASIL S.A. FATO RELEVANTE Projeções Corporativas 2026.
+Lucro Líquido Ajustado entre R$ 9 bilhões e R$ 11 bilhões. Payout de 25% para o exercício de 2026."""
+
+TABELA_BB_NOV = """Projeções Corporativas 2026 (R$ bilhões) Anterior Revisado
+Lucro Líquido Ajustado 18 a 22 9 a 11  Custo do Crédito 65 a 70 80 a 83  Payout 25%"""
 
 RELEASE_SEM_GUIDANCE = "Divulgação de resultados do 3T26. Lucro líquido de R$ 3,9 bilhões no trimestre."
 
@@ -25,17 +34,17 @@ def test_numero_br():
 
 
 def test_fato_relevante_com_faixa_unica_tem_confianca_alta():
-    ex = extrair_por_padroes(FATO_BB_FEV, 2026)
-    assert (ex.lucro_min, ex.lucro_max) == (22e9, 26e9)
-    assert ex.ano == 2026 and ex.payout == pytest.approx(0.30)
+    ex = extrair_por_padroes(FATO_BB_NOV, 2026)
+    assert (ex.lucro_min, ex.lucro_max) == (9e9, 11e9)
+    assert ex.ano == 2026 and ex.payout == pytest.approx(0.25)
     assert ex.confianca == "alta" and ex.candidatos == 1
-    assert "22 bilhões" in ex.trecho
+    assert "9 bilhões" in ex.trecho
 
 
 def test_tabela_com_anterior_e_revisado_fica_sem_confianca():
-    ex = extrair_por_padroes(TABELA_BB_REVISADA, 2026)
-    assert ex is not None and ex.confianca == "baixa" and ex.candidatos >= 1
-    assert ex.lucro_min == 22e9            # a primeira faixa; por isso não pode ir direto para o app
+    ex = extrair_por_padroes(TABELA_BB_NOV, 2026)
+    assert ex is not None and ex.confianca == "baixa" and ex.candidatos == 2
+    assert ex.lucro_min == 18e9            # a primeira faixa é a antiga; por isso não pode ir direto para o app
 
 
 def test_release_sem_faixa_nao_e_guidance():
@@ -43,7 +52,7 @@ def test_release_sem_faixa_nao_e_guidance():
 
 
 def test_projecao_de_outro_ano_fica_sem_confianca():
-    ex = extrair_por_padroes(FATO_BB_FEV.replace("2026", "2027"), 2026)
+    ex = extrair_por_padroes(FATO_BB_NOV.replace("2026", "2027"), 2026)
     assert ex.confianca == "baixa" and ex.ano == 2027
 
 
@@ -53,10 +62,11 @@ def test_valor_em_milhoes():
 
 
 # ------------------------------------------------------------ decisão (sem rede)
-def _planejar(textos, anterior=None, claude=None, vistos=None):
-    docs = [{"data": f"2026-0{9 - i}-01", "categoria": "Fato Relevante", "assunto": "Projeções",
-             "link": f"https://cvm.example/doc{i}.pdf"} for i in range(len(textos))]
-    paginas = {d["link"]: t for d, t in zip(docs, textos)}
+def _planejar(docs_datados, anterior=None, claude=None, vistos=None):
+    """docs_datados: [(data ISO, texto)], do mais novo para o mais antigo."""
+    docs = [{"data": data, "categoria": "Fato Relevante", "assunto": "Projeções",
+             "link": f"https://cvm.example/doc{i}.pdf"} for i, (data, _) in enumerate(docs_datados)]
+    paginas = {d["link"]: texto for d, (_, texto) in zip(docs, docs_datados)}
     return planejar_ticker(
         "BBAS3", HOJE, anterior, set() if vistos is None else vistos,
         buscar_cnpj=lambda t, h: ("00.000.000/0001-91", "BANCO DO BRASIL S.A."),
@@ -64,48 +74,70 @@ def _planejar(textos, anterior=None, claude=None, vistos=None):
         buscar_acoes=lambda t: 5.73e9, ler_com_claude=claude or (lambda p, t, a: None))
 
 
-def test_confianca_alta_vai_direto_para_o_app():
-    item = _planejar([FATO_BB_FEV])
+NOV, MAI, FEV = "2026-11-11", "2026-05-13", "2026-02-12"
+GUIDANCE_NOV = {"lucro_min": 9e9, "lucro_max": 11e9, "acoes": 5.73e9, "payout": 0.25, "ano": 2026,
+                "data": "11/11/2026", "documento": "https://cvm.example/release-3t26.pdf"}
+
+
+def test_confianca_alta_e_documento_recente_vai_direto_para_o_app():
+    item = _planejar([(NOV, FATO_BB_NOV)])
     assert item["acao"] == "commit"
     n = item["novo"]
-    assert (n["lucro_min"], n["lucro_max"], n["payout"], n["acoes"]) == (22e9, 26e9, 0.30, 5.73e9)
-    assert n["fonte"].startswith("BANCO DO BRASIL S.A., Fato Relevante de ") and n["url"].startswith("https://")
+    assert (n["lucro_min"], n["lucro_max"], n["payout"], n["acoes"]) == (9e9, 11e9, 0.25, 5.73e9)
+    assert n["data"] == "11/11/2026"
+    assert n["fonte"] == "BANCO DO BRASIL S.A., Fato Relevante de 11/11/2026 (CVM)" and n["url"].startswith("https://")
 
 
 def test_documento_mais_novo_sem_guidance_e_pulado():
-    assert _planejar([RELEASE_SEM_GUIDANCE, FATO_BB_FEV])["acao"] == "commit"
+    assert _planejar([("2026-11-14", RELEASE_SEM_GUIDANCE), (NOV, FATO_BB_NOV)])["acao"] == "commit"
+
+
+def test_faixa_de_maio_e_descartada_quando_o_app_ja_tem_a_de_novembro():
+    # o robô só achou o documento de maio (18 a 22): é mais antigo que o guidance atual, descarta
+    item = _planejar([(MAI, FATO_BB_MAI), (FEV, FATO_BB_FEV)], anterior=GUIDANCE_NOV)
+    assert item["acao"] == "nada" and item["novo"] is None and "mais antigo" in item["motivo"]
+
+
+def test_faixa_de_maio_sem_guidance_no_app_nunca_e_publicada_sozinha():
+    # primeira execução, sem guidance salvo: documento com mais de 120 dias vai para revisão
+    item = _planejar([(MAI, FATO_BB_MAI)])
+    assert item["acao"] == "pr" and "120 dias" in item["motivo"]
+    assert item["novo"]["lucro_min"] == 18e9      # aparece no PR, para você recusar
 
 
 def test_nunca_volta_para_documento_antigo_quando_o_novo_e_ambiguo():
-    # o mais novo é a revisão (ambígua): não pode usar o fato de fevereiro, que está desatualizado
-    item = _planejar([TABELA_BB_REVISADA, FATO_BB_FEV])
+    # o mais novo (novembro) traz anterior e revisada; não pode cair para o fato de maio ou fevereiro
+    item = _planejar([(NOV, TABELA_BB_NOV), (MAI, FATO_BB_MAI), (FEV, FATO_BB_FEV)])
     assert item["acao"] == "erro" and item["novo"] is None
 
 
 def test_ambiguo_lido_pela_api_do_claude_vai_para_revisao():
-    lido = Extracao(lucro_min=18e9, lucro_max=22e9, ano=2026, trecho="Lucro Líquido Ajustado 22 a 26 18 a 22",
-                    metodo="API do Claude", motivos=["lido pela API do Claude: precisa de revisão"])
-    item = _planejar([TABELA_BB_REVISADA], claude=lambda p, t, a: lido)
-    assert item["acao"] == "pr" and item["novo"]["lucro_min"] == 18e9
+    lido = Extracao(lucro_min=9e9, lucro_max=11e9, payout=0.25, ano=2026,
+                    trecho="Lucro Líquido Ajustado 18 a 22 9 a 11", metodo="API do Claude",
+                    motivos=["lido pela API do Claude: precisa de revisão"])
+    item = _planejar([(NOV, TABELA_BB_NOV)], claude=lambda p, t, a: lido)
+    assert item["acao"] == "pr" and (item["novo"]["lucro_min"], item["novo"]["lucro_max"]) == (9e9, 11e9)
     assert item["novo"]["metodo"] == "API do Claude"
 
 
 def test_documento_ja_tentado_nao_chama_a_api_de_novo():
     chamadas = []
-    vistos = {"https://cvm.example/doc0.pdf"}
-    item = _planejar([TABELA_BB_REVISADA], claude=lambda *a: chamadas.append(a), vistos=vistos)
+    item = _planejar([(NOV, TABELA_BB_NOV)], claude=lambda *a: chamadas.append(a),
+                     vistos={"https://cvm.example/doc0.pdf"})
     assert not chamadas and item["acao"] == "nada"
 
 
-def test_mudanca_maior_que_50_por_cento_vai_para_revisao():
-    anterior = {"lucro_min": 50e9, "lucro_max": 60e9, "acoes": 5.73e9, "payout": 0.3, "ano": 2026, "documento": "x"}
-    item = _planejar([FATO_BB_FEV], anterior=anterior)
+def test_corte_de_mais_de_50_por_cento_vai_para_revisao():
+    # de 18 a 22 (maio) para 9 a 11 (novembro): LPA cai 50%; acima do limite vai para revisão
+    anterior = {"lucro_min": 18e9, "lucro_max": 22e9, "acoes": 5.73e9, "payout": 0.3, "ano": 2026,
+                "data": "13/05/2026", "documento": "x"}
+    item = _planejar([(NOV, FATO_BB_NOV.replace("9 bilhões", "8 bilhões"))], anterior=anterior)
     assert item["acao"] == "pr" and "mudou" in item["motivo"]
 
 
 def test_mesmo_documento_ja_aplicado_nao_muda_nada():
-    anterior = {"lucro_min": 22e9, "lucro_max": 26e9, "acoes": 5.73e9, "documento": "https://cvm.example/doc0.pdf"}
-    assert _planejar([FATO_BB_FEV], anterior=anterior)["acao"] == "nada"
+    anterior = {**GUIDANCE_NOV, "documento": "https://cvm.example/doc0.pdf"}
+    assert _planejar([(NOV, FATO_BB_NOV)], anterior=anterior)["acao"] == "nada"
 
 
 def test_acao_dos_eua_fica_desligada():
