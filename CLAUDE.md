@@ -48,6 +48,9 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   negativo (só resta a média), o aviso diz que a média pode estar otimista.
 - P/L médio de 12 meses só usa o LPA trimestral do Yahoo se a série bater com o LPA de 12 meses em até 10%
   (senão as bases são diferentes, ex.: ajustado x contábil, e usa preço médio do ano ÷ LPA atual).
+- Card de P/L: colunas Contábil (LPA 12 meses, data do último balanço), Previsão do ano (consenso do Yahoo,
+  com analistas e faixa) e Média 12m. Guidance oficial e lucro ajustado aparecem em linhas à parte, com fonte.
+- Retorno acumulado: período (1/3/5 anos) no topo; barras com o ativo primeiro e os indicadores em ordem crescente.
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 

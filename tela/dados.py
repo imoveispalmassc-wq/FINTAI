@@ -288,6 +288,9 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
     lynch = modo_lynch(d, f["pl"], regra)
     g = guidance_oficial(curto, acoes_padrao=f["acoes"])
     guia = None
+    # consenso do Yahoo para o ano em curso, guardado antes do guidance substituir (card de P/L mostra os dois)
+    fu = lynch["futuro"]
+    consenso_ano = {"lpa": fu["lpaEsteAno"], "analistas": fu["analistas"], "baixa": fu["lpaBaixa"], "alta": fu["lpaAlta"]}
     if g:
         lynch["futuro"].update({"lpaEsteAno": _n(g["lpa"], 4), "lpaBaixa": _n(g["lpaMin"], 4),
                                 "lpaAlta": _n(g["lpaMax"], 4), "analistas": None})
@@ -325,7 +328,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "lpaAnos": [{"ano": a, "lpa": _n(v, 4)} for a, v in lpa_anos],
         "regra": {"status": regra["status"], "media": _n(regra["media"], 4), "mensagem": regra["mensagem"]},
         "lynch": lynch,
-        "guidance": guia,
+        "guidance": guia, "consensoAno": consenso_ano,
         "simons": modo_simons(hist),
         "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "precoMedio12": _n(float(r.fechamentos_1a.mean()), 4) if len(r.fechamentos_1a) else None, "plMetodo": f["metodo"],
         "lpa": _n(f["lpa"], 4), "lpaAgora": _n(f["lpa_agora"], 4), "lpa12Atras": _n(f["lpa_antes"], 4),

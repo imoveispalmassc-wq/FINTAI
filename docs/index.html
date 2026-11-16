@@ -885,12 +885,12 @@ function montar(root, d) {
     const plAjustado = tem(lpaAjustado) ? d.preco / lpaAjustado : null;
     const [cPL, tPL] = prejuizo ? ['neutro', 'Sem lucro em 12 meses'] : tem(difPL) ? selo(difPL, true) : semDado;
     // previsão: guidance oficial (override) ou consenso do Yahoo para o ano em curso
-    const Fp = d.lynch && d.lynch.futuro ? d.lynch.futuro : {};
-    const lpaPrev = tem(Fp.lpaEsteAno) && Fp.lpaEsteAno > 0 ? Fp.lpaEsteAno : null;
+    // previsão = consenso dos analistas no Yahoo (o número das plataformas); o guidance da empresa vai numa linha à parte
+    const Fp = d.consensoAno || {};
+    const lpaPrev = tem(Fp.lpa) && Fp.lpa > 0 ? Fp.lpa : null;
     const plPrev = tem(lpaPrev) ? d.preco / lpaPrev : null;
     const anoPrev = d.lpaAnos && d.lpaAnos.length ? d.lpaAnos[d.lpaAnos.length - 1].ano + 1 : null;
-    const fontePrev = d.guidance ? `GUIDANCE OFICIAL · ${d.guidance.data}`
-      : tem(lpaPrev) ? `Consenso Yahoo${tem(Fp.analistas) ? ` · ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' · pouco confiável' : ''}` : '';
+    const fontePrev = tem(lpaPrev) ? `Consenso Yahoo${tem(Fp.analistas) ? ` · ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' · pouco confiável' : ''}` : '';
     const lpaMedioImpl = tem(d.precoMedio12) && tem(d.plMedio12) && d.plMedio12 > 0 ? d.precoMedio12 / d.plMedio12 : null;
     const B = d.balanco;
     const rotBal = B && B.data ? `último balanço divulgado em ${B.data}` : 'último balanço divulgado';
@@ -899,13 +899,15 @@ function montar(root, d) {
       : !tem(d.pl) ? ['O Yahoo Finance não traz o lucro por ação deste ativo.']
       : [
         `<b>Contábil</b> (${rotBal}): cotação de hoje ÷ lucro por ação dos últimos 12 meses.`,
-        tem(plPrev) ? (G0 ? `<b>Previsão ${anoPrev || ''}</b>: GUIDANCE OFICIAL · ${G0.data}, lucro de ${din(G0.lucroMin / 1e9, 0)} a ${din(G0.lucroMax / 1e9, 0)} bi (ponto médio ÷ ações).`
-            : `<b>Previsão ${anoPrev || ''}</b>: consenso Yahoo${tem(Fp.analistas) ? ` de ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' (pouco confiável)' : ''}.`)
+        tem(plPrev) ? `<b>Previsão ${anoPrev || ''}</b>: consenso${tem(Fp.analistas) ? ` de ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance${tem(Fp.baixa) && tem(Fp.alta) ? `, de ${din(Fp.baixa)} a ${din(Fp.alta)}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' (poucos analistas: pouco confiável)' : ''}.`
           : `<b>Previsão</b>: sem estimativa no Yahoo.`,
         !tem(difPL) ? '<b>Média 12m</b>: sem histórico para comparar.'
           : `<b>Média 12m</b>: ${d.plMetodo === 'simplificado' ? 'preço médio do último ano ÷ o mesmo lucro contábil' : 'média do P/L de cada pregão, com o lucro de cada balanço'}. O P/L contábil está ${sinal(difPL, 1)} contra a média: ${difPL < -5 ? 'mais barata que no último ano' : difPL > 5 ? 'mais cara que no último ano' : 'perto da média'}.`];
     const frasePL = linhasPL.join('<br>');
-    const notaAjustado = tem(plAjustado) ? `Lucro ajustado (Yahoo): LPA ${din(lpaAjustado)}, P/L ${f(plAjustado)}. É a base de alguns sites.` : '';
+    const lpaGuia = G0 && tem(G0.lpa) && G0.lpa > 0 ? G0.lpa : null;
+    const notaAjustado = [
+      lpaGuia ? `GUIDANCE OFICIAL · ${G0.data}: lucro de ${din(G0.lucroMin / 1e9, 0)} a ${din(G0.lucroMax / 1e9, 0)} bi, LPA ${din(lpaGuia)}, P/L ${f(d.preco / lpaGuia)}.` : '',
+      tem(plAjustado) ? `Lucro ajustado (Yahoo): LPA ${din(lpaAjustado)}, P/L ${f(plAjustado)}. É a base de alguns sites.` : ''].filter(Boolean).join('<br>');
 
     // 2. Dividendos
     const dyDif = tem(dy) && tem(d.dyMedio12) && d.dyMedio12 > 0 ? (dy / d.dyMedio12 - 1) * 100 : null;
@@ -1117,10 +1119,10 @@ function montar(root, d) {
       const em10k = v => Math.round(10000 * (1 + v / 100) / 10) * 10;
       const difDinheiro = tem(d.retorno.total[0]) && tem(d.retorno.preco[0]) ? em10k(d.retorno.total[0]) - em10k(d.retorno.preco[0]) : 0;
 
-      // a ação primeiro; depois os indicadores do maior para o menor retorno
+      // a ação primeiro; depois os indicadores do menor para o maior retorno
       const linhasG = [{ nome: d.ticker, v: vals[per], acao: true },
         ...Object.values(d.comparadores).map(o => ({ nome: o.nome, v: o.v[per], fora: o.moeda !== d.moeda, moeda: o.moeda }))
-          .sort((x, y) => (tem(y.v) ? y.v : -Infinity) - (tem(x.v) ? x.v : -Infinity))];
+          .sort((x, y) => (tem(x.v) ? x.v : Infinity) - (tem(y.v) ? y.v : Infinity))];
       const comV = linhasG.map(l => l.v).filter(tem);
       let vhi = Math.max(0, ...comV), vlo = Math.min(0, ...comV);
       const vpasso = passoBonito(Math.max(vhi - vlo, 1) / 4);
