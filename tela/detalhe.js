@@ -471,23 +471,32 @@ function montar(root, d) {
 
   /* ---------------- mínimo, máximo e ponto médio */
   (function MinMaxMidpoint(el) {
-    const bloco = (id, titulo, min, max, periodo) => {
-      if (!tem(min) || !tem(max)) return `<div class="card"><strong>${titulo}</strong><div class="nota" style="margin-top:6px">${INDISP}</div></div>`;
-      const meio = (min + max) / 2, dif = d.preco - meio, p = posicao(d.preco, min, max);
-      const difPct = meio ? dif / meio * 100 : 0;   // % sobre o ponto médio
+    // contas com os valores arredondados que a tela mostra, para o usuário conseguir refazer:
+    // (14,72 + 24,97) ÷ 2 = 19,85 e 19,85 − 15,10 = 4,75
+    const r2 = v => Math.round(v * 100 + (v >= 0 ? 1e-7 : -1e-7)) / 100;
+    const bloco = (id, titulo, minBruto, maxBruto, periodo) => {
+      if (!tem(minBruto) || !tem(maxBruto)) return `<div class="card"><strong>${titulo}</strong><div class="nota" style="margin-top:6px">${INDISP}</div></div>`;
+      const min = r2(minBruto), max = r2(maxBruto), agora = r2(d.preco);
+      const meio = r2((min + max) / 2), dif = r2(agora - meio), p = posicao(agora, min, max);
+      const difPct = meio ? dif / meio * 100 : 0;                 // distância, em % do ponto médio
+      const volta = agora ? (meio / agora - 1) * 100 : 0;         // quanto o preço precisa andar até o ponto médio
+      const frase = dif === 0 ? 'O preço está no ponto médio.'
+        : `Precisa ${dif < 0 ? 'subir' : 'cair'} ${f(Math.abs(volta), 1)}% para voltar ao ponto médio de ${f(meio)}.`;
       FOLHAS[id] = () => [`Ponto médio · ${titulo.toLowerCase()}`, `
         <p>O ponto médio é a metade do caminho entre a mínima e a máxima reais do período.</p>
         <code>(${f(min)} + ${f(max)}) ÷ 2 = ${f(meio)}</code>
-        <p>Preço agora: <b>${din(d.preco)}</b>, ou <b>${din(Math.abs(dif))} ${dif >= 0 ? 'acima' : 'abaixo'}</b> do ponto médio.</p>
-        <p>Em porcentagem, sobre o ponto médio:</p>
-        <code>(${f(d.preco)} − ${f(meio)}) ÷ ${f(meio)} = ${sinal(difPct, 1)}</code>${fonte}`];
+        <p>Distância do preço até o ponto médio:</p>
+        <code>${f(agora)} − ${f(meio)} = ${dif < 0 ? '-' : ''}${f(Math.abs(dif))} (${sinal(difPct, 1)} do ponto médio)</code>
+        ${dif === 0 ? '' : `<p>Quanto o preço precisa ${dif < 0 ? 'subir' : 'cair'} para chegar ao ponto médio:</p>
+        <code>${f(meio)} ÷ ${f(agora)} − 1 = ${sinal(volta, 1)}</code>
+        <p>Os dois percentuais são diferentes porque partem de bases diferentes: o primeiro é medido sobre o ponto médio, o segundo sobre o preço atual.</p>`}${fonte}`];
       return `<div class="card">
         <div class="cab"><strong>${titulo}</strong><button class="link" data-folha="${id}">Ver como calculamos</button></div>
         <div class="marca-cima num"><span class="esq">Mín.<b>${f(min)}</b></span><span style="left:50%">Ponto médio<b>${f(meio)}</b></span><span class="dir">Máx.<b>${f(max)}</b></span></div>
         <div class="regua" style="background:var(--ardosia);margin-top:6px"><span class="traco" style="left:50%"></span><span class="bola" style="left:${p}%"></span></div>
-        <div class="marca-baixo num"><span style="${ancora(p)}">Agora<b>${f(d.preco)}</b></span></div>
-        <div class="destaque num">Você está ${din(Math.abs(dif))} (${f(Math.abs(difPct), 1)}%) ${dif >= 0 ? 'acima' : 'abaixo'} do ponto médio</div>
-        <div class="nota">Preço na metade mais ${dif >= 0 ? 'cara' : 'barata'} do range de ${periodo}</div>
+        <div class="marca-baixo num"><span style="${ancora(p)}">Agora<b>${f(agora)}</b></span></div>
+        <div class="destaque num">${dif === 0 ? 'Você está no ponto médio' : `Você está ${din(Math.abs(dif))} (${f(Math.abs(difPct), 1)}%) ${dif > 0 ? 'acima' : 'abaixo'} do ponto médio`}</div>
+        ${dif === 0 ? '' : `<div class="nota num">${frase}</div>`}
       </div>`;
     };
     el.innerHTML = `<h2>Mínimo, máximo e ponto médio</h2><div class="sub">Valores em ${d.moeda}</div>
