@@ -13,7 +13,10 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   regras de cálculo aplicadas aos dados do ativo buscado.
 - Estimativas de analistas mostram a base (ano atual, próximo ano fiscal, longo prazo), o número
   de analistas e a faixa quando o Yahoo informa. Com menos de 3 analistas, avisar que é pouco confiável.
-- Projeção da empresa (guidance) não vem do Yahoo: só entra com fonte citada.
+- Projeção da empresa (guidance) não vem do Yahoo: só entra com fonte citada, pelo `OVERRIDE` em
+  `utils/override.py` (lucro_min, lucro_max, acoes, payout, fonte, data). Com override, o guidance ganha
+  do Yahoo: LPA projetado = (lucro_min + lucro_max) / 2 / acoes; dividendo projetado = LPA × payout.
+  A tela mostra o selo "GUIDANCE OFICIAL" com a data. Sem override, vale o consenso do Yahoo.
 - A página de exemplo (`docs/index.html`, gerada por `tools/gerar_demo.py`) não busca dados.
   Qualquer valor nela sem fonte real fica vazio ou marcado como EXEMPLO.
 

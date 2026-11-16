@@ -12,6 +12,7 @@ import pandas as pd
 from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, pl_medio_12m,
                       graham_duas_versoes, pl_medio_longo, preco_justo_graham, preco_teto_bazin)
 from utils.lynch import crescimento_anual, peg, regra_prejuizo, veredito
+from utils.override import guidance as guidance_oficial
 from utils.percentile import percentil_na_faixa, zonas
 from utils.signals import (backtest_percentil, decidir_estado, fundamento_quebrou,
                            selo_backtest)
@@ -275,6 +276,18 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
 
     faixa = zonas(r.minimo_1a, r.maximo_1a)
 
+    # guidance oficial da empresa (OVERRIDE) ganha do consenso do Yahoo no LPA projetado
+    lynch = modo_lynch(d, f["pl"], regra)
+    g = guidance_oficial(curto)
+    guia = None
+    if g:
+        lynch["futuro"].update({"lpaEsteAno": _n(g["lpa"], 4), "lpaBaixa": _n(g["lpaMin"], 4),
+                                "lpaAlta": _n(g["lpaMax"], 4), "analistas": None})
+        guia = {"lpa": _n(g["lpa"], 4), "lpaMin": _n(g["lpaMin"], 4), "lpaMax": _n(g["lpaMax"], 4),
+                "dividendo": _n(g["dividendo"], 4), "payout": _n(g["payout"], 4),
+                "lucroMin": _n(g["lucroMin"], 0), "lucroMax": _n(g["lucroMax"], 0),
+                "acoes": _n(g["acoes"], 0), "fonte": g["fonte"], "data": g["data"]}
+
     after = None
     if info.get("postMarketPrice") and info.get("postMarketChangePercent") is not None:
         hora = ""
@@ -301,7 +314,8 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "mm200": _n(r.mm200, 4), "tendencia": direcao, "forca": _n(r.ifr, 0),
         "lpaAnos": [{"ano": a, "lpa": _n(v, 4)} for a, v in lpa_anos],
         "regra": {"status": regra["status"], "media": _n(regra["media"], 4), "mensagem": regra["mensagem"]},
-        "lynch": modo_lynch(d, f["pl"], regra),
+        "lynch": lynch,
+        "guidance": guia,
         "simons": modo_simons(hist),
         "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "plMetodo": f["metodo"],
         "lpa": _n(f["lpa"], 4), "lpaAgora": _n(f["lpa_agora"], 4), "lpa12Atras": _n(f["lpa_antes"], 4),

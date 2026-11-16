@@ -17,13 +17,14 @@ import tela.dados
 import utils.benchmarks
 import utils.formato
 import utils.lynch
+import utils.override
 import utils.percentile
 import utils.signals
 import utils.simons
 
 # O Streamlit Cloud pode manter versões antigas dos módulos na memória depois de uma
 # atualização; recarregar (na ordem das dependências) mantém tudo na mesma versão.
-for _modulo in (utils.formato, utils.percentile, utils.signals, utils.benchmarks, utils.lynch,
+for _modulo in (utils.formato, utils.percentile, utils.signals, utils.benchmarks, utils.lynch, utils.override,
                 utils.simons, calculos, tela.dados):
     importlib.reload(_modulo)
 
