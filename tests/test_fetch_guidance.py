@@ -127,12 +127,25 @@ def test_documento_ja_tentado_nao_chama_a_api_de_novo():
     assert not chamadas and item["acao"] == "nada"
 
 
-def test_corte_de_mais_de_50_por_cento_vai_para_revisao():
-    # de 18 a 22 (maio) para 9 a 11 (novembro): LPA cai 50%; acima do limite vai para revisão
-    anterior = {"lucro_min": 18e9, "lucro_max": 22e9, "acoes": 5.73e9, "payout": 0.3, "ano": 2026,
+GUIDANCE_MAI = {"lucro_min": 18e9, "lucro_max": 22e9, "acoes": 5.73e9, "payout": 0.30, "ano": 2026,
                 "data": "13/05/2026", "documento": "x"}
-    item = _planejar([(NOV, FATO_BB_NOV.replace("9 bilhões", "8 bilhões"))], anterior=anterior)
+
+
+def test_corte_de_exatamente_50_por_cento_vai_para_revisao_mesmo_com_confianca_alta():
+    # o corte real do BB: de 18 a 22 (maio) para 9 a 11 (novembro), LPA de 20 para 10 bi / ações
+    item = _planejar([(NOV, FATO_BB_NOV)], anterior=GUIDANCE_MAI)
+    assert item["acao"] == "pr" and "mudou 50%" in item["motivo"]
+    assert (item["novo"]["lucro_min"], item["novo"]["lucro_max"]) == (9e9, 11e9)
+
+
+def test_corte_maior_que_50_por_cento_vai_para_revisao():
+    item = _planejar([(NOV, FATO_BB_NOV.replace("9 bilhões", "8 bilhões"))], anterior=GUIDANCE_MAI)
     assert item["acao"] == "pr" and "mudou" in item["motivo"]
+
+
+def test_mudanca_menor_que_50_por_cento_com_confianca_alta_vai_direto():
+    anterior = {**GUIDANCE_MAI, "lucro_min": 12e9, "lucro_max": 14e9}     # LPA de 13 para 10: -23%
+    assert _planejar([(NOV, FATO_BB_NOV)], anterior=anterior)["acao"] == "commit"
 
 
 def test_mesmo_documento_ja_aplicado_nao_muda_nada():

@@ -16,8 +16,8 @@ Fluxo por ticker (lista em utils/guidance_tickers.json):
       variável ANTHROPIC_API_KEY, guardada nos Secrets do GitHub). O trecho devolvido tem de
       existir no documento, senão o resultado é descartado.
 4. Decide como publicar:
-   - "commit": padrões de texto com confiança alta e variação de até 50% no LPA projetado;
-   - "pr": veio da API do Claude, confiança baixa ou variação maior que 50%;
+   - "commit": padrões de texto com confiança alta e variação de menos de 50% no LPA projetado;
+   - "pr": veio da API do Claude, confiança baixa ou variação de 50% ou mais (mesmo com confiança alta);
    - nada muda quando não acha guidance ou não tem confiança: só registra no log.
 
 O resultado vai para utils/guidance_auto.json, que utils/override.py lê. Um cadastro manual em
@@ -48,7 +48,7 @@ ARQ_VISTOS = RAIZ / ".guidance_cache" / "vistos.json"   # persistido pelo cache 
 
 CVM = "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC"
 CABECALHO = {"User-Agent": "fintai-guidance/1.0 (+https://github.com/imoveispalmassc-wq/fintai)"}
-LIMITE_MUDANCA = 0.50        # variação do LPA projetado acima disso vai para revisão
+LIMITE_MUDANCA = 0.50        # variação do LPA projetado de 50% ou mais vai para revisão
 IDADE_MAXIMA_DIAS = 120      # documento mais velho que isso (mais de um trimestre) vai para revisão
 MAX_DOCUMENTOS = 6           # documentos lidos por ticker, do mais novo para o mais antigo
 MODELO = "claude-opus-5-5"
@@ -430,7 +430,8 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
             item["motivo"] = "mesma faixa do guidance atual"
             return item
         lpa_novo, lpa_ant = _lpa(novo), _lpa(anterior or {})
-        mudou_muito = bool(lpa_ant and lpa_novo and abs(lpa_novo / lpa_ant - 1) > LIMITE_MUDANCA)
+        # arredonda para o corte de exatamente 50% (ex.: 18-22 -> 9-11) não escapar por erro de ponto flutuante
+        mudou_muito = bool(lpa_ant and lpa_novo and round(abs(lpa_novo / lpa_ant - 1), 6) >= LIMITE_MUDANCA)
         motivos = list(ex.motivos)
         idade = (hoje - data_doc).days if data_doc else None
         velho = idade is None or idade > IDADE_MAXIMA_DIAS
@@ -438,7 +439,7 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
             motivos.append(f"documento de {_data_br(doc['data'])}, com mais de {IDADE_MAXIMA_DIAS} dias: "
                            "pode existir guidance mais novo que o robô não leu")
         if mudou_muito:
-            motivos.append(f"LPA projetado mudou {abs(lpa_novo / lpa_ant - 1):.0%} (limite {LIMITE_MUDANCA:.0%})")
+            motivos.append(f"LPA projetado mudou {abs(lpa_novo / lpa_ant - 1):.0%} (revisão a partir de {LIMITE_MUDANCA:.0%})")
         revisar = ex.metodo == "API do Claude" or ex.confianca != "alta" or mudou_muito or velho
         item.update(acao="pr" if revisar else "commit", novo=novo,
                     motivo="; ".join(motivos) or "padrões de texto, confiança alta")
