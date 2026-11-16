@@ -544,11 +544,19 @@ function montar(root, d) {
     const fontePrev = d.guidance ? `GUIDANCE OFICIAL · ${d.guidance.data}`
       : tem(lpaPrev) ? `Consenso Yahoo${tem(Fp.analistas) ? ` · ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' · pouco confiável' : ''}` : '';
     const lpaMedioImpl = tem(d.precoMedio12) && tem(d.plMedio12) && d.plMedio12 > 0 ? d.precoMedio12 / d.plMedio12 : null;
-    const frasePL = prejuizo ? 'A empresa teve prejuízo nos últimos 12 meses, então a relação preço/lucro não se aplica.'
-      : !tem(d.pl) ? 'O Yahoo Finance não traz o lucro por ação deste ativo.'
-      : !tem(difPL) ? 'Sem histórico de lucros para comparar com a média.'
-      : `P/L ${sinal(difPL, 1)} em relação à média de 12 meses: ${difPL < -5 ? 'mais barata que na média do ano.' : difPL > 5 ? 'mais cara que na média do ano.' : 'perto da média do ano.'}`
-        + (d.plMetodo === 'simplificado' ? ' Média estimada com o lucro atual.' : '');
+    const B = d.balanco;
+    const rotBal = B ? `${B.trimestre}${B.data ? `, divulgado em ${B.data}` : ''}` : '';
+    const G0 = d.guidance;
+    const linhasPL = prejuizo ? ['A empresa teve prejuízo nos últimos 12 meses, então a relação preço/lucro não se aplica.']
+      : !tem(d.pl) ? ['O Yahoo Finance não traz o lucro por ação deste ativo.']
+      : [
+        `<b>Último balanço</b>${rotBal ? ` (${rotBal})` : ''}: cotação de hoje ÷ lucro por ação dos últimos 12 meses.`,
+        tem(plPrev) ? (G0 ? `<b>Previsão ${anoPrev || ''}</b>: GUIDANCE OFICIAL · ${G0.data}, lucro de ${din(G0.lucroMin / 1e9, 0)} a ${din(G0.lucroMax / 1e9, 0)} bi (ponto médio ÷ ações).`
+            : `<b>Previsão ${anoPrev || ''}</b>: consenso Yahoo${tem(Fp.analistas) ? ` de ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' (pouco confiável)' : ''}.`)
+          : `<b>Previsão</b>: sem estimativa no Yahoo.`,
+        !tem(difPL) ? '<b>Média 12m</b>: sem histórico para comparar.'
+          : `<b>Média 12m</b>: ${d.plMetodo === 'simplificado' ? 'preço médio do último ano ÷ o mesmo lucro do último balanço' : 'média do P/L de cada pregão, com o lucro de cada balanço'}. O P/L do último balanço está ${sinal(difPL, 1)} contra a média: ${difPL < -5 ? 'mais barata que no último ano' : difPL > 5 ? 'mais cara que no último ano' : 'perto da média'}.`];
+    const frasePL = linhasPL.join('<br>');
     const notaAjustado = tem(plAjustado) ? `Lucro ajustado (Yahoo): LPA ${din(lpaAjustado)}, P/L ${f(plAjustado)}. É a base de alguns sites.` : '';
 
     // 2. Dividendos
@@ -586,13 +594,12 @@ function montar(root, d) {
         <div class="card crit">
           <div class="topo-c"><span class="nome">Preço vs Lucro (P/L)</span><span class="st ${cPL}">${tPL}</span></div>
           <div class="tab-pl num">
-            <span></span><div class="cab"><div>Hoje</div><div class="i">contábil</div></div><div class="cab"><div>${anoPrev ? `Previsão ${anoPrev}` : 'Previsão'}</div><div class="i">${d.guidance ? 'guidance' : 'analistas'}</div></div><div class="cab"><div>Média 12m</div><div class="i">contábil</div></div>
+            <span></span><div class="cab"><div>Último balanço</div><div class="i">${B ? B.trimestre : '12 meses'}</div></div><div class="cab"><div>${anoPrev ? `Previsão ${anoPrev}` : 'Previsão'}</div><div class="i">${d.guidance ? 'guidance' : 'analistas'}</div></div><div class="cab"><div>Média 12m</div><div class="i">último ano</div></div>
             <span class="rot">Cotação<br>${d.moeda}</span><b>${f(d.preco)}</b><b>${tem(plPrev) ? f(d.preco) : '—'}</b><b>${tem(d.precoMedio12) ? f(d.precoMedio12) : '—'}</b>
             <span class="rot">P/L</span><b class="gr">${f(d.pl)}</b><b class="gr">${tem(plPrev) ? f(plPrev) : '—'}</b><b class="gr">${f(d.plMedio12)}</b>
             <span class="rot">Lucro/ação<br>${d.moeda}</span><b>${f(d.lpa)}</b><b>${tem(lpaPrev) ? f(lpaPrev) : 'Sem dado'}</b><b>${tem(lpaMedioImpl) ? f(lpaMedioImpl) : '—'}</b>
           </div>
-          ${fontePrev ? `<div class="nota" style="margin:-2px 0 8px">Previsão: ${fontePrev}${tem(plPrev) ? '. Cotação de hoje ÷ lucro previsto.' : ''}</div>` : ''}
-          <p>${frasePL}</p>${notaAjustado ? `<div class="nota" style="margin:-4px 0 8px">${notaAjustado}</div>` : ''}
+          <p class="linhas-pl">${frasePL}</p>${notaAjustado ? `<div class="nota" style="margin:-4px 0 8px">${notaAjustado}</div>` : ''}
           <button class="link" data-folha="f-pl">Ver como calculamos</button>
         </div>
         <div class="card crit">
@@ -767,11 +774,16 @@ function montar(root, d) {
         ...Object.values(d.comparadores).map(o => ({ nome: o.nome, v: o.v[per], fora: o.moeda !== d.moeda, moeda: o.moeda }))]
         .sort((x, y) => (tem(y.v) ? y.v : -Infinity) - (tem(x.v) ? x.v : -Infinity));
       const comV = linhasG.map(l => l.v).filter(tem);
-      const hi = Math.max(0, ...comV), lo = Math.min(0, ...comV), amp = Math.max(hi - lo, 1);
-      const pos = v => (v - lo) / amp * 100;
-      const grafico = linhasG.map(l => `<div class="hb${l.acao ? ' acao' : ''}"><span class="n">${l.nome}${l.fora ? ` <small>${l.moeda}</small>` : ''}</span>
-          <span class="t"><span class="z" style="left:${pos(0)}%"></span>${tem(l.v) ? `<span class="b${l.v < 0 ? ' neg' : ''}" style="left:${pos(Math.min(0, l.v))}%;width:${Math.max(Math.abs(l.v) / amp * 100, 0.8)}%"></span>` : ''}</span>
-          <b class="num">${tem(l.v) ? ret(l.v) : 'Sem dado'}</b></div>`).join('');
+      let vhi = Math.max(0, ...comV), vlo = Math.min(0, ...comV);
+      const vpasso = passoBonito(Math.max(vhi - vlo, 1) / 4);
+      vhi = Math.max(vpasso, Math.ceil(vhi / vpasso) * vpasso); vlo = Math.floor(vlo / vpasso) * vpasso;
+      const vamp = vhi - vlo, vpos = v => (v - vlo) / vamp * 100;
+      const vmarcas = []; for (let v = vlo; v <= vhi + 1e-9; v += vpasso) vmarcas.push(v);
+      const grafico = `<div class="grade-y">${vmarcas.map(v => `<div style="bottom:${vpos(v)}%"><span>${f(v, 0)}%</span></div>`).join('')}<div class="zero" style="bottom:${vpos(0)}%"></div></div>
+        <div class="vcols">${linhasG.map(l => `<div class="vc${l.acao ? ' acao' : ''}">${tem(l.v)
+          ? `<div class="vb${l.v < 0 ? ' neg' : ''}" style="bottom:${vpos(Math.min(0, l.v))}%;height:${Math.max(Math.abs(l.v) / vamp * 100, 0.8)}%"><i class="num">${ret(l.v)}</i></div>`
+          : `<div class="vb vazio" style="bottom:${vpos(0)}%" title="Sem dado"><i>—</i></div>`}
+          <em>${({ 'S&P 500': 'S&P', 'Ibovespa': 'Ibov', 'Poupança': 'Poup.' })[l.nome] || l.nome}${l.fora ? `<small>${l.moeda}</small>` : ''}</em></div>`).join('')}</div>`;
       const temFora = linhasG.some(l => l.fora && tem(l.v));
 
       // resumo do período contra o comparador da bolsa
@@ -797,9 +809,9 @@ function montar(root, d) {
         <div class="toggle" role="group" aria-label="Reinvestimento de dividendos">
           <button data-r="1" aria-pressed="${reinveste}">Reinvestindo dividendos</button><button data-r="0" aria-pressed="${!reinveste}">Sem reinvestir</button>
         </div>
-        <p class="nota" style="margin:10px 2px 0">${texto}</p>
-        <div class="hbarras">${grafico}</div>
         <div class="chips periodos" role="group" aria-label="Período">${idx.map(i => `<button data-p="${i}" aria-pressed="${i === per}">${d.retorno.periodos[i]}</button>`).join('')}</div>
+        <p class="nota" style="margin:4px 2px 0">${texto}</p>
+        <div class="vbarras">${grafico}</div>
         ${temFora ? `<p class="nota" style="margin:4px 2px 10px">Indicadores marcados em ${Object.values(d.comparadores).find(o => o.moeda !== d.moeda).moeda} estão em outra moeda, sem conversão.</p>` : ''}
         <div class="card resumo num">${resumo}</div>
         ${per === 0 && tem(d.retorno.total[0]) && tem(d.retorno.preco[0]) ? `<p class="nota num" style="margin:12px 2px 0">Em 1 ano: <b>${sinal(d.retorno.preco[0], 2)}</b> só preço e <b>${sinal(d.retorno.total[0], 2)}</b> com dividendos reinvestidos.${difDinheiro > 0 && d.dividendo > 0 ? ` Diferença de ${d.moeda} ${f(difDinheiro, 0)} é o dividendo de ${din(d.dividendo)} recomprado em ações nas datas de pagamento (preço ajustado Yahoo).` : ''}</p>` : ''}

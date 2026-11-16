@@ -4,6 +4,7 @@ Rodar:  streamlit run app.py
 """
 from __future__ import annotations
 
+import hashlib
 import importlib
 from pathlib import Path
 from urllib.parse import quote
@@ -167,8 +168,12 @@ def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]
     return {k: todos[k] for k in ordem}, padrao
 
 
+# muda quando o código dos cálculos muda: um deploy novo não reaproveita pacote antigo do cache
+VERSAO_CALCULO = hashlib.md5(b"".join(open(m.__file__, "rb").read() for m in (calculos, tela.dados, utils.lynch, utils.override))).hexdigest()[:10]
+
+
 @st.cache_data(ttl=900, show_spinner=False)
-def pacote(ticker: str) -> dict:
+def pacote(ticker: str, versao: str = "") -> dict:
     """Tudo o que a tela de um ticker precisa, calculado uma única vez."""
     d = baixar(ticker)
     hist = d["hist"]
@@ -224,7 +229,7 @@ def barra_de_acoes(ticker: str):
 # ------------------------------------------------------------ telas
 def painel(ticker: str):
     with st.spinner(f"Buscando {ticker}..."):
-        dados = pacote(ticker)
+        dados = pacote(ticker, VERSAO_CALCULO)
     barra_de_acoes(ticker)
     tela_detalhe(data={"dados": dados}, key=f"tela_{ticker}")
 
@@ -233,7 +238,7 @@ def resumo(tickers: list[str]):
     linhas = []
     for t in tickers:
         try:
-            p = pacote(t)
+            p = pacote(t, VERSAO_CALCULO)
             z = zonas(p["min52"], p["max52"])
             dy = p["dividendo"] / p["preco"] * 100 if p["dividendo"] is not None and p["preco"] else None
             linhas.append({

@@ -268,3 +268,23 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .hb.acao .n, .hb.acao b { color: var(--texto, #e8ecf3); font-weight: 700; }
 .hb.acao .b { background: var(--verde); } .hb.acao .b.neg { background: var(--vermelho); }
 .chips.periodos { margin: 10px 0 8px; }
+
+/* Retorno: barras verticais, um indicador por coluna */
+.vbarras { position: relative; height: 230px; margin: 26px 0 64px 36px; }
+.vbarras .grade-y { position: absolute; inset: 0; }
+.vbarras .grade-y div { position: absolute; left: 0; right: 0; border-top: 1px solid #26314799; }
+.vbarras .grade-y span { position: absolute; left: -36px; width: 31px; text-align: right; transform: translateY(-50%); color: var(--suave); font-size: 10px; }
+.vbarras .zero { position: absolute; left: 0; right: 0; border-top: 1px solid var(--suave); }
+.vbarras .vcols { position: absolute; inset: 0; display: flex; }
+.vbarras .vc { flex: 1; position: relative; min-width: 0; }
+.vbarras .vb { position: absolute; left: 50%; transform: translateX(-50%); width: 62%; max-width: 34px; border-radius: 4px 4px 0 0; background: var(--ardosia); transition: height .4s, bottom .4s; }
+.vbarras .vb.neg { border-radius: 0 0 4px 4px; }
+.vbarras .vc.acao .vb { background: var(--verde); } .vbarras .vc.acao .vb.neg { background: var(--vermelho); }
+.vbarras .vb.vazio { height: 0; background: none; }
+.vbarras .vb i { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 9.5px; color: var(--suave); white-space: nowrap; padding-bottom: 2px; }
+.vbarras .vb.neg i { bottom: auto; top: 100%; padding: 2px 0 0; }
+.vbarras .vc.acao .vb i { color: var(--texto); font-weight: 700; }
+.vbarras .vc em { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); font-style: normal; font-size: 10px; color: var(--suave); text-align: center; line-height: 1.15; white-space: nowrap; }
+.vbarras .vc em small { display: block; font-size: 8.5px; opacity: .8; }
+.vbarras .vc.acao em { color: var(--texto); font-weight: 700; }
+.linhas-pl { line-height: 1.5; }

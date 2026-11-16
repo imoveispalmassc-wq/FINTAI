@@ -83,6 +83,20 @@ def series_do_grafico(hist: pd.DataFrame, intraday: dict) -> dict:
     }
 
 
+def ultimo_balanco(lucro_tri, lpa_tri) -> dict | None:
+    """Último trimestre divulgado (ex.: 3T26) e a data de divulgação, quando o Yahoo informa."""
+    if lucro_tri is None or not len(lucro_tri):
+        return None
+    fim = pd.Timestamp(_sem_fuso(lucro_tri.dropna()).index.max())
+    rotulo = f"{(fim.month - 1) // 3 + 1}T{fim.year % 100:02d}"
+    data = None
+    if lpa_tri is not None and len(lpa_tri):
+        datas = [t for t in _sem_fuso(lpa_tri.dropna()).index if fim < t <= fim + pd.Timedelta(days=120)]
+        if datas:
+            data = f"{min(datas):%d/%m/%Y}"
+    return {"trimestre": rotulo, "data": data}
+
+
 def fundamentos(d: dict, r: Resultado) -> dict:
     """Indicadores fundamentalistas, calculados uma única vez."""
     info, hist, lpa_tri = d["info"], _sem_fuso(d["hist"]), d["lpa_tri"]
@@ -103,6 +117,7 @@ def fundamentos(d: dict, r: Resultado) -> dict:
     bazin, div_medio5 = preco_teto_bazin(prov, hist.index[0], fim)
     vpa = info.get("bookValue")
 
+    balanco = ultimo_balanco(d["lucro_tri"], lpa_tri)
     divida, caixa, ebitda = info.get("totalDebt"), info.get("totalCash"), info.get("ebitda")
     dl_ebitda = (divida - (caixa or 0)) / ebitda if divida is not None and ebitda and ebitda > 0 else None
     return dict(
@@ -114,7 +129,7 @@ def fundamentos(d: dict, r: Resultado) -> dict:
         vpa=vpa, graham=preco_justo_graham(lpa, vpa), bazin=bazin, div_medio5=div_medio5,
         pl_hist=pl_hist, anos_hist=anos_hist,
         justo_pl=pl_hist * lpa if pl_hist and lpa and lpa > 0 else None,
-        dl_ebitda=dl_ebitda,
+        dl_ebitda=dl_ebitda, balanco=balanco,
         lucros=d["lucro_tri"] if d["lucro_tri"] is not None else lpa_tri,
     )
 
@@ -321,7 +336,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "simons": modo_simons(hist),
         "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "precoMedio12": _n(float(r.fechamentos_1a.mean()), 4) if len(r.fechamentos_1a) else None, "plMetodo": f["metodo"],
         "lpa": _n(f["lpa"], 4), "lpaAgora": _n(f["lpa_agora"], 4), "lpa12Atras": _n(f["lpa_antes"], 4),
-        "baseLpa": f["base_lpa"],
+        "baseLpa": f["base_lpa"], "balanco": f["balanco"],
         "dividendo": _n(f["div"], 4), "dividendo12Atras": _n(f["div_antes"], 4),
         "dyMedio12": _n(f["dy_medio"], 4), "dividendos5Anos": _n(f["div5"], 4),
         "acoes": _n(f["acoes"], 0), "vpa": _n(f["vpa"], 4),

@@ -147,3 +147,13 @@ def test_serie_na_mesma_base_usa_o_lpa_de_cada_trimestre():
     serie = _lpa_trimestral([1.66, 1.67, 1.29, 0.67, 0.66, 1.06, 0.60, 0.68, 0.22])
     _, metodo = pl_medio_12m(_fech_ano(), serie, 2.56)
     assert metodo == "trimestral"
+
+
+def test_ultimo_balanco_trimestre_e_data_de_divulgacao():
+    import pandas as pd
+    from tela.dados import ultimo_balanco
+    lucro = pd.Series([1.0, 2.0], index=pd.to_datetime(["2026-06-30", "2026-09-30"]))
+    datas = pd.to_datetime(["2026-08-12", "2026-11-11"]).tz_localize("America/Sao_Paulo")
+    assert ultimo_balanco(lucro, pd.Series([0.4, 0.2], index=datas)) == {"trimestre": "3T26", "data": "11/11/2026"}
+    assert ultimo_balanco(lucro, None) == {"trimestre": "3T26", "data": None}
+    assert ultimo_balanco(None, None) is None
