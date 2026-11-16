@@ -140,3 +140,35 @@ def test_historico_conta_casos_e_altas_no_dia_seguinte():
 def test_leitura_ate_10_dias_usa_a_ultima_linha_da_regua():
     l = leitura(8, 10)
     assert l["nivel"] == 8 and l["prob"] == 64 and l["acao"] == "MOVIMENTO CURTO"
+
+
+# ------------------------------------------------------------ SIMONS: MM200 -> oportunidade -> dias
+def test_classificacao_usa_mm200_e_faixa():
+    from utils.simons import classificar
+    # faixa: oportunidade até 12, caro acima de 18
+    assert classificar(11, 11.5, 0.5, 12, 18)["classe"] == "OPORTUNIDADE"
+    assert classificar(11, 10.0, 0.5, 12, 18)["classe"] == "NEUTRO"          # 10% acima da MM200
+    assert classificar(15, 15, 0, 12, 18)["classe"] == "NEUTRO"
+    assert classificar(19, 18, 0, 12, 18)["classe"] == "CARO"                # zona cara
+    assert classificar(17, 14.5, 0, 12, 18)["classe"] == "CARO"              # 17% acima da MM200
+    c = classificar(11, 14, -3, 12, 18)
+    assert c["classe"] == "OPORTUNIDADE" and c["conservador"] and round(c["distMM200"], 2) == -21.43
+
+
+@pytest.mark.parametrize("dias,parte", [(0, 0), (1, 0), (2, 1), (3, 1), (4, 2), (5, 2), (6, 2), (7, 3), (10, 3)])
+def test_entrada_escalonada_normal(dias, parte):
+    from utils.simons import timing
+    assert timing("OPORTUNIDADE", dias, False)["parte"] == parte
+
+
+@pytest.mark.parametrize("dias,parte", [(2, 0), (3, 0), (4, 1), (5, 1), (6, 1), (7, 2), (10, 2)])
+def test_entrada_conservadora_abaixo_da_mm200_em_baixa(dias, parte):
+    from utils.simons import timing
+    assert timing("OPORTUNIDADE", dias, True)["parte"] == parte
+
+
+def test_dias_de_queda_nao_compram_fora_da_oportunidade():
+    from utils.simons import timing
+    assert timing("NEUTRO", 8, False) == {"parte": 0, "acao": "AGUARDAR", "detalhe": "Fora da oportunidade: dias de queda são só alerta"}
+    assert timing("CARO", 8, False)["acao"] == "NÃO COMPRA"
+    assert timing("OPORTUNIDADE", 5, False)["acao"] == "ENTRADA 2/3"      # 5º dia nunca manda tudo

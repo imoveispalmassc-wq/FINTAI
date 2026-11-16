@@ -53,9 +53,12 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 - Card de P/L: linhas P/L, Lucro líquido (lucro/ação × ações do Yahoo), Lucro/ação, Cotação; colunas Contábil (LPA 12 meses, data do último balanço), Previsão do ano (consenso do Yahoo,
   com analistas e faixa) e Média 12m. Guidance oficial e lucro ajustado aparecem em linhas à parte, com fonte.
 - Retorno acumulado: período (1/3/5 anos) no topo; barras com o ativo primeiro e os indicadores em ordem crescente.
-- SIMONS: conta os dias desde o maior fechamento dos últimos 10 pregões (termômetro 0 a 10), se o último pregão
-  caiu; alta no meio não quebra enquanto o preço não passar do topo. Chances: régua fixa (1 a 5+, A VALIDAR) e o
-  histórico de 5 anos do próprio ativo com a mesma regra (vezes e % de alta no dia seguinte; < 20 casos = poucos).
+- SIMONS, nesta ordem: (1) MM200 no gráfico com preço e distância %; (2) classificação: OPORTUNIDADE = zona de
+  oportunidade da faixa de 52 semanas e preço até 5% acima da MM200; CARO = zona cara ou 15%+ acima da MM200;
+  senão NEUTRO; (3) dias de queda desde o topo dos últimos 10 pregões (alta no meio não quebra) viram entrada
+  escalonada só dentro da oportunidade: 2-3 dias 1/3, 4-6 dias 2/3, 7+ 3/3 (5º dia nunca manda tudo). Abaixo da
+  MM200 com a média caindo: 4-6 dias 1/3, 7+ 2/3, última parte só com preço acima da MM200 ou média parando de cair.
+  Neutro/Caro: dias são só alerta. Mostra também a régua fixa (A VALIDAR) e o histórico de 5 anos do ativo.
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 

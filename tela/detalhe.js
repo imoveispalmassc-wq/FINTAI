@@ -80,7 +80,7 @@ function montar(root, d) {
   const TEXTO_MODO = {
     graham: 'Modo longo prazo. Para segurar por anos. Pode demorar anos até comprar.',
     lynch: 'Modo longo prazo. Para quem entende a empresa e o crescimento. Não é para movimento curto.',
-    simons: 'Modo movimento curto. Para aproveitar repique depois de 1 a 10 dias de queda. Não é para segurar anos.',
+    simons: 'Modo movimento curto: primeiro a média de 200 dias, depois a oportunidade, por último os dias de queda para escalonar a entrada. Não é para segurar anos.',
   };
   // selo do modo Graham: vem do teste real das zonas em 5 anos
   const bt5 = d.backtest['5a'];
@@ -114,12 +114,14 @@ function montar(root, d) {
         ${tem(d.lynch.pegFuturo) ? `<div class="nota num" style="margin-top:8px">PEG = P/L ${f(d.pl)} / Crescimento ${f(d.lynch.futuro.lucroLongo, 1)}% = ${f(d.lynch.pegFuturo)}</div>` : ''}
         <div class="destaque">${conclusao}</div></div>`;
     } else {
-      const sm = d.simons; rotulo = sm.acao;
-      classe = sm.acao === 'MOVIMENTO CURTO' ? 'COMPRAR' : sm.acao === 'OBSERVA' ? 'CARO' : '';
-      const hA = sm.histAtual;
-      texto = sm.dias ? `Hoje: ${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda desde o topo${sm.altas ? ` (${sm.altas} ${sm.altas === 1 ? 'alta' : 'altas'} no meio)` : ''}, ${sinal(sm.queda)}. ${sm.detalhe}.`
-          + (hA && hA.vezes ? ` No histórico da ação, subiu no dia seguinte em ${f(hA.pct, 0)}% de ${hA.vezes} ${hA.vezes === 1 ? 'vez' : 'vezes'}${hA.vezes < 20 ? ' (poucos casos)' : ''}.` : '')
-        : 'Sem queda no último pregão. Nada a fazer no movimento curto.';
+      const sm = d.simons, hA = sm.histAtual;
+      const R = { OPORTUNIDADE: ['COMPRAR - Oportunidade', 'COMPRAR'], NEUTRO: ['AGUARDAR - Neutro', 'AGUARDAR'], CARO: ['CARO - Evitar', 'CARO'] }[sm.classe] || [sm.acao, ''];
+      rotulo = R[0]; classe = R[1];
+      const mmTxt = tem(sm.mm200) ? `Média 200d ${din(sm.mm200)}: preço ${sinal(sm.distMM200, 1)} ${sm.distMM200 < 0 ? 'abaixo' : 'acima'}${sm.mm200Caindo ? ', média caindo' : ''}.` : 'Sem média de 200 dias (histórico curto).';
+      const diasTxt = sm.dias ? `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda desde o topo${sm.altas ? ` (${sm.altas} ${sm.altas === 1 ? 'alta' : 'altas'} no meio)` : ''}, ${sinal(sm.queda)}` : 'sem queda no último pregão';
+      texto = `1. ${mmTxt} 2. ${sm.classe === 'OPORTUNIDADE' ? 'Oportunidade' : sm.classe === 'CARO' ? 'Caro' : 'Neutro'} (faixa de 52 semanas: ${(sm.zona52 || '').toLowerCase()}). 3. ${diasTxt}: ${sm.entrada}. ${sm.entradaDetalhe}.`
+        + (hA && hA.vezes && sm.classe === 'OPORTUNIDADE' ? ` Histórico da ação: subiu no dia seguinte em ${f(hA.pct, 0)}% de ${hA.vezes} ${hA.vezes === 1 ? 'vez' : 'vezes'}${hA.vezes < 20 ? ' (poucos casos)' : ''}.` : '')
+        + ` Ponto de oportunidade em ${din(sm.oportunidadeAte)}.`;
       selo = ['sem', sm.selo];
     }
     const nome = document.createElement('div'); nome.className = 'razao'; nome.textContent = `${d.razao} · ${d.ticker}`;
@@ -272,7 +274,26 @@ function montar(root, d) {
       });
       }
 
-      // modo Simons: dias de queda marcados, contador e termômetro
+      // modo Simons, passo 1: a média de 200 dias como ponto de partida (linha se couber; senão etiqueta na borda)
+      if (modo === 'simons' && tem(d.simons.mm200)) {
+        const mm = d.simons.mm200, ym = Y(mm), dist = d.simons.distMM200;
+        const txt = `Média 200d ${f(mm)} · preço ${sinal(dist, 1)}`;
+        ctx.font = '600 10.5px Inter, system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+        const tw = ctx.measureText(txt).width + 14;
+        if (ym >= yTop && ym <= yPlot) {
+          ctx.setLineDash([6, 4]); ctx.strokeStyle = '#f2994a'; ctx.lineWidth = 1.4;
+          ctx.beginPath(); ctx.moveTo(x0, ym); ctx.lineTo(x1, ym); ctx.stroke(); ctx.setLineDash([]);
+          ctx.fillStyle = '#0e1420cc'; ctx.beginPath(); ctx.roundRect(x1 - tw - 4, ym - 19, tw, 16, 6); ctx.fill();
+          ctx.fillStyle = '#f2994a'; ctx.fillText(txt, x1 - tw + 3, ym - 11);
+        } else {
+          const acima = ym < yTop, yb = acima ? yTop + 2 : yPlot - 18;
+          ctx.fillStyle = '#0e1420e6'; ctx.beginPath(); ctx.roundRect(x1 - tw - 18, yb, tw + 14, 18, 6); ctx.fill();
+          ctx.fillStyle = '#f2994a'; ctx.fillText(`${acima ? '↑' : '↓'} ${txt}`, x1 - tw - 11, yb + 9.5);
+        }
+        ctx.font = '11px Inter, system-ui, sans-serif';
+      }
+
+      // modo Simons, passo 3: dias de queda marcados, contador e termômetro
       if (modo === 'simons' && escala === '10d') {
         const sm = d.simons;
         for (let i = 0; i < n; i++) {   // um ponto por pregão; vermelho na sequência atual de queda
@@ -977,20 +998,36 @@ function montar(root, d) {
       const sm = d.simons, mx = sm.maximo || 5, bolas = Array.from({ length: mx }, (_, k) => `<i class="${k < sm.nivel ? 'on' : ''}"></i>`).join('');
       const REGUA = [[1, 51, 'Não faz nada'], [2, 54, 'Observa'], [3, 58, 'Movimento curto pequeno'], [4, 61, 'Movimento curto médio'], [5, 64, 'Movimento curto maior']];
       const dias = `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'}`;
-      el.innerHTML = `<h2>Movimento curto <small>últimos 10 dias</small></h2>
-        <div class="card">
-          <div class="nota num" style="margin-bottom:10px">${ex('simons') ? ex('simons') + ' ' : ''}Janela: últimos ${sm.pregoes} dias - de ${sm.janelaDe} a ${sm.janelaAte}</div>
+      const nomeClasse = { OPORTUNIDADE: 'Oportunidade', NEUTRO: 'Neutro', CARO: 'Caro' }[sm.classe] || '—';
+      const corClasse = { OPORTUNIDADE: 'var(--verde)', CARO: 'var(--vermelho)' }[sm.classe] || 'var(--texto)';
+      const terco = k => `<i class="${k < (sm.parte || 0) ? 'on' : ''}"></i>`;
+      el.innerHTML = `<h2>Movimento curto <small>MM200 → oportunidade → dias</small></h2>
+        <div class="card"><span class="rot">1. Média de 200 dias (ponto de partida)</span>
+          <div class="lista-v num" style="margin:6px 0 0">
+          <div>Média 200d<b>${tem(sm.mm200) ? din(sm.mm200) : 'Sem dado'}</b></div>
+          <div>Preço atual<b>${din(d.preco)}</b></div>
+          <div>Distância<b style="color:${tem(sm.distMM200) ? cor(sm.distMM200) : 'inherit'}">${tem(sm.distMM200) ? `${sinal(sm.distMM200, 1)} ${sm.distMM200 < 0 ? 'abaixo' : 'acima'}` : '—'}</b></div>
+          <div>Média<b>${sm.mm200Caindo ? 'caindo' : 'subindo ou de lado'}</b></div>
+        </div></div>
+        <div class="card" style="margin-top:8px"><span class="rot">2. Oportunidade / Neutro / Caro</span>
+          <div class="lista-v num" style="margin:6px 0 0">
+          <div>Faixa de 52 semanas<b>${sm.zona52 || '—'}</b></div>
+          <div>Oportunidade até<b>${din(sm.oportunidadeAte)}</b></div>
+          <div>Caro acima de<b>${din(sm.caraAcima)}</b></div>
+          <div>Classificação<b style="color:${corClasse}">${nomeClasse}${sm.conservador ? ' · conservador' : ''}</b></div>
+        </div>
+          <div class="nota" style="margin-top:8px">Oportunidade = zona de oportunidade da faixa de 52 semanas e preço até 5% acima da MM200. Caro = zona cara ou 15%+ acima da MM200.${sm.conservador ? ' Conservador: preço abaixo da MM200 com a média caindo (tendência de baixa).' : ''}</div></div>
+        <div class="card" style="margin-top:8px"><span class="rot">3. Dias de queda (momento da entrada)</span>
+          <div class="nota num" style="margin:6px 0 8px">Janela: últimos ${sm.pregoes} dias - de ${sm.janelaDe} a ${sm.janelaAte}</div>
           <div class="lista-v num" style="margin:0">
           <div>Hoje<b>${dias} de queda desde o topo</b></div>
-          ${sm.dias ? `<div>Topo<b>${din(sm.topo)} em ${sm.topoData}</b></div>` : ''}
-          ${sm.dias ? `<div>Altas no meio<b>${sm.altas}</b></div>` : ''}
+          ${sm.dias ? `<div>Topo<b>${din(sm.topo)} em ${sm.topoData}</b></div><div>Altas no meio<b>${sm.altas}</b></div>` : ''}
           <div>Queda desde o topo<b>${sm.dias ? sinal(sm.queda) : '—'}</b></div>
-          <div>Variação nos ${sm.pregoes} dias<b>${sinal(sm.variacao10)}</b></div>
           <div>Termômetro<b><span class="termo">${bolas}</span> ${sm.nivel} de ${mx}</b></div>
-          <div>Régua fixa (repique amanhã)<b>${tem(sm.prob) ? sm.prob + '%' : '—'}</b></div>
-          <div>Histórico da ação<b>${sm.histAtual && sm.histAtual.vezes ? `${f(sm.histAtual.pct, 0)}% de ${sm.histAtual.vezes}` : '—'}</b></div>
-          <div>Ação<b>${sm.acao}</b></div>
-        </div></div>
+          <div>Entrada<b><span class="termo">${[0, 1, 2].map(terco).join('')}</span> ${sm.entrada}</b></div>
+        </div>
+          <div class="destaque" style="margin-top:8px">${sm.entradaDetalhe}.</div>
+          <div class="nota" style="margin-top:8px">${sm.conservador ? 'Conservador: 4 a 6 dias = 1/3, 7 ou mais = 2/3; a última parte só quando o preço voltar acima da MM200 ou a média parar de cair.' : 'Escalonada: 2 a 3 dias = 1/3, 4 a 6 dias = 2/3, 7 ou mais = 3/3. O 5º dia sozinho nunca manda a compra toda.'}${sm.classe === 'OPORTUNIDADE' ? ' Fora da oportunidade, os dias são só alerta.' : ''}</div></div>
         <div class="card" style="margin-top:8px"><span class="rot">Histórico da ação desde ${sm.histDesde}: subiu no dia seguinte</span>
           <div class="lista-v num" style="margin-bottom:0">${(sm.historico || []).map(h => `<div style="${h.dias === sm.dias ? 'color:var(--texto);font-weight:700' : ''}">${h.dias}${h.dias === mx ? ' ou mais' : ''} ${h.dias === 1 ? 'dia' : 'dias'} de queda<b style="${h.dias === sm.dias ? '' : 'color:var(--suave);font-weight:500'}">${h.vezes ? `${f(h.pct, 0)}% · ${h.vezes} ${h.vezes === 1 ? 'vez' : 'vezes'}` : 'nenhum caso'}</b></div>`).join('')}</div></div>
         <div class="card" style="margin-top:8px"><span class="rot">Régua fixa</span>

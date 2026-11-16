@@ -75,3 +75,52 @@ def historico(fechamentos: pd.Series, anos: int = 5, janela: int = JANELA) -> di
             conta[n][0] += 1
             conta[n][1] += int(c[t + 1] > c[t])
     return {n: {"vezes": v, "altas": a, "pct": (a / v * 100) if v else None} for n, (v, a) in conta.items()}
+
+
+# ------------------------------------------------------------ ordem: MM200 -> oportunidade -> dias
+MM200_OPORTUNIDADE = 0.05   # oportunidade só com o preço até 5% acima da média de 200 dias
+MM200_CARO = 0.15           # 15% ou mais acima da média de 200 dias = esticado, caro
+
+
+def classificar(preco: float, mm200: float | None, inclinacao: float | None,
+                oportunidade_ate: float, cara_acima: float) -> dict:
+    """Passos 1 e 2: distância até a MM200 e classificação Oportunidade / Neutro / Caro.
+
+    Oportunidade: preço na zona de oportunidade da faixa de 52 semanas E até 5% acima da MM200.
+    Caro: zona cara da faixa OU 15%+ acima da MM200. O resto é Neutro.
+    "conservador": preço abaixo da MM200 com a média caindo (tendência de baixa)."""
+    dist = (preco / mm200 - 1) * 100 if mm200 else None
+    zona = "Oportunidade" if preco <= oportunidade_ate else "Cara" if preco > cara_acima else "Neutra"
+    caindo = inclinacao is not None and not pd.isna(inclinacao) and inclinacao < -1
+    conservador = bool(mm200 and preco < mm200 and caindo)
+    if zona == "Cara" or (dist is not None and dist >= MM200_CARO * 100):
+        classe = "CARO"
+    elif zona == "Oportunidade" and (dist is None or dist <= MM200_OPORTUNIDADE * 100):
+        classe = "OPORTUNIDADE"
+    else:
+        classe = "NEUTRO"
+    return {"classe": classe, "zona52": zona, "distMM200": dist, "conservador": conservador,
+            "mm200Caindo": caindo}
+
+
+def timing(classe: str, dias: int, conservador: bool) -> dict:
+    """Passo 3: os dias de queda viram entrada escalonada (em terços), só dentro de uma oportunidade.
+
+    Normal: 2-3 dias = 1/3, 4-6 dias = 2/3, 7+ dias = 3/3 (o 5º dia nunca manda tudo).
+    Conservador (abaixo da MM200 com média caindo): 4-6 dias = 1/3, 7+ dias = 2/3; a última parte
+    só depois que o preço voltar acima da MM200 ou a média parar de cair."""
+    if classe == "CARO":
+        return {"parte": 0, "acao": "NÃO COMPRA", "detalhe": "Preço caro: dias de queda não abrem compra"}
+    if classe == "NEUTRO":
+        return {"parte": 0, "acao": "AGUARDAR", "detalhe": "Fora da oportunidade: dias de queda são só alerta"}
+    if conservador:
+        parte = 2 if dias >= 7 else 1 if dias >= 4 else 0
+        limite = "; última parte só com o preço acima da MM200 ou a média parando de cair"
+    else:
+        parte = 3 if dias >= 7 else 2 if dias >= 4 else 1 if dias >= 2 else 0
+        limite = ""
+    if parte == 0:
+        return {"parte": 0, "acao": "OBSERVA",
+                "detalhe": f"Oportunidade validada; esperar {4 if conservador else 2} dias de queda para a 1ª parte{limite}"}
+    return {"parte": parte, "acao": f"ENTRADA {parte}/3",
+            "detalhe": f"Movimento curto: {parte}ª parte de 3{limite}"}

@@ -17,7 +17,7 @@ from utils.percentile import percentil_na_faixa, zonas
 from utils.signals import (backtest_percentil, decidir_estado, fundamento_quebrou,
                            selo_backtest)
 from utils.simons import SELO as SELO_SIMONS
-from utils.simons import JANELA, historico, leitura, queda_desde_topo
+from utils.simons import JANELA, classificar, historico, leitura, queda_desde_topo, timing
 
 SIMBOLO = {"BRL": "R$", "USD": "US$", "EUR": "€", "GBP": "£"}
 ROTULO_PERIODOS = ["1 ano", "3 anos", "5 anos"]
@@ -225,14 +225,22 @@ def _veredito_com_fonte(peg_futuro, receita, status, lucro_fut, tem_estimativa: 
     return v
 
 
-def modo_simons(hist: pd.DataFrame) -> dict:
+def modo_simons(hist: pd.DataFrame, r: Resultado | None = None, faixa=None) -> dict:
     fech = _sem_fuso(hist)["Close"].dropna()
     q = queda_desde_topo(fech)
     janela = fech.tail(JANELA + 1)   # de -10 pregões até hoje
     topo_pos = q["topo_pos"] - (len(fech.tail(JANELA + 1)) - len(janela))
     hist_n = historico(fech)
     atual = hist_n.get(q["dias"]) if q["dias"] else None
-    return {"dias": q["dias"], "queda": _n(q["queda"], 2), "altas": q["altas"],
+    passo = {}
+    if r is not None and faixa is not None:
+        c = classificar(r.preco_atual, r.mm200, r.inclinacao_mm200, faixa.oportunidade_ate, faixa.cara_acima)
+        t = timing(c["classe"], q["dias"], c["conservador"])
+        passo = {"mm200": _n(r.mm200, 4), "distMM200": _n(c["distMM200"], 2), "mm200Caindo": c["mm200Caindo"],
+                 "classe": c["classe"], "zona52": c["zona52"], "conservador": c["conservador"],
+                 "parte": t["parte"], "entrada": t["acao"], "entradaDetalhe": t["detalhe"],
+                 "oportunidadeAte": _n(faixa.oportunidade_ate, 4), "caraAcima": _n(faixa.cara_acima, 4)}
+    return {**passo, "dias": q["dias"], "queda": _n(q["queda"], 2), "altas": q["altas"],
             **leitura(q["dias"], JANELA), "maximo": JANELA, "selo": SELO_SIMONS,
             "topo": _n(janela.iloc[topo_pos], 4) if q["dias"] else None,
             "topoData": f"{janela.index[topo_pos]:%d/%m/%Y}" if q["dias"] else None,
@@ -370,7 +378,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "regra": {"status": regra["status"], "media": _n(regra["media"], 4), "mensagem": regra["mensagem"]},
         "lynch": lynch,
         "guidance": guia, "consensoAno": consenso_ano,
-        "simons": modo_simons(hist),
+        "simons": modo_simons(hist, r, faixa),
         "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "precoMedio12": _n(f["preco_medio"], 4), "mediaDesde": f["media_desde"], "mediaMeses": f["media_meses"], "plMetodo": f["metodo"],
         "lpa": _n(f["lpa"], 4), "lpaAgora": _n(f["lpa_agora"], 4), "lpa12Atras": _n(f["lpa_antes"], 4),
         "baseLpa": f["base_lpa"], "balanco": f["balanco"],
