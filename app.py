@@ -125,8 +125,13 @@ def baixar_indice(simbolos: tuple[str, ...]):
     return None, None
 
 
+# muda quando o código dos cálculos muda: um deploy novo não reaproveita resultado antigo do cache
+VERSAO_CALCULO = hashlib.md5(b"".join(open(m.__file__, "rb").read() for m in (
+    calculos, tela.dados, utils.lynch, utils.override, utils.benchmarks)) + open(__file__, "rb").read()).hexdigest()[:10]
+
+
 @st.cache_data(ttl=86400, show_spinner=False)
-def brasil(dia: str) -> dict:
+def brasil(dia: str, versao: str = "") -> dict:
     """CDI, Selic, IPCA e Poupança acumulados em 1, 3 e 5 anos (cache diário)."""
     return retornos_brasil(pd.Timestamp(dia))
 
@@ -151,7 +156,7 @@ def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]
                 saida.append(None)
         return saida
 
-    br = brasil(f"{fim:%Y-%m-%d}")
+    br = brasil(f"{fim:%Y-%m-%d}", VERSAO_CALCULO)
     arred = lambda lista: [None if v is None else round(v, 2) for v in lista]
     todos = {
         "nasdaq": {"nome": "Nasdaq", "curto": "Nasdaq", "artigo": "do índice", "moeda": "US$", "v": do_indice(("^IXIC",))},
@@ -175,10 +180,6 @@ def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]
         ordem = ["sp500", "nasdaq", "ibov", "cdi", "selic", "ipca", "poupanca"]
     padrao = ordem[0]
     return {k: todos[k] for k in ordem}, padrao
-
-
-# muda quando o código dos cálculos muda: um deploy novo não reaproveita pacote antigo do cache
-VERSAO_CALCULO = hashlib.md5(b"".join(open(m.__file__, "rb").read() for m in (calculos, tela.dados, utils.lynch, utils.override))).hexdigest()[:10]
 
 
 @st.cache_data(ttl=900, show_spinner=False)
