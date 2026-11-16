@@ -299,3 +299,10 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .hist-l .t i { display: block; height: 100%; } .hist-l .t i.s { background: var(--verde); } .hist-l .t i.c { background: var(--vermelho); opacity: .85; }
 .hist-l .v { text-align: right; white-space: nowrap; } .hist-l .vs { color: var(--verde); } .hist-l .vc { color: var(--vermelho); }
 .hist-l.atual { color: var(--texto); font-weight: 700; } .hist-l.atual .t { outline: 2px solid var(--azul); outline-offset: 1px; }
+
+.hist-l.cab { font-size: 10.5px; letter-spacing: .03em; text-transform: uppercase; color: var(--suave); margin-bottom: 4px; }
+.hist-l.cab .n { white-space: normal; line-height: 1.15; }
+.hist-l .t-cab { display: flex; gap: 12px; text-transform: none; letter-spacing: 0; font-size: 11px; }
+.hist-l .t-cab i { font-style: normal; display: inline-flex; align-items: center; gap: 4px; }
+.hist-l .t-cab i::before { content: ''; width: 9px; height: 9px; border-radius: 2px; background: var(--c); }
+.hist-l.cab .v { text-transform: none; letter-spacing: 0; font-size: 11px; }

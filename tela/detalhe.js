@@ -1032,13 +1032,14 @@ function montar(root, d) {
         // rótulo da MM200 embaixo; se ficar perto do "Hoje", desce uma linha para não sobrepor
         extra: tem(sm.mm200) && sm.mm200 >= sm.min52 && sm.mm200 <= sm.max52 ? `<span class="traco mm" style="left:POS(${sm.mm200})%"></span><span class="mm-rot" style="left:POS(${sm.mm200})%;${Math.abs(sm.mm200 - d.preco) / (sm.max52 - sm.min52) < 0.25 ? 'top:38px' : ''}">MM200 ${f(sm.mm200)}</span>` : '' });
       // 3. dias de queda: régua de 0 a 10 com as partes da entrada
-      const segsDias = sm.classe !== 'OPORTUNIDADE'
-        ? [{ ate: 10, cor: 'var(--ardosia)', corTxt: '#aab4c6', nome: 'Só alerta: fora da oportunidade' }]
-        : sm.conservador
-          ? [{ ate: 4, cor: 'var(--ardosia)', corTxt: '#aab4c6', nome: 'Observa' }, { ate: 7, cor: '#2fbf8a66', corTxt: 'var(--verde)', nome: '1/3' }, { ate: 10, cor: '#2fbf8aaa', corTxt: 'var(--verde)', nome: '2/3' }]
-          : [{ ate: 2, cor: 'var(--ardosia)', corTxt: '#aab4c6', nome: 'Observa' }, { ate: 4, cor: '#2fbf8a55', corTxt: 'var(--verde)', nome: '1/3' }, { ate: 7, cor: '#2fbf8a99', corTxt: 'var(--verde)', nome: '2/3' }, { ate: 10, cor: 'var(--verde)', nome: '3/3' }];
-      const marcasDias = [0, ...segsDias.slice(0, -1).map(g => g.ate), 10].map(v => ({ v, t: v === 10 ? '10+' : String(v) }));
-      const cartao3 = barra({ ini: 0, fim: 10, segs: segsDias, marcas: marcasDias, bola: Math.min(sm.dias, 10), rotBola: sm.dias ? `${dias} · ${sinal(sm.queda)}` : 'sem queda' });
+      const foraOp = sm.classe !== 'OPORTUNIDADE';
+      const segsBase = sm.conservador
+        ? [{ ate: 4, cor: 'var(--ardosia)', corTxt: '#aab4c6', nome: 'Observa' }, { ate: 7, cor: '#2fbf8a66', corTxt: 'var(--verde)', nome: '1/3' }, { ate: 10, cor: '#2fbf8aaa', corTxt: 'var(--verde)', nome: '2/3' }]
+        : [{ ate: 2, cor: 'var(--ardosia)', corTxt: '#aab4c6', nome: 'Observa' }, { ate: 4, cor: '#2fbf8a55', corTxt: 'var(--verde)', nome: '1/3' }, { ate: 7, cor: '#2fbf8a99', corTxt: 'var(--verde)', nome: '2/3' }, { ate: 10, cor: 'var(--verde)', nome: '3/3' }];
+      // fora da oportunidade a régua continua com as partes, mas apagada: mostra o que valeria se fosse oportunidade
+      const segsDias = foraOp ? segsBase.map(g => ({ ...g, cor: '#3a4558', corTxt: 'var(--fraco)' })) : segsBase;
+      const marcasDias = [0, ...segsDias.slice(0, -1).map(g => g.ate), 10].map(v => ({ v, t: v === 10 ? '10+ dias' : v === 0 ? '0 dia' : `${v} dias` }));
+      const cartao3 = barra({ ini: 0, fim: 10, segs: segsDias, marcas: marcasDias, bola: Math.min(sm.dias, 10), rotBola: sm.dias ? `Hoje: ${dias} de queda (${sinal(sm.queda)})` : 'Hoje: sem queda' });
       // histórico: quantas vezes subiu e caiu no dia seguinte (sem porcentagem solta)
       const maxV = Math.max(1, ...(sm.historico || []).map(h => h.vezes));
       const linhasHist = (sm.historico || []).map(h => {
@@ -1057,13 +1058,15 @@ function montar(root, d) {
           ${cartao2}
           <div class="nota" style="margin-top:${tem(sm.mm200) && temFaixa && Math.abs(sm.mm200 - d.preco) / (sm.max52 - sm.min52) < 0.25 ? 20 : 2}px">${tendTxt} Oportunidade = zona verde e preço até 5% acima da MM200. Caro = zona cara ou 15%+ acima da MM200.${sm.conservador ? ' Conservador: abaixo da MM200 com a média caindo.' : ''}</div></div>
         <div class="card" style="margin-top:8px"><span class="rot">3. Dias de queda (momento da entrada)</span>
-          <div class="duas" style="margin:8px 0 2px"><span class="esq">Entrada</span><span class="dir">${sm.entrada}</span></div>
+          <div class="duas" style="margin:8px 0 2px"><span class="esq">Entrada hoje</span><span class="dir">${sm.entrada}</span></div>
+          <div class="nota" style="margin:0 0 4px">${foraOp ? `Régua apagada: a classificação é ${nomeClasse}, então os dias de queda não abrem compra. As partes mostram como seria numa oportunidade.` : `Quanto comprar conforme os dias de queda${sm.conservador ? ' (modo conservador)' : ''}.`}</div>
           ${cartao3}
           <div class="nota" style="margin-top:2px">${sm.dias ? `Topo ${din(sm.topo)} em ${sm.topoData}${sm.altas ? `, ${sm.altas} ${sm.altas === 1 ? 'alta' : 'altas'} no meio` : ''}. ` : ''}${sm.entradaDetalhe}. ${sm.classe === 'OPORTUNIDADE' ? (sm.conservador ? 'A última parte só com o preço acima da MM200 ou a média parando de cair.' : 'O 5º dia sozinho nunca manda a compra toda.') : ''}</div></div>
-        <div class="card" style="margin-top:8px"><span class="rot">Histórico desde ${sm.histDesde}: no dia seguinte</span>
-          <div class="leg" style="margin:8px 0 6px"><span style="--c:var(--verde)">subiu</span><span style="--c:var(--vermelho)">caiu</span><span style="--c:transparent">vezes: subiu / caiu</span></div>
+        <div class="card" style="margin-top:8px"><span class="rot">O que aconteceu no dia seguinte · desde ${sm.histDesde}</span>
+          ${(() => { const h = (sm.historico || []).find(x => x.dias === Math.min(sm.dias, mx)); return h && h.vezes ? `<p class="destaque" style="margin:8px 0 10px;font-size:14px">Nos últimos 5 anos, a ${d.ticker} chegou a ${h.dias}${h.dias === mx ? ' ou mais' : ''} ${h.dias === 1 ? 'dia' : 'dias'} de queda <b>${h.vezes} vezes</b>. No pregão seguinte, <b style="color:var(--verde)">subiu em ${h.altas}</b> e <b style="color:var(--vermelho)">caiu em ${h.vezes - h.altas}</b>.</p>` : ''; })()}
+          <div class="hist-l cab"><span class="n">Dias de queda</span><span class="t-cab"><i style="--c:var(--verde)">subiu</i><i style="--c:var(--vermelho)">caiu</i></span><span class="v">subiu / caiu</span></div>
           <div class="hist">${linhasHist}</div>
-          <div class="nota" style="margin-top:6px">Cada linha conta quantas vezes a ação chegou a N dias de queda nos últimos 5 anos e o que fez no pregão seguinte. Linhas com poucos casos dizem pouco.</div></div>
+          <div class="nota" style="margin-top:6px">Cada linha: quantas vezes a ação chegou àquele número de dias de queda e, no pregão seguinte, quantas vezes subiu (verde) e caiu (vermelho). Barra maior = mais casos.</div></div>
         <div class="card" style="margin-top:8px"><span class="rot">Régua fixa (igual para qualquer ação)</span>
           ${cartaoRegua}</div>
         <div style="margin-top:10px"><span class="selo sem">${sm.selo}</span></div>
