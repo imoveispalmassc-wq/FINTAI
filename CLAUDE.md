@@ -14,12 +14,14 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 - Estimativas de analistas mostram a base (ano atual, próximo ano fiscal, longo prazo), o número
   de analistas e a faixa quando o Yahoo informa. Com menos de 3 analistas, avisar que é pouco confiável.
 - Projeção da empresa (guidance) não vem do Yahoo: só entra com fonte citada, pelo `OVERRIDE` em
-  `utils/override.py` (lucro_min, lucro_max, acoes, payout, fonte, data). Com override, o guidance ganha
+  `utils/override.py` (lucro_min, lucro_max, fonte, data; acoes e payout opcionais, sem acoes usa o Yahoo). Com override, o guidance ganha
   do Yahoo: LPA projetado = (lucro_min + lucro_max) / 2 / acoes; dividendo projetado = LPA × payout.
   A tela mostra o selo "GUIDANCE OFICIAL" com a data. Sem override, vale o consenso do Yahoo.
 - Guidance automático: `utils/fetch_guidance.py` roda todo dia às 9h (`.github/workflows/update-guidance.yml`)
   para os tickers de `utils/guidance_tickers.json` e grava em `utils/guidance_auto.json`. Busca nos documentos
   entregues à CVM; padrões de texto primeiro, API do Claude só se falharem (chave em GitHub Secrets).
+  A leitura da API só vale se a faixa estiver no documento (achada pelos padrões ou no trecho, sem
+  contar espaços e separadores de tabela). Ticker não gravado vira aviso amarelo na execução do Actions.
   Primeira gravação de cada ticker: sempre pull request. Depois de aprovada, confiança alta e variação
   menor que 50%: commit direto. API do Claude, confiança baixa ou LPA mudando 50% ou mais: pull request.
   Nunca usa documento mais antigo que o mais novo com faixa de lucro, nem mais antigo que o guidance já

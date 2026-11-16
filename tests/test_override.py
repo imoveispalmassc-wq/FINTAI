@@ -22,6 +22,7 @@ def test_ticker_aceita_sufixo_e_minusculas():
 @pytest.mark.parametrize("mudanca,erro", [
     ({"lucro_min": 30e9}, "lucro_min maior"),
     ({"acoes": 0}, "acoes"),
+    ({"lucro_max": None}, "lucro_max"),
     ({"payout": 40}, "payout"),
     ({"fonte": ""}, "fonte"),
 ])
@@ -53,3 +54,18 @@ def test_cadastro_manual_ganha_do_automatico(tmp_path, monkeypatch):
     monkeypatch.setattr(ov, "OVERRIDE", {"XXXX3": TABELA["XXXX3"]})
     assert ov.guidance("XXXX3")["lucroMin"] == 21e9      # manual
     assert ov.guidance("YYYY3") is not None               # automático
+
+
+def test_acoes_do_yahoo_quando_o_cadastro_nao_traz():
+    o = {k: v for k, v in TABELA["XXXX3"].items() if k != "acoes"}
+    assert guidance("XXXX3", {"XXXX3": o}) is None                  # sem ações em lugar nenhum
+    g = guidance("XXXX3", {"XXXX3": o}, acoes_padrao=5.73e9)
+    assert g["lpa"] == pytest.approx(23e9 / 5.73e9) and g["acoesFonte"] == "Yahoo Finance"
+
+
+def test_cadastro_do_bbas3_com_o_guidance_de_11_11_2026():
+    from utils.override import OVERRIDE
+    o = OVERRIDE["BBAS3"]
+    assert (o["lucro_min"], o["lucro_max"], o["payout"], o["data"]) == (9e9, 11e9, 0.25, "11/11/2026")
+    g = guidance("BBAS3", OVERRIDE, acoes_padrao=5.73e9)
+    assert g["lpa"] == pytest.approx(10e9 / 5.73e9) and g["dividendo"] == pytest.approx(g["lpa"] * 0.25)

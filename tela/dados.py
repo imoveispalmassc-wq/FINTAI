@@ -278,7 +278,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
 
     # guidance oficial da empresa (OVERRIDE) ganha do consenso do Yahoo no LPA projetado
     lynch = modo_lynch(d, f["pl"], regra)
-    g = guidance_oficial(curto)
+    g = guidance_oficial(curto, acoes_padrao=f["acoes"])
     guia = None
     if g:
         lynch["futuro"].update({"lpaEsteAno": _n(g["lpa"], 4), "lpaBaixa": _n(g["lpaMin"], 4),
@@ -287,7 +287,8 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
                 "dividendo": _n(g["dividendo"], 4), "payout": _n(g["payout"], 4),
                 "lucroMin": _n(g["lucroMin"], 0), "lucroMax": _n(g["lucroMax"], 0),
                 "acoes": _n(g["acoes"], 0), "fonte": g["fonte"], "data": g["data"],
-                "url": g["url"] if g["url"].startswith("https://") else "", "metodo": g["metodo"]}
+                "url": g["url"] if g["url"].startswith("https://") else "", "metodo": g["metodo"],
+                "acoesFonte": g["acoesFonte"], "lucroTipo": g["lucroTipo"]}
 
     after = None
     if info.get("postMarketPrice") and info.get("postMarketChangePercent") is not None:

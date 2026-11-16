@@ -71,7 +71,7 @@ def _planejar(docs_datados, anterior=None, claude=None, vistos=None):
         "BBAS3", HOJE, anterior, set() if vistos is None else vistos,
         buscar_cnpj=lambda t, h: ("00.000.000/0001-91", "BANCO DO BRASIL S.A."),
         buscar_docs=lambda c, h: docs, ler_pdf=lambda link: (b"%PDF", paginas[link]),
-        buscar_acoes=lambda t: 5.73e9, ler_com_claude=claude or (lambda p, t, a: None))
+        buscar_acoes=lambda t: 5.73e9, ler_com_claude=claude or (lambda *args: None))
 
 
 NOV, MAI, FEV = "2026-11-11", "2026-05-13", "2026-02-12"
@@ -125,7 +125,7 @@ def test_ambiguo_lido_pela_api_do_claude_vai_para_revisao():
     lido = Extracao(lucro_min=9e9, lucro_max=11e9, payout=0.25, ano=2026,
                     trecho="Lucro Líquido Ajustado 18 a 22 9 a 11", metodo="API do Claude",
                     motivos=["lido pela API do Claude: precisa de revisão"])
-    item = _planejar([(NOV, TABELA_BB_NOV)], claude=lambda p, t, a: lido)
+    item = _planejar([(NOV, TABELA_BB_NOV)], claude=lambda *args: lido)
     assert item["acao"] == "pr" and (item["novo"]["lucro_min"], item["novo"]["lucro_max"]) == (9e9, 11e9)
     assert item["novo"]["metodo"] == "API do Claude"
 
@@ -177,3 +177,33 @@ def test_aplicar_grava_so_o_tipo_pedido(tmp_path, monkeypatch):
     assert json.loads((tmp_path / "auto.json").read_text()) == {"BBAS3": {"lucro_min": 1}}
     fg.aplicar(plano, "pr")
     assert set(json.loads((tmp_path / "auto.json").read_text())) == {"BBAS3", "ITUB4"}
+
+
+# ------------------------------------------------------------ conferência da leitura pela API do Claude
+from utils.fetch_guidance import _confere
+
+
+def test_faixa_da_api_conferida_pelas_faixas_do_proprio_documento():
+    ex = extrair_por_padroes(TABELA_BB_NOV, 2026)
+    # trecho com formatação diferente da extraída do PDF (como aconteceu na primeira execução real)
+    assert _confere(9e9, 11e9, TABELA_BB_NOV, "Lucro Líquido Ajustado | R$ 9 a 11 bi", ex.faixas)
+
+
+def test_faixa_da_api_que_nao_esta_no_documento_e_descartada():
+    ex = extrair_por_padroes(TABELA_BB_NOV, 2026)
+    assert _confere(12e9, 14e9, TABELA_BB_NOV, "Lucro Líquido Ajustado entre 12 e 14", ex.faixas) is None
+
+
+def test_trecho_confere_ignorando_espacos_e_separadores():
+    texto = "Projeções\nLucro  Líquido\nAjustado entre R$ 9 bilhões e R$ 11 bilhões para 2026"
+    assert _confere(9e9, 11e9, texto, "Lucro Líquido Ajustado entre R$ 9 bilhões e R$ 11 bilhões", [])
+
+
+def test_a_api_recebe_as_faixas_do_documento():
+    recebido = {}
+
+    def claude(pdf, texto, ano, faixas):
+        recebido["faixas"] = faixas
+        return None
+    _planejar([(NOV, TABELA_BB_NOV)], claude=claude)
+    assert (9e9, 11e9) in recebido["faixas"] and (18e9, 22e9) in recebido["faixas"]

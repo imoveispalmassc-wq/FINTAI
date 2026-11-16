@@ -99,6 +99,7 @@ class Extracao:
     metodo: str = "padrões de texto"     # "padrões de texto" | "API do Claude"
     motivos: list[str] = field(default_factory=list)
     candidatos: int = 0                  # faixas de lucro distintas encontradas
+    faixas: list = field(default_factory=list)   # todas as faixas (mín., máx.) achadas no documento
 
 
 RE_LUCRO = re.compile(r"lucro\s+l[ií]quido(?:\s+(?:ajustado|recorrente|cont[áa]bil|gerencial))?", re.I)
@@ -156,7 +157,7 @@ def extrair_por_padroes(texto: str, ano_alvo: int) -> Extracao | None:
     if not faixas:
         return None
 
-    ex = Extracao(candidatos=len(faixas))
+    ex = Extracao(candidatos=len(faixas), faixas=list(faixas))
     (ex.lucro_min, ex.lucro_max), ex.trecho = next(iter(faixas.items()))
     if len(faixas) > 1:
         ex.motivos.append(f"{len(faixas)} faixas de lucro diferentes no documento (ex.: anterior e revisada)")
@@ -216,7 +217,25 @@ Regras:
 e os números como null."""
 
 
-def extrair_com_claude(pdf: bytes, texto: str, ano_alvo: int) -> Extracao | None:
+def _so_letras_numeros(texto: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", sem_acento(texto))
+
+
+def _confere(a: float, b: float, texto: str, trecho: str, faixas_do_documento) -> str | None:
+    """Como a faixa devolvida pela API foi conferida no documento; None se não foi.
+
+    1. A faixa é uma das que os padrões de texto acharam no próprio documento (mais forte).
+    2. O trecho existe no documento, ignorando espaços, acentos e separadores de tabela."""
+    for x, y in faixas_do_documento or []:
+        if abs(x - a) <= 0.005 * a and abs(y - b) <= 0.005 * b:
+            return "faixa encontrada no documento pelos padrões de texto"
+    pedaco = _so_letras_numeros(trecho)[:80]
+    if len(pedaco) >= 20 and pedaco in _so_letras_numeros(texto):
+        return "trecho encontrado no documento"
+    return None
+
+
+def extrair_com_claude(pdf: bytes, texto: str, ano_alvo: int, faixas_do_documento=()) -> Extracao | None:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         log.info("  sem ANTHROPIC_API_KEY: leitura pela API do Claude desligada")
         return None
@@ -259,15 +278,18 @@ def extrair_com_claude(pdf: bytes, texto: str, ano_alvo: int) -> Extracao | None
     if not (a and b and 0 < a <= b <= a * 2):
         log.error("  API do Claude devolveu faixa inválida: %s a %s", a, b)
         return None
-    # o trecho tem de existir no documento: sem isso, o número pode ter sido inventado
-    if not trecho or sem_acento(trecho)[:120] not in sem_acento(normalizar(texto)):
-        log.error("  trecho devolvido pela API do Claude não foi encontrado no documento: descartado")
+    # a faixa tem de estar no documento: sem isso, o número pode ter sido inventado
+    conferido = _confere(float(a), float(b), texto, trecho, faixas_do_documento)
+    if not conferido:
+        log.error("  API do Claude leu R$ %.1f a %.1f bi, mas a faixa não foi encontrada no documento: descartado",
+                  a / 1e9, b / 1e9)
         return None
+    log.info("  API do Claude leu R$ %.1f a %.1f bi (%s)", a / 1e9, b / 1e9, conferido)
     payout = dados.get("payout_fracao")
     return Extracao(lucro_min=float(a), lucro_max=float(b),
                     payout=float(payout) if payout is not None and 0 < payout <= 1 else None,
                     ano=dados.get("ano"), trecho=trecho[:400], confianca="baixa", metodo="API do Claude",
-                    motivos=["lido pela API do Claude: precisa de revisão"], candidatos=1)
+                    motivos=[f"lido pela API do Claude ({conferido}): precisa de revisão"], candidatos=1)
 
 
 # ------------------------------------------------------------ CVM (dados abertos)
@@ -338,6 +360,17 @@ def texto_do_pdf(link: str) -> tuple[bytes, str]:
     from pypdf import PdfReader
 
     pdf = _get(link).content
+    if not pdf.lstrip().startswith(b"%PDF"):
+        # o RAD da CVM às vezes devolve uma página HTML com o arquivo dentro
+        inicio = pdf.find(b"%PDF")
+        b64 = re.search(rb"JVBERi0[A-Za-z0-9+/=\s]{100,}", pdf)
+        if inicio >= 0:
+            pdf = pdf[inicio:]
+        elif b64:
+            pdf = base64.b64decode(re.sub(rb"\s", b"", b64.group(0)))
+        else:
+            titulo = re.search(rb"<title>(.*?)</title>", pdf, re.I | re.S)
+            raise ValueError(f"não é PDF ({(titulo.group(1).strip()[:80] if titulo else pdf[:60])!r})")
     leitor = PdfReader(io.BytesIO(pdf))
     return pdf, "\n".join((p.extract_text() or "") for p in leitor.pages)
 
@@ -405,7 +438,7 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
         try:
             pdf, texto = ler_pdf(doc["link"])
         except Exception as e:  # noqa: BLE001
-            log.info("  não abriu %s (%s)", doc["link"], e.__class__.__name__)
+            log.info("  não abriu documento de %s (%s: %s)", _data_br(doc["data"]), e.__class__.__name__, e)
             continue
         ex = extrair_por_padroes(texto, ano)
         if ex is None:
@@ -416,7 +449,7 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
                 item["motivo"] = "documento já tentado sem confiança; aguardando documento novo"
                 return item
             vistos.add(doc["link"])
-            ex = ler_com_claude(pdf, texto, ano) or ex
+            ex = ler_com_claude(pdf, texto, ano, ex.faixas) or ex
             if ex.metodo != "API do Claude":
                 item.update(acao="erro", motivo="faixa de lucro encontrada sem confiança: " + "; ".join(ex.motivos))
                 return item
@@ -476,6 +509,9 @@ def planejar(hoje: dt.date | None = None) -> list[dict]:
         vistos_por_ticker[t] = sorted(vistos)[-50:]
         nivel = logging.ERROR if item["acao"] == "erro" else logging.INFO
         log.log(nivel, "  -> %s: %s", item["acao"], item["motivo"])
+        if item["acao"] == "erro" and os.environ.get("GITHUB_ACTIONS"):
+            # aparece como aviso amarelo no resumo da execução, mesmo com o robô terminando "verde"
+            print(f"::warning title=Guidance {t} não gravado::{item['motivo']}", flush=True)
         plano.append(item)
     ARQ_VISTOS.parent.mkdir(exist_ok=True)
     ARQ_VISTOS.write_text(json.dumps(vistos_por_ticker, ensure_ascii=False, indent=2), encoding="utf-8")
