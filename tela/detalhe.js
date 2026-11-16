@@ -1042,9 +1042,13 @@ function montar(root, d) {
       const cartao3 = barra({ ini: 0, fim: 10, segs: segsDias, marcas: marcasDias, bola: Math.min(sm.dias, 10), rotBola: sm.dias ? `Hoje: ${dias} de queda (${sinal(sm.queda)})` : 'Hoje: sem queda' });
       // histórico: quantas vezes subiu e caiu no dia seguinte (sem porcentagem solta)
       const maxV = Math.max(1, ...(sm.historico || []).map(h => h.vezes));
+      // linha que mais deu alta no dia seguinte (proporção), só entre as que têm 20+ casos
+      const MIN_CASOS = 20;
+      const melhor = (sm.historico || []).filter(h => h.vezes >= MIN_CASOS)
+        .reduce((m, h) => !m || h.altas / h.vezes > m.altas / m.vezes || (h.altas / h.vezes === m.altas / m.vezes && h.vezes > m.vezes) ? h : m, null);
       const linhasHist = (sm.historico || []).map(h => {
-        const caiu = h.vezes - h.altas, wS = h.altas / maxV * 100, wC = caiu / maxV * 100, atual = h.dias === sm.dias;
-        return `<div class="hist-l${atual ? ' atual' : ''}"><span class="n">${h.dias}${h.dias === mx ? '+' : ''} ${h.dias === 1 ? 'dia' : 'dias'}</span>
+        const caiu = h.vezes - h.altas, wS = h.altas / maxV * 100, wC = caiu / maxV * 100, atual = h.dias === Math.min(sm.dias, mx), top = melhor && h.dias === melhor.dias;
+        return `<div class="hist-l${atual ? ' atual' : ''}${top ? ' melhor' : ''}"><span class="n">${h.dias}${h.dias === mx ? '+' : ''} ${h.dias === 1 ? 'dia' : 'dias'}${atual ? '<em class="tag-h hoje">hoje</em>' : ''}${top ? '<em class="tag-h top">melhor</em>' : ''}</span>
           <span class="t">${h.vezes ? `<i class="s" style="width:${wS}%"></i><i class="c" style="width:${wC}%"></i>` : ''}</span>
           <span class="v num">${h.vezes ? `<b class="vs">${h.altas}</b> / <b class="vc">${caiu}</b>` : 'nenhum caso'}</span></div>`;
       }).join('');
@@ -1064,9 +1068,10 @@ function montar(root, d) {
           <div class="nota" style="margin-top:2px">${sm.dias ? `Topo ${din(sm.topo)} em ${sm.topoData}${sm.altas ? `, ${sm.altas} ${sm.altas === 1 ? 'alta' : 'altas'} no meio` : ''}. ` : ''}${sm.entradaDetalhe}. ${sm.classe === 'OPORTUNIDADE' ? (sm.conservador ? 'A última parte só com o preço acima da MM200 ou a média parando de cair.' : 'O 5º dia sozinho nunca manda a compra toda.') : ''}</div></div>
         <div class="card" style="margin-top:8px"><span class="rot">O que aconteceu no dia seguinte · desde ${sm.histDesde}</span>
           ${(() => { const h = (sm.historico || []).find(x => x.dias === Math.min(sm.dias, mx)); return h && h.vezes ? `<p class="destaque" style="margin:8px 0 10px;font-size:14px">Nos últimos 5 anos, a ${d.ticker} chegou a ${h.dias}${h.dias === mx ? ' ou mais' : ''} ${h.dias === 1 ? 'dia' : 'dias'} de queda <b>${h.vezes} vezes</b>. No pregão seguinte, <b style="color:var(--verde)">subiu em ${h.altas}</b> e <b style="color:var(--vermelho)">caiu em ${h.vezes - h.altas}</b>.</p>` : ''; })()}
+          ${melhor ? `<p class="nota" style="margin:-4px 0 10px"><span style="color:var(--verde);font-weight:700">Melhor resultado no período:</span> ${melhor.dias}${melhor.dias === mx ? ' ou mais' : ''} ${melhor.dias === 1 ? 'dia' : 'dias'} de queda. Subiu no dia seguinte em ${melhor.altas} de ${melhor.vezes} vezes${melhor.dias === Math.min(sm.dias, mx) ? ', que é a situação de hoje' : ''}.</p>` : ''}
           <div class="hist-l cab"><span class="n">Dias de queda</span><span class="t-cab"><i style="--c:var(--verde)">subiu</i><i style="--c:var(--vermelho)">caiu</i></span><span class="v">subiu / caiu</span></div>
           <div class="hist">${linhasHist}</div>
-          <div class="nota" style="margin-top:6px">Cada linha: quantas vezes a ação chegou àquele número de dias de queda e, no pregão seguinte, quantas vezes subiu (verde) e caiu (vermelho). Barra maior = mais casos.</div></div>
+          <div class="nota" style="margin-top:6px">Cada linha: quantas vezes a ação chegou àquele número de dias de queda e, no pregão seguinte, quantas vezes subiu (verde) e caiu (vermelho). Barra maior = mais casos. Contorno vermelho = hoje; contorno verde = a quantidade de dias que mais subiu no dia seguinte (entre as linhas com ${MIN_CASOS}+ casos).</div></div>
         <div class="card" style="margin-top:8px"><span class="rot">Régua fixa (igual para qualquer ação)</span>
           ${cartaoRegua}</div>
         <div style="margin-top:10px"><span class="selo sem">${sm.selo}</span></div>
