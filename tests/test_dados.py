@@ -54,3 +54,33 @@ def test_sem_estimativa_nenhuma_mantem_o_aviso_geral():
     d = {"info": {}, "lpa_anual": None, "receita_anual": None, "est_lucro": None,
          "est_receita": None, "est_cresc": None}
     assert modo_lynch(d, 10.0, {"status": "ok"})["veredito"]["titulo"] == "Sem PEG - Sem estimativa no Yahoo para este ativo"
+
+
+def test_faixa_acompanha_o_periodo_do_grafico():
+    from tela.dados import faixas_por_periodo
+    h = _hist()
+    fx = faixas_por_periodo(h, float(h["Close"].iloc[-1]), compra_validada_52=True, quebrou=False,
+                            motivo="", simbolo="R$", tendencia="Alta")
+    assert set(fx) == {"1a", "5a", "max"}
+    hh = h.copy(); hh.index = hh.index.tz_localize(None)
+    fim = hh.index[-1]
+    for chave, anos in (("1a", 1), ("5a", 5)):
+        jan = hh[hh.index > fim - pd.DateOffset(years=anos)]
+        assert fx[chave]["min"] == pytest.approx(jan["Low"].min(), abs=1e-3)
+        assert fx[chave]["max"] == pytest.approx(jan["High"].max(), abs=1e-3)
+        amp = fx[chave]["max"] - fx[chave]["min"]
+        assert fx[chave]["zOport"] == pytest.approx(fx[chave]["min"] + 0.3 * amp, abs=1e-3)
+        assert fx[chave]["zCara"] == pytest.approx(fx[chave]["min"] + 0.7 * amp, abs=1e-3)
+    assert fx["max"]["min"] <= fx["5a"]["min"] <= fx["1a"]["min"]
+    assert fx["1a"]["rotulo"] == "Últimas 52 semanas" and fx["5a"]["rotulo"] == "Últimas 260 semanas (5 anos)"
+    # só a faixa de 52 semanas tem teste histórico
+    assert fx["1a"]["testada"] and not fx["5a"]["testada"] and not fx["max"]["testada"]
+    assert "Ponto de oportunidade em R$" in fx["5a"]["decisao"]["texto"]
+
+
+def test_faixa_de_5_anos_com_historico_curto_diz_quanto_cobre():
+    from tela.dados import faixas_por_periodo
+    h = _hist().tail(600)          # pouco mais de 2 anos de pregões
+    fx = faixas_por_periodo(h, float(h["Close"].iloc[-1]), compra_validada_52=False, quebrou=False,
+                            motivo="", simbolo="R$", tendencia="Alta")
+    assert fx["5a"]["rotulo"].startswith("Últimos 2,") and "histórico disponível" in fx["5a"]["rotulo"]

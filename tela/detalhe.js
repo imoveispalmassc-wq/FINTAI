@@ -37,7 +37,17 @@ function montar(root, d) {
   const ex = chave => (d.exemplos && d.exemplos[chave] ? ' <span class="tag-proto">EXEMPLO</span>' : '');
   const FOLHAS = {};
   const fonte = `<p><b>Fonte:</b> ${d.fonte} · atualizado em ${d.atualizado}.</p>`;
-  const zOport = d.zOport, zCara = d.zCara;
+  // faixa de preço do período escolhido no gráfico: 52 semanas (padrão), 5 anos ou todo o histórico
+  const FAIXA_PADRAO = { min: d.min52, max: d.max52, zOport: d.zOport, zCara: d.zCara, decisao: d.decisao,
+    rotulo: 'Últimas 52 semanas', curto: '52 semanas', testada: true };
+  let faixaK = '1a', fx = FAIXA_PADRAO, zOport = fx.zOport, zCara = fx.zCara;
+  function aplicarFaixa(escala) {
+    const k = escala === '5a' || escala === 'max' ? escala : '1a';
+    faixaK = d.faixas && d.faixas[k] ? k : '1a';
+    fx = (d.faixas && d.faixas[faixaK]) || FAIXA_PADRAO;
+    zOport = fx.zOport; zCara = fx.zCara;
+  }
+  aplicarFaixa('1a');
   // rótulo embaixo da bolinha: centrado nela; perto das pontas, alinhado à ponta para não sair da barra
   const ancora = p => p < 8 ? 'left:0;transform:none;text-align:left'
     : p > 92 ? 'left:auto;right:0;transform:none;text-align:right' : `left:${p}%`;
@@ -84,11 +94,12 @@ function montar(root, d) {
     const el = $('decisao');
     let rotulo, classe = '', texto, pilula = '', selo = null, alerta = '', extra = '';
     if (modo === 'graham') {
-      const e = d.decisao; rotulo = e.rotulo; texto = e.texto; pilula = e.zona; selo = seloGraham;
+      const e = fx.decisao; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
+      selo = fx.testada ? seloGraham : ['sem', `SEM TESTE - Zonas de ${fx.curto} não têm teste histórico`];
       classe = e.codigo === 'COMPRAR' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
       alerta = e.alerta || '';
     } else if (modo === 'lynch') {
-      const e = d.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
+      const e = fx.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
       classe = e.codigo === 'COMPRAR' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
       alerta = e.alerta || '';
       const zona = { COMPRAR: 'Zona de Oportunidade', AGUARDAR: 'Zona Neutra', CARO: 'Zona Cara' }[e.codigo];
@@ -315,7 +326,7 @@ function montar(root, d) {
     function trocar(k) {
       escala = k; toque = null;
       el.querySelectorAll('.e').forEach(b => b.setAttribute('aria-pressed', b.dataset.e === k));
-      legenda(); animar(); backtest && backtest(k === 'max');
+      trocarFaixa(k); legenda(); animar(); backtest && backtest(k === 'max');
     }
     el.querySelectorAll('.e').forEach(b => { b.onclick = () => trocar(b.dataset.e); });
     $('gvela').onclick = e => { velas = !velas; e.currentTarget.setAttribute('aria-pressed', velas); animar(); };
@@ -345,11 +356,17 @@ function montar(root, d) {
   })($('grafico'));
 
   /* ---------------- faixa de preço */
-  (function PriceRange(el) {
-    const p = posicao(d.preco, d.min52, d.max52), larg = d.max52 - d.min52;
-    const a = larg > 0 ? (zOport - d.min52) / larg * 100 : 25, b = larg > 0 ? (zCara - d.min52) / larg * 100 : 75;
+  function trocarFaixa(escala) {
+    const antes = faixaK;
+    aplicarFaixa(escala);
+    if (faixaK !== antes) { renderFaixa(); renderDecisao(); }
+  }
+  function renderFaixa() {
+    const el = $('faixa');
+    const p = posicao(d.preco, fx.min, fx.max), larg = fx.max - fx.min;
+    const a = larg > 0 ? (zOport - fx.min) / larg * 100 : 30, b = larg > 0 ? (zCara - fx.min) / larg * 100 : 70;
     const fundo = `linear-gradient(90deg,var(--verde) 0 ${a}%,var(--ardosia) ${a}% ${b}%,var(--ambar) ${b}% 100%)`;
-    el.innerHTML = `<h2>Faixa de preço <small>Últimas 52 semanas</small></h2>
+    el.innerHTML = `<h2>Faixa de preço <small>${fx.rotulo}</small></h2>
       <div class="pilha">
         <div class="zona" style="--c:var(--verde)"><span class="rot">Zona de oportunidade</span><b class="num">até ${din(zOport)}</b></div>
         <div class="zona" style="--c:var(--ardosia)"><span class="rot">Zona neutra</span><b class="num">${f(zOport)} a ${f(zCara)}</b></div>
@@ -362,18 +379,19 @@ function montar(root, d) {
             <span style="color:var(--ambar)"><b>Cara</b></span>
           </div>
           <div class="marca-cima limites num">
-            <span class="esq">${f(d.min52)}</span><span style="left:${a}%">${f(zOport)}</span>
-            <span style="left:${b}%">${f(zCara)}</span><span class="dir">${f(d.max52)}</span>
+            <span class="esq">${f(fx.min)}</span><span style="left:${a}%">${f(zOport)}</span>
+            <span style="left:${b}%">${f(zCara)}</span><span class="dir">${f(fx.max)}</span>
           </div>
           <div class="regua" style="background:${fundo};margin-top:4px">
             <span class="traco" style="left:${a}%"></span><span class="traco" style="left:${b}%"></span>
             <span class="bola" style="left:${p}%"></span>
           </div>
           <div class="marca-baixo so-valor num"><span style="${ancora(p)}">${f(d.preco)}</span></div>
-          <div class="nota" style="margin-top:2px">Mínima e máxima das últimas 52 semanas nas pontas da barra.</div>
+          <div class="nota" style="margin-top:2px">Mínima e máxima ${fx.curto === '52 semanas' ? 'das últimas 52 semanas' : fx.curto === 'todo o histórico' ? 'de todo o histórico' : `dos últimos ${fx.curto}`} nas pontas da barra. A faixa acompanha o período do gráfico (1A, 5A ou Máx.).</div>
         </div>
       </div>`;
-  })($('faixa'));
+  }
+  renderFaixa();
 
   /* ---------------- tendência e força */
   (function TrendStrength(el) {
@@ -801,7 +819,7 @@ function montar(root, d) {
         <p class="nota" style="margin:12px 2px"><b>Referência:</b> comprar em uma semana qualquer rendeu em média ${sinal(ref.retorno, 0)} em 12 meses (subiu em ${f(ref.subiu, 0)}% das vezes) ${periodo}. Teste com ${f(b.anos, 1)} anos de histórico, semana a semana, usando só os dados disponíveis em cada data. Retornos com dividendos. Resultado passado não garante resultado futuro.${expandido ? ex('backtestMax') : ''}</p>
         <details class="acord"><summary>Como os números são calculados</summary><div class="dentro"><div class="nota">
           <p style="margin:0 0 8px"><b>Janela:</b> ${expandido ? 'todo o histórico disponível' : 'últimos 5 anos'}, semana a semana. Entram as semanas que já têm 12 meses de resultado.</p>
-          <p style="margin:0 0 8px"><b>Zona de Oportunidade</b> = até ${din(zOport)} hoje (faixa inferior das 52 semanas). <b>Zona Cara</b> = acima de ${din(zCara)} hoje (faixa superior). Em cada semana do passado, as faixas são recalculadas só com os dados que existiam até aquela data, sem olhar o futuro.</p>
+          <p style="margin:0 0 8px"><b>Zona de Oportunidade</b> = até ${din(d.zOport)} hoje (faixa inferior das 52 semanas). <b>Zona Cara</b> = acima de ${din(d.zCara)} hoje (faixa superior). Em cada semana do passado, as faixas são recalculadas só com os dados que existiam até aquela data, sem olhar o futuro.</p>
           <p style="margin:0 0 8px"><b>Retorno 12M</b> = (valor 12 meses depois, com dividendos reinvestidos) ÷ (valor na semana do sinal) − 1.</p>
           <p style="margin:0 0 8px"><b>Sinal validado:</b> acertou em mais de 60% das vezes, rendeu melhor do que a referência (comprar em uma semana qualquer) e teve pelo menos 8 casos.</p>
           <p style="margin:0">Um sinal invalidado nunca entra na decisão do topo da tela.</p>

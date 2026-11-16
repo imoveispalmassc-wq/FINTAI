@@ -12,7 +12,7 @@ import pandas as pd
 from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, pl_medio_12m,
                       pl_medio_longo, preco_justo_graham, preco_teto_bazin)
 from utils.lynch import crescimento_anual, peg, regra_prejuizo, veredito
-from utils.percentile import zonas
+from utils.percentile import percentil_na_faixa, zonas
 from utils.signals import (backtest_percentil, decidir_estado, fundamento_quebrou,
                            selo_backtest)
 from utils.simons import SELO as SELO_SIMONS
@@ -194,6 +194,42 @@ def modo_simons(hist: pd.DataFrame) -> dict:
             "variacao10": _n((janela.iloc[-1] / janela.iloc[0] - 1) * 100, 2)}
 
 
+def faixas_por_periodo(hist: pd.DataFrame, preco: float, *, compra_validada_52: bool,
+                       quebrou: bool, motivo: str, simbolo: str, tendencia: str) -> dict:
+    """Zonas e decisão calculadas com a mínima e a máxima de cada período do gráfico.
+
+    "1a": últimas 52 semanas (padrão; é a faixa que o teste histórico valida).
+    "5a": últimas 260 semanas. "max": todo o histórico.
+    A mesma regra vale para todos: oportunidade = mínima + 30% da amplitude; fim da neutra = mínima + 70%.
+    """
+    h = _sem_fuso(hist).dropna(subset=["High", "Low", "Close"])
+    fim = h.index[-1]
+    periodos = {
+        "1a": (h[h.index > fim - pd.DateOffset(years=1)], "Últimas 52 semanas", "52 semanas"),
+        "5a": (h[h.index > fim - pd.DateOffset(years=5)], "Últimas 260 semanas (5 anos)", "5 anos"),
+        "max": (h, f"Todo o histórico (desde {h.index[0]:%Y})", "todo o histórico"),
+    }
+    saida = {}
+    for chave, (janela, rotulo, curto) in periodos.items():
+        if janela.empty:
+            continue
+        anos = (fim - janela.index[0]).days / 365.25
+        if chave == "5a" and anos < 4.75:          # histórico menor que 5 anos: diz quanto cobre
+            rotulo, curto = f"Últimos {anos:.1f} anos (histórico disponível)".replace(".", ","), f"{anos:.1f} anos".replace(".", ",")
+        minimo, maximo = float(janela["Low"].min()), float(janela["High"].max())
+        z = zonas(minimo, maximo)
+        e = decidir_estado(percentil_na_faixa(preco, minimo, maximo), minimo, maximo,
+                           compra_validada=compra_validada_52 if chave == "1a" else False,
+                           quebrou=quebrou, motivo_quebra=motivo, simbolo=simbolo,
+                           preco=preco, tendencia=tendencia)
+        saida[chave] = {"min": _n(minimo, 4), "max": _n(maximo, 4),
+                        "zOport": _n(z.oportunidade_ate, 4), "zCara": _n(z.cara_acima, 4),
+                        "rotulo": rotulo, "curto": curto, "testada": chave == "1a",
+                        "decisao": {"codigo": e.codigo, "rotulo": e.rotulo, "texto": e.texto, "zona": e.zona,
+                                    "validado": e.validado, "alerta": e.alerta}}
+    return saida
+
+
 def _backtest(hist, anos, nome):
     try:
         b = backtest_percentil(hist, anos)
@@ -284,5 +320,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "decisao": {"codigo": estado.codigo, "rotulo": estado.rotulo, "texto": estado.texto, "zona": estado.zona,
                     "validado": estado.validado, "alerta": estado.alerta},
         "zOport": _n(faixa.oportunidade_ate, 4), "zCara": _n(faixa.cara_acima, 4),
+        "faixas": faixas_por_periodo(hist, r.preco_atual, compra_validada_52=bool(bt5 and bt5["compraValidada"]),
+                                     quebrou=quebrou, motivo=motivo, simbolo=moeda, tendencia=direcao),
         "series": series,
     }

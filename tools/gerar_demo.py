@@ -17,7 +17,7 @@ import pandas as pd
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 
-from tela.dados import modo_simons, series_do_grafico  # noqa: E402
+from tela.dados import faixas_por_periodo, modo_simons, series_do_grafico  # noqa: E402
 from utils.lynch import crescimento_anual, peg, regra_prejuizo, veredito  # noqa: E402
 from utils.percentile import percentil_na_faixa, zonas  # noqa: E402
 from utils.signals import decidir_estado  # noqa: E402
@@ -177,6 +177,8 @@ def pacote() -> dict:
         "decisao": {"codigo": estado.codigo, "rotulo": estado.rotulo, "texto": estado.texto,
                     "zona": estado.zona, "validado": estado.validado, "alerta": estado.alerta},
         "zOport": round(faixa.oportunidade_ate, 4), "zCara": round(faixa.cara_acima, 4),
+        "faixas": faixas_por_periodo(hist, PRECO, compra_validada_52=bt5["compraValidada"], quebrou=False,
+                                     motivo="", simbolo="US$", tendencia=direcao),
         "series": series,
     }
 
