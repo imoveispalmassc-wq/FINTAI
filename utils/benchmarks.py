@@ -41,15 +41,26 @@ def mensal_de_aniversario(taxas_pct: pd.Series) -> pd.Series:
 
 def buscar_sgs(codigo: int, inicio: pd.Timestamp, fim: pd.Timestamp) -> pd.Series:
     """Baixa uma série do SGS. Levanta exceção se a API falhar."""
+    import time
+
     import requests
 
-    r = requests.get(
-        URL.format(codigo=codigo),
-        params={"formato": "json", "dataInicial": f"{inicio:%d/%m/%Y}", "dataFinal": f"{fim:%d/%m/%Y}"},
-        headers={"Accept": "application/json"}, timeout=12,
-    )
-    r.raise_for_status()
-    dados = r.json()
+    erro = None
+    for tentativa in range(3):          # a API do Banco Central às vezes demora ou devolve erro passageiro
+        try:
+            r = requests.get(
+                URL.format(codigo=codigo),
+                params={"formato": "json", "dataInicial": f"{inicio:%d/%m/%Y}", "dataFinal": f"{fim:%d/%m/%Y}"},
+                headers={"Accept": "application/json"}, timeout=20,
+            )
+            r.raise_for_status()
+            dados = r.json()
+            break
+        except Exception as e:  # noqa: BLE001
+            erro = e
+            time.sleep(1.5 * (tentativa + 1))
+    else:
+        raise erro
     datas = pd.to_datetime([x["data"] for x in dados], format="%d/%m/%Y")
     return pd.Series([float(str(x["valor"]).replace(",", ".")) for x in dados], index=datas)
 
@@ -62,7 +73,7 @@ def retornos_brasil(fim: pd.Timestamp, anos=(1, 3, 5)) -> dict[str, list[float |
     """Retorno acumulado de cada comparador para cada período. Falha vira None.
 
     Em "periodos" vai o intervalo usado em cada conta, para conferir com outras fontes."""
-    saida, periodos = {}, {}
+    saida, periodos, falhas = {}, {}, []
     inicio_busca = fim - pd.DateOffset(years=max(anos)) - pd.Timedelta(days=40)
     for nome, (codigo, tipo) in SGS.items():
         try:
@@ -81,14 +92,19 @@ def retornos_brasil(fim: pd.Timestamp, anos=(1, 3, 5)) -> dict[str, list[float |
                 # até o último divulgado, senão o período de 12 meses fica com 11
                 ref = serie.index[serie.index <= fim].max()
             else:
-                # poupança: taxa datada no início do período de aniversário; só períodos já completos
-                ref = serie.index[serie.index + pd.DateOffset(months=1) <= fim].max()
+                    # poupança: taxa datada no início do período de aniversário; só períodos já completos
+                completos = [t for t in serie.index if t + pd.DateOffset(months=1) <= fim]
+                if not completos:
+                    raise ValueError("sem período de aniversário completo")
+                ref = max(completos)
             saida[nome] = [acumular(serie, ref - pd.DateOffset(years=a), ref) for a in anos]
             periodos[nome] = [f"{12 * a} meses, de {_mes(ref - pd.DateOffset(years=a) + pd.DateOffset(months=1))} a {_mes(ref)}" for a in anos]
-        except Exception:
+        except Exception as e:  # noqa: BLE001
             saida[nome] = [None for _ in anos]
-            periodos[nome] = [None for _ in anos]
+            periodos[nome] = [f"Banco Central não respondeu ({type(e).__name__})" for _ in anos]
+            falhas.append(nome)
     saida["periodos"] = periodos
+    saida["falhas"] = falhas
     taxas = {}
     for nome, codigo in TAXA_ANO.items():
         try:

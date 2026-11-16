@@ -40,3 +40,24 @@ for t in sys.argv[1:] or ["BBAS3.SA"]:
         print(f"--- dividendos últimos 12 meses: soma {ult.sum():.4f}\n{ult.to_string()}")
     except Exception as e:  # noqa: BLE001
         print(f"--- dividendos: erro {e}")
+
+
+# Banco Central (SGS): mesmos cálculos do app, com o erro de cada série se houver
+try:
+    import requests  # noqa: F401
+    sys.path.insert(0, ".")
+    from utils.benchmarks import SGS, buscar_sgs, retornos_brasil
+    hoje = pd.Timestamp.today().normalize()
+    print("===== Banco Central (SGS)")
+    for nome, (codigo, _) in SGS.items():
+        try:
+            s_ = buscar_sgs(codigo, hoje - pd.Timedelta(days=60), hoje)
+            print(f"{nome:10} série {codigo}: {len(s_)} linhas, últimas:\n{s_.tail(3).to_string()}")
+        except Exception as e:  # noqa: BLE001
+            print(f"{nome:10} série {codigo}: ERRO {type(e).__name__}: {e}")
+    r = retornos_brasil(hoje)
+    for nome in SGS:
+        print(f"{nome:10} 1/3/5 anos: {r[nome]}  ·  {r['periodos'][nome]}")
+    print("taxas de hoje:", r.get("taxas"), " falhas:", r.get("falhas"))
+except Exception as e:  # noqa: BLE001
+    print("Banco Central: erro no diagnóstico", e)

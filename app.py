@@ -133,8 +133,25 @@ VERSAO_CALCULO = hashlib.md5(b"".join(open(m.__file__, "rb").read() for m in (
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def brasil(dia: str, versao: str = "") -> dict:
-    """CDI, Selic, IPCA e Poupança acumulados em 1, 3 e 5 anos (cache diário)."""
-    return retornos_brasil(pd.Timestamp(dia))
+    """CDI, Selic, IPCA e Poupança acumulados em 1, 3 e 5 anos (cache diário).
+
+    Se algum indicador falhar, levanta exceção: o Streamlit não guarda erro no cache e a próxima
+    abertura tenta de novo (o resultado parcial vai na exceção)."""
+    r = retornos_brasil(pd.Timestamp(dia))
+    if r.get("falhas"):
+        raise BrasilIncompleto(r)
+    return r
+
+
+class BrasilIncompleto(Exception):
+    pass
+
+
+def brasil_ou_parcial(dia: str) -> dict:
+    try:
+        return brasil(dia, VERSAO_CALCULO)
+    except BrasilIncompleto as e:
+        return e.args[0]
 
 
 def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]:
@@ -171,7 +188,7 @@ def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]
                          .replace(",", "X").replace(".", ",").replace("X", "."))
         return saida
 
-    br = brasil(f"{fim:%Y-%m-%d}", VERSAO_CALCULO)
+    br = brasil_ou_parcial(f"{fim:%Y-%m-%d}")
     arred = lambda lista: [None if v is None else round(v, 2) for v in lista]
     todos = {
         "nasdaq": {"nome": "Nasdaq", "curto": "Nasdaq", "artigo": "do índice", "moeda": "US$", "v": do_indice(("^IXIC",)), "conta": pontos_indice(("^IXIC",))},
