@@ -69,11 +69,15 @@ def historico(fechamentos: pd.Series, anos: int = 5, janela: int = JANELA) -> di
         f = f[f.index > f.index[-1] - pd.DateOffset(years=anos)]
     c = f.to_numpy()
     conta = {n: [0, 0] for n in range(1, janela + 1)}
+    anterior = 0
     for t in range(janela, len(c) - 1):
         n = queda_desde_topo(c[t - janela:t + 1], janela)["dias"]
-        if n:
+        # o último grupo ("10 ou mais") conta cada queda uma vez só, no dia em que chega a 10;
+        # senão uma queda de 20 dias entraria 11 vezes (do 10º ao 20º dia), sobrepostas
+        if n and not (n == janela and anterior == janela):
             conta[n][0] += 1
             conta[n][1] += int(c[t + 1] > c[t])
+        anterior = n
     return {n: {"vezes": v, "altas": a, "pct": (a / v * 100) if v else None} for n, (v, a) in conta.items()}
 
 

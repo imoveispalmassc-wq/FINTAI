@@ -236,7 +236,7 @@ def modo_simons(hist: pd.DataFrame, r: Resultado | None = None, faixa=None) -> d
     if r is not None and faixa is not None:
         c = classificar(r.preco_atual, r.mm200, r.inclinacao_mm200, faixa.oportunidade_ate, faixa.cara_acima)
         t = timing(c["classe"], q["dias"], c["conservador"])
-        passo = {"mm200": _n(r.mm200, 4), "distMM200": _n(c["distMM200"], 2), "mm200Caindo": c["mm200Caindo"],
+        passo = {"mm200": _n(r.mm200, 4), "distMM200": _n(c["distMM200"], 2), "mm200Caindo": c["mm200Caindo"], "mm200Incl": _n(r.inclinacao_mm200, 2),
                  "classe": c["classe"], "zona52": c["zona52"], "conservador": c["conservador"],
                  "parte": t["parte"], "entrada": t["acao"], "entradaDetalhe": t["detalhe"],
                  "oportunidadeAte": _n(faixa.oportunidade_ate, 4), "caraAcima": _n(faixa.cara_acima, 4)}

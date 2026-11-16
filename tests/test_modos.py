@@ -172,3 +172,11 @@ def test_dias_de_queda_nao_compram_fora_da_oportunidade():
     assert timing("NEUTRO", 8, False) == {"parte": 0, "acao": "AGUARDAR", "detalhe": "Fora da oportunidade: dias de queda são só alerta"}
     assert timing("CARO", 8, False)["acao"] == "NÃO COMPRA"
     assert timing("OPORTUNIDADE", 5, False)["acao"] == "ENTRADA 2/3"      # 5º dia nunca manda tudo
+
+
+def test_historico_conta_queda_longa_uma_vez_no_grupo_de_10():
+    import numpy as np
+    from utils.simons import historico
+    c = np.r_[np.linspace(10, 12, 15), np.linspace(11.9, 9, 20), np.linspace(9.1, 10, 10)]
+    h = historico(_fech(list(c)), anos=50)
+    assert h[10]["vezes"] == 1 and h[9]["vezes"] == 1

@@ -58,7 +58,9 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   senão NEUTRO; (3) dias de queda desde o topo dos últimos 10 pregões (alta no meio não quebra) viram entrada
   escalonada só dentro da oportunidade: 2-3 dias 1/3, 4-6 dias 2/3, 7+ 3/3 (5º dia nunca manda tudo). Abaixo da
   MM200 com a média caindo: 4-6 dias 1/3, 7+ 2/3, última parte só com preço acima da MM200 ou média parando de cair.
-  Neutro/Caro: dias são só alerta. Mostra também a régua fixa (A VALIDAR) e o histórico de 5 anos do ativo.
+  Neutro/Caro: dias são só alerta. Mostra também a régua fixa (A VALIDAR) e o histórico de 5 anos do ativo
+  (cada queda conta uma vez por linha; "10 ou mais" só no dia em que chega a 10). Gráfico 10D do SIMONS: escala
+  inclui MM200, oportunidade e caro (linhas iguais ao painel, valores no eixo), % de cada dia de queda no ponto.
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 

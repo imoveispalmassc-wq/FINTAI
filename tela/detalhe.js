@@ -176,7 +176,11 @@ function montar(root, d) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
       const eixoW = 58, x0 = 4, x1 = W - eixoW, yTop = 44, yBase = H - 22, volH = 30, yPlot = yBase - volH - 8;
       const hi = velas ? s.h.map((v, i) => (tem(v) ? v : s.c[i])) : s.c, lo = velas ? s.l.map((v, i) => (tem(v) ? v : s.c[i])) : s.c;
-      const vmin = Math.min(...lo), vmax = Math.max(...hi), folga = (vmax - vmin) * 0.04 || 1;
+      // SIMONS: a escala inclui a MM200 e os limites da faixa, como no painel (preço aparece na zona em que está)
+      const refsS = modo === 'simons' ? [d.simons.mm200, d.simons.oportunidadeAte, d.simons.caraAcima].filter(tem) : [];
+      const vmin = Math.min(...lo, ...refsS), vmax0 = Math.max(...hi, ...refsS);
+      // SIMONS 10D: espaço livre em cima para o % de cada dia de queda
+      const vmax = modo === 'simons' && escala === '10d' ? vmax0 + (vmax0 - vmin) * 0.16 : vmax0, folga = (vmax - vmin) * 0.05 || 1;
       const Y = v => yPlot - (v - (vmin - folga)) / (vmax - vmin + 2 * folga) * (yPlot - yTop);
       const X = i => x0 + (x1 - x0) * (n === 1 ? 0 : i / (n - 1));
       ctx.font = '11px Inter, system-ui, sans-serif'; ctx.textBaseline = 'middle';
@@ -215,7 +219,7 @@ function montar(root, d) {
       for (let k = 0; k < 6; k++) {
         const v = vmin + (vmax - vmin) * k / 5, y = Y(v);
         ctx.strokeStyle = '#26314766'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
-        if (Math.abs(y - yPreco) > 13) { ctx.fillStyle = css('--suave'); ctx.fillText(f(v), x1 + 7, y); }
+        if (modo !== 'simons' && Math.abs(y - yPreco) > 13) { ctx.fillStyle = css('--suave'); ctx.fillText(f(v), x1 + 7, y); }
       }
 
       // volume
@@ -274,22 +278,25 @@ function montar(root, d) {
       });
       }
 
-      // modo Simons, passo 1: a média de 200 dias como ponto de partida (linha se couber; senão etiqueta na borda)
-      if (modo === 'simons' && tem(d.simons.mm200)) {
-        const mm = d.simons.mm200, ym = Y(mm), dist = d.simons.distMM200;
-        const txt = `Média 200d ${f(mm)} · preço ${sinal(dist, 1)}`;
-        ctx.font = '600 10.5px Inter, system-ui, sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-        const tw = ctx.measureText(txt).width + 14;
-        if (ym >= yTop && ym <= yPlot) {
-          ctx.setLineDash([6, 4]); ctx.strokeStyle = '#f2994a'; ctx.lineWidth = 1.4;
-          ctx.beginPath(); ctx.moveTo(x0, ym); ctx.lineTo(x1, ym); ctx.stroke(); ctx.setLineDash([]);
-          ctx.fillStyle = '#0e1420cc'; ctx.beginPath(); ctx.roundRect(x1 - tw - 4, ym - 19, tw, 16, 6); ctx.fill();
-          ctx.fillStyle = '#f2994a'; ctx.fillText(txt, x1 - tw + 3, ym - 11);
-        } else {
-          const acima = ym < yTop, yb = acima ? yTop + 2 : yPlot - 18;
-          ctx.fillStyle = '#0e1420e6'; ctx.beginPath(); ctx.roundRect(x1 - tw - 18, yb, tw + 14, 18, 6); ctx.fill();
-          ctx.fillStyle = '#f2994a'; ctx.fillText(`${acima ? '↑' : '↓'} ${txt}`, x1 - tw - 11, yb + 9.5);
-        }
+      // modo Simons, passos 1 e 2: MM200 e limites da faixa, iguais ao painel; valores no eixo da direita
+      if (modo === 'simons') {
+        const S = d.simons;
+        const linhas = [[S.caraAcima, '#f06a6a', [5, 4]], [S.mm200, '#f2994a', [7, 4]], [S.oportunidadeAte, '#2fbf8a', [5, 4]]].filter(l => tem(l[0]));
+        ctx.save(); ctx.beginPath(); ctx.rect(x0, yTop - 6, x1 - x0, yPlot - yTop + 6); ctx.clip();
+        if (tem(S.oportunidadeAte)) { ctx.fillStyle = '#2fbf8a14'; ctx.fillRect(x0, Y(S.oportunidadeAte), x1 - x0, 4000); }
+        if (tem(S.caraAcima)) { ctx.fillStyle = '#f06a6a12'; ctx.fillRect(x0, Y(S.caraAcima) - 4000, x1 - x0, 4000); }
+        linhas.forEach(([v, c, dash]) => { ctx.setLineDash(dash); ctx.strokeStyle = c; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x0, Y(v)); ctx.lineTo(x1, Y(v)); ctx.stroke(); });
+        ctx.setLineDash([]); ctx.restore();
+        // etiquetas no eixo: afasta as que se encostam e a do preço
+        const tags = linhas.map(([v, c]) => ({ y: Y(v), t: f(v), c })).sort((p, q) => p.y - q.y);
+        tags.forEach((t, k) => { if (k && t.y - tags[k - 1].y < 18) t.y = tags[k - 1].y + 18; });
+        ctx.font = '600 10.5px Inter, system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        tags.forEach(t => { if (Math.abs(t.y - yPreco) < 18) t.y += t.y < yPreco ? -9 : 9; ctx.fillStyle = t.c; ctx.fillText(t.t, x1 + 7, t.y); });
+        // legenda no canto de baixo à esquerda (abaixo da zona de oportunidade, longe dos pontos)
+        ctx.font = '10px Inter, system-ui, sans-serif';
+        const leg = [['Caro acima', '#f06a6a'], ['Média 200d', '#f2994a'], ['Oportunidade até', '#2fbf8a']];
+        ctx.fillStyle = '#0e1420cc'; ctx.beginPath(); ctx.roundRect(x0 + 1, yPlot - 43, 104, 42, 7); ctx.fill();
+        leg.forEach(([t, c], k) => { const y = yPlot - 34 + k * 12; ctx.fillStyle = c; ctx.fillRect(x0 + 6, y - 1, 8, 2.5); ctx.fillStyle = css('--suave'); ctx.fillText(t, x0 + 18, y); });
         ctx.font = '11px Inter, system-ui, sans-serif';
       }
 
@@ -301,6 +308,16 @@ function montar(root, d) {
           ctx.fillStyle = naQueda ? css('--vermelho') : css('--azul');
           ctx.beginPath(); ctx.arc(X(i), Y(s.c[i]), naQueda ? 4 : 2.6, 0, 7); ctx.fill();
         }
+        // % de cada dia da sequência em cima do ponto; alturas alternadas para os vizinhos não se encostarem
+        ctx.font = '600 9.5px Inter, system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        for (let i = Math.max(1, n - sm.dias), k = 0; i < n; i++, k++) {
+          const v = (s.c[i] / s.c[i - 1] - 1) * 100, t = sinal(v, 2), tw = ctx.measureText(t).width + 8;
+          const x = Math.max(x0 + tw / 2, Math.min(x1 + 6, X(i))), y = Y(s.c[i]) - ((n - 1 - i) % 2 ? 26 : 12);
+          ctx.strokeStyle = '#f06a6a55'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(X(i), Y(s.c[i]) - 4); ctx.lineTo(X(i), y + 6); ctx.stroke();
+          ctx.fillStyle = '#0e1420e6'; ctx.beginPath(); ctx.roundRect(x - tw / 2, y - 7, tw, 14, 4); ctx.fill();
+          ctx.fillStyle = v < 0 ? css('--vermelho') : css('--verde'); ctx.fillText(t, x, y + 0.5);
+        }
+        ctx.textAlign = 'left';
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '600 11px Inter, system-ui, sans-serif';
         const rot = `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda`, lw = ctx.measureText(rot).width, mx = sm.maximo || 5;
         ctx.fillStyle = '#0e1420cc'; ctx.beginPath(); ctx.roundRect(x0 + 44, 8, lw + 30 + mx * 11, 26, 8); ctx.fill();
@@ -1007,7 +1024,7 @@ function montar(root, d) {
           <div>Média 200d<b>${tem(sm.mm200) ? din(sm.mm200) : 'Sem dado'}</b></div>
           <div>Preço atual<b>${din(d.preco)}</b></div>
           <div>Distância<b style="color:${tem(sm.distMM200) ? cor(sm.distMM200) : 'inherit'}">${tem(sm.distMM200) ? `${sinal(sm.distMM200, 1)} ${sm.distMM200 < 0 ? 'abaixo' : 'acima'}` : '—'}</b></div>
-          <div>Média<b>${sm.mm200Caindo ? 'caindo' : 'subindo ou de lado'}</b></div>
+          <div>Média 200d em 3 meses<b>${!tem(sm.mm200Incl) ? '—' : sm.mm200Incl > 1 ? 'subindo' : sm.mm200Incl < -1 ? 'caindo' : 'de lado'}${tem(sm.mm200Incl) ? ` (${sinal(sm.mm200Incl, 1)})` : ''}</b></div>
         </div></div>
         <div class="card" style="margin-top:8px"><span class="rot">2. Oportunidade / Neutro / Caro</span>
           <div class="lista-v num" style="margin:6px 0 0">
@@ -1033,7 +1050,7 @@ function montar(root, d) {
         <div class="card" style="margin-top:8px"><span class="rot">Régua fixa</span>
           <div class="lista-v num" style="margin-bottom:0">${REGUA.map(([n, p, a]) => `<div style="${n === Math.min(sm.nivel, 5) ? 'color:var(--texto);font-weight:700' : ''}">${n}${n === 5 ? ' ou mais' : ''} ${n === 1 ? 'dia' : 'dias'}: ${p}%<b style="${n === Math.min(sm.nivel, 5) ? '' : 'color:var(--suave);font-weight:500'}">${a}</b></div>`).join('')}</div></div>
         <div style="margin-top:10px"><span class="selo sem">${sm.selo}</span></div>
-        <p class="nota" style="margin:10px 2px 0">Os dias contam desde o maior fechamento dos últimos ${sm.pregoes} pregões, desde que o último pregão tenha sido de queda. Uma alta no meio não quebra a contagem enquanto o preço não passar do topo. O histórico usa a mesma regra nos últimos 5 anos da ação; com menos de 20 casos, a porcentagem é pouco confiável. A régua fixa é igual para qualquer ação e ainda não foi testada.</p>`;
+        <p class="nota" style="margin:10px 2px 0">Os dias contam desde o maior fechamento dos últimos ${sm.pregoes} pregões, desde que o último pregão tenha sido de queda. Uma alta no meio não quebra a contagem enquanto o preço não passar do topo. O histórico usa a mesma regra nos últimos 5 anos da ação; cada queda conta uma vez em cada linha (a de 10 ou mais só no dia em que chega a 10). Com menos de 20 casos, a porcentagem é pouco confiável. A régua fixa é igual para qualquer ação e ainda não foi testada.</p>`;
     }
   }
 
