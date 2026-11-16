@@ -831,7 +831,7 @@ function montar(root, d) {
       <p><b>Sem reinvestir (Price Return)</b></p><code>Preço final ÷ Preço inicial − 1</code>
       ${tem(d.retorno.total[0]) && tem(d.retorno.preco[0]) ? `<p><b>1 ano:</b> ${ret(d.retorno.total[0])} com dividendos e ${ret(d.retorno.preco[0])} só preço. A diferença de ${f(d.retorno.total[0] - d.retorno.preco[0], 2)} ponto vem dos dividendos do período.</p>` : ''}
       <p><b>Diferença em pontos:</b> retorno da ação menos retorno do comparador.</p>
-      <p>Nasdaq (Composite, sem dividendos), S&P 500 (com dividendos) e Ibovespa vêm do Yahoo Finance; CDI, Selic, IPCA e Poupança vêm do Banco Central. Cada comparador fica na própria moeda, sem conversão.</p>${fonte}`];
+      <p>Nasdaq (Composite, sem dividendos), S&P 500 (com dividendos) e Ibovespa vêm do Yahoo Finance; CDI, Selic, IPCA e Poupança vêm do Banco Central. Cada comparador fica na própria moeda, sem conversão. O IPCA conta os 12, 36 ou 60 meses até o último mês divulgado pelo IBGE (sai com cerca de um mês de atraso).</p>${fonte}`];
     render();
   })($('retorno'));
 

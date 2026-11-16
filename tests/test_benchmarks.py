@@ -31,3 +31,14 @@ def test_poupanca_usa_um_aniversario_por_mes():
     s = pd.Series(0.6, index=pd.date_range("2026-01-01", "2026-03-31", freq="D"))
     m = mensal_de_aniversario(s)
     assert list(m.index.day) == [1, 1, 1]
+
+
+def test_ipca_de_12_meses_conta_12_meses_ate_o_ultimo_divulgado(monkeypatch):
+    import utils.benchmarks as b
+    # IPCA de out/2026 é o último divulgado em 13/11/2026; série mensal datada no dia 1º
+    meses = pd.date_range("2021-09-01", "2026-10-01", freq="MS")
+    ipca = pd.Series(0.5, index=meses)
+    monkeypatch.setattr(b, "buscar_sgs", lambda codigo, i, f: ipca if codigo == 433 else pd.Series(dtype=float))
+    v = b.retornos_brasil(pd.Timestamp("2026-11-13"))["ipca"]
+    assert round(v[0], 4) == round((1.005 ** 12 - 1) * 100, 4)
+    assert round(v[1], 4) == round((1.005 ** 36 - 1) * 100, 4)

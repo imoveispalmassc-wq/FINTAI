@@ -61,7 +61,12 @@ def retornos_brasil(fim: pd.Timestamp, anos=(1, 3, 5)) -> dict[str, list[float |
             serie = buscar_sgs(codigo, inicio_busca, fim)
             if tipo == "aniversario":
                 serie = mensal_de_aniversario(serie)
-            saida[nome] = [acumular(serie, fim - pd.DateOffset(years=a), fim) for a in anos]
+            ref = fim
+            if tipo == "mensal":
+                # IPCA sai com 1 mês de atraso e cada taxa tem a data do dia 1º do mês: contar os N meses
+                # até o último divulgado, senão o período de 12 meses fica com 11
+                ref = serie.index[serie.index <= fim].max()
+            saida[nome] = [acumular(serie, ref - pd.DateOffset(years=a), ref) for a in anos]
         except Exception:
             saida[nome] = [None for _ in anos]
     return saida
