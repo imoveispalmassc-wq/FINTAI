@@ -1165,6 +1165,7 @@ function montar(root, d) {
         <div class="chips periodos" role="group" aria-label="Período">${idx.map(i => `<button data-p="${i}" aria-pressed="${i === per}">${d.retorno.periodos[i]}</button>`).join('')}</div>
         <p class="nota" style="margin:4px 2px 0">${texto}</p>
         <div class="vbarras">${grafico}</div>
+        ${(() => { const tx = ['selic', 'cdi'].map(k => d.comparadores[k]).filter(o => o && tem(o.taxaAno)); return tx.length ? `<p class="nota num" style="margin:4px 2px 6px">Taxa de hoje: ${tx.map(o => `${o.nome} ${f(o.taxaAno)}% a.a.`).join(' · ')}. As barras mostram quanto rendeu em ${d.retorno.periodos[per]}.</p>` : ''; })()}
         ${temFora ? `<p class="nota" style="margin:4px 2px 10px">Indicadores marcados em ${Object.values(d.comparadores).find(o => o.moeda !== d.moeda).moeda} estão em outra moeda, sem conversão.</p>` : ''}
         <div class="card resumo num">${resumo}</div>
         ${per === 0 && tem(d.retorno.total[0]) && tem(d.retorno.preco[0]) ? `<p class="nota num" style="margin:12px 2px 0">Em 1 ano: <b>${sinal(d.retorno.preco[0], 2)}</b> só preço e <b>${sinal(d.retorno.total[0], 2)}</b> com dividendos reinvestidos.${difDinheiro > 0 && d.dividendo > 0 ? ` Diferença de ${d.moeda} ${f(difDinheiro, 0)} é o dividendo de ${din(d.dividendo)} recomprado em ações nas datas de pagamento (preço ajustado Yahoo).` : ''}</p>` : ''}

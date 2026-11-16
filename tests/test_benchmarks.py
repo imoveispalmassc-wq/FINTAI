@@ -64,3 +64,11 @@ def test_poupanca_so_conta_aniversarios_completos(monkeypatch):
     # em 13/11/2026 o período iniciado em 01/11 ainda não terminou: nov/2025 a out/2026 = 12 períodos
     assert v[0] == pytest.approx((1.006 ** 12 - 1) * 100)
     assert v[2] == pytest.approx((1.006 ** 60 - 1) * 100)
+
+
+def test_taxa_de_hoje_da_selic_e_do_cdi(monkeypatch):
+    import utils.benchmarks as b
+    dias = pd.bdate_range("2026-11-01", "2026-11-13")
+    fontes = {432: pd.Series(13.75, index=dias), 4389: pd.Series(13.65, index=dias)}
+    monkeypatch.setattr(b, "buscar_sgs", lambda codigo, i, f: fontes.get(codigo, pd.Series(dtype=float)))
+    assert b.retornos_brasil(FIM)["taxas"] == {"selic": 13.75, "cdi": 13.65}

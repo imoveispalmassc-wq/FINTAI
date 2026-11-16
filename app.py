@@ -109,7 +109,7 @@ def baixar(ticker: str) -> dict:
     return d
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=900, show_spinner=False)   # mesmo ritmo da cotação da ação (atraso de ~15 min)
 def baixar_indice(simbolos: tuple[str, ...]):
     """Fechamentos do índice de referência (tenta os símbolos na ordem). Devolve (série, símbolo usado)."""
     for s in simbolos:
@@ -176,8 +176,8 @@ def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]
         "nasdaq": {"nome": "Nasdaq", "curto": "Nasdaq", "artigo": "do índice", "moeda": "US$", "v": do_indice(("^IXIC",)), "conta": pontos_indice(("^IXIC",))},
         "sp500": {"nome": "S&P 500", "curto": "S&P", "artigo": "do índice", "moeda": "US$", "v": do_indice(("^SP500TR", "^GSPC")), "conta": pontos_indice(("^SP500TR", "^GSPC"))},
         "ibov": {"nome": "Ibovespa", "curto": "Ibovespa", "artigo": "do índice", "moeda": "R$", "v": do_indice(("^BVSP",)), "conta": pontos_indice(("^BVSP",))},
-        "cdi": {"nome": "CDI", "curto": "CDI", "artigo": "do CDI", "moeda": "R$", "v": arred(br["cdi"]), "conta": br.get("periodos", {}).get("cdi", [None, None, None])},
-        "selic": {"nome": "Selic", "curto": "Selic", "artigo": "da Selic", "moeda": "R$", "v": arred(br["selic"]), "conta": br.get("periodos", {}).get("selic", [None, None, None])},
+        "cdi": {"nome": "CDI", "curto": "CDI", "artigo": "do CDI", "moeda": "R$", "v": arred(br["cdi"]), "conta": br.get("periodos", {}).get("cdi", [None, None, None]), "taxaAno": br.get("taxas", {}).get("cdi")},
+        "selic": {"nome": "Selic", "curto": "Selic", "artigo": "da Selic", "moeda": "R$", "v": arred(br["selic"]), "conta": br.get("periodos", {}).get("selic", [None, None, None]), "taxaAno": br.get("taxas", {}).get("selic")},
         "ipca": {"nome": "IPCA", "curto": "IPCA", "artigo": "do IPCA", "moeda": "R$", "v": arred(br["ipca"]), "conta": br.get("periodos", {}).get("ipca", [None, None, None])},
         "poupanca": {"nome": "Poupança", "curto": "Poupança", "artigo": "da poupança", "moeda": "R$", "v": arred(br["poupanca"]), "conta": br.get("periodos", {}).get("poupanca", [None, None, None])},
     }

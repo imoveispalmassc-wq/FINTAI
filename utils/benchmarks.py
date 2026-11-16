@@ -14,6 +14,8 @@ SGS = {
     "ipca": (433, "mensal"),      # IPCA, % ao mês
     "poupanca": (195, "aniversario"),  # poupança (depósitos desde 05/2012), % ao mês por data de aniversário
 }
+# taxa de hoje, em % ao ano: Selic meta (Copom) e CDI anualizado (base 252)
+TAXA_ANO = {"selic": 432, "cdi": 4389}
 URL = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.{codigo}/dados"
 
 
@@ -87,4 +89,12 @@ def retornos_brasil(fim: pd.Timestamp, anos=(1, 3, 5)) -> dict[str, list[float |
             saida[nome] = [None for _ in anos]
             periodos[nome] = [None for _ in anos]
     saida["periodos"] = periodos
+    taxas = {}
+    for nome, codigo in TAXA_ANO.items():
+        try:
+            serie = buscar_sgs(codigo, fim - pd.Timedelta(days=20), fim)
+            taxas[nome] = float(serie.sort_index().iloc[-1]) if len(serie) else None
+        except Exception:
+            taxas[nome] = None
+    saida["taxas"] = taxas
     return saida
