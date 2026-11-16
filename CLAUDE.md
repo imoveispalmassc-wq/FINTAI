@@ -53,19 +53,20 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 - Card de P/L: linhas P/L, Lucro líquido (lucro/ação × ações do Yahoo), Lucro/ação, Cotação; colunas Contábil (LPA 12 meses, data do último balanço), Previsão do ano (consenso do Yahoo,
   com analistas e faixa) e Média 12m. Guidance oficial e lucro ajustado aparecem em linhas à parte, com fonte.
 - Retorno acumulado: período (1/3/5 anos) no topo; barras com o ativo primeiro e os indicadores em ordem crescente.
-- SIMONS, nesta ordem: (1) MM200 no gráfico com preço e distância %; (2) classificação só pela MM200 (ignora a faixa
-  30/70): OPORTUNIDADE = MM200 −10% a +5%; abaixo de −10% = "Bem abaixo da MM200" (conta como oportunidade,
-  aparece em azul, separado); NEUTRO = +5% a +15%; CARO = +15% ou mais; ponto de oportunidade = MM200 × 1,05;
-  sem MM200, usa a faixa 30/70; (3) dias de queda desde o topo dos últimos 10 pregões (alta no meio não quebra) viram entrada
+- SIMONS, nesta ordem: (1) MM200 no gráfico com preço e distância %; (2) classificação pela faixa de 52 semanas
+  (30/70) + MM200: OPORTUNIDADE = zona de oportunidade e preço até +5% da MM200; CARO = zona cara ou +15% ou
+  mais acima da MM200; senão NEUTRO; (3) dias de queda desde o topo dos últimos 10 pregões (alta no meio não quebra) viram entrada
   escalonada só dentro da oportunidade: 2-3 dias 1/3, 4-6 dias 2/3, 7+ 3/3 (5º dia nunca manda tudo). Abaixo da
   MM200 com a média caindo: 4-6 dias 1/3, 7+ 2/3, última parte só com preço acima da MM200 ou média parando de cair.
   Neutro/Caro: dias são só alerta. Mostra também a régua fixa (A VALIDAR) e o histórico de 5 anos do ativo
   (cada queda conta uma vez por linha; "10 ou mais" só no dia em que chega a 10). Gráfico 10D do SIMONS: escala
   inclui MM200, oportunidade e caro (nome e valor escritos na linha, à esquerda), % de cada dia de queda no ponto.
-  Cartões em barras visuais: classificação com os limites da MM200 e a MM200 marcada; dias de 0 a 10+ com as
+  Cartões em barras visuais: classificação na faixa de 52 semanas com a MM200 marcada; dias de 0 a 10+ com as
   partes da entrada; histórico em vezes que subiu/caiu (sem % solto; contorno azul = hoje; ★ MELHOR só com 30+ casos, 8+ pontos
   acima da média geral e 5+ acima da segunda melhor; senão "Nenhum padrão forte - todos entre X% e Y%"); régua fixa de 1 a 5+.
-- Graham e Lynch usam a faixa 30/70 de 52 semanas.
+- Graham usa a faixa 30/70 de 52 semanas. LYNCH ignora a faixa e usa só a MM200: Oportunidade = MM200 −10% a +5%;
+  abaixo de −10% = "Bem abaixo da MM200" (azul, separado, ainda COMPRAR); Neutro = +5% a +15%; Caro = +15% ou mais;
+  ponto de oportunidade = MM200 × 1,05.
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 

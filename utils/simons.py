@@ -82,38 +82,29 @@ def historico(fechamentos: pd.Series, anos: int = 5, janela: int = JANELA) -> di
 
 
 # ------------------------------------------------------------ ordem: MM200 -> oportunidade -> dias
-MM200_BEM_ABAIXO = -10.0   # abaixo de MM200 -10%: "Bem abaixo da MM200" (faixa própria, fora da barra verde)
-MM200_OPORTUNIDADE = 5.0   # oportunidade: de MM200 -10% até MM200 +5%
-MM200_CARO = 15.0          # caro: +15% ou mais acima da média de 200 dias
+MM200_OPORTUNIDADE = 5.0   # oportunidade só com o preço até +5% acima da média de 200 dias
+MM200_CARO = 15.0          # +15% ou mais acima da média de 200 dias = esticado, caro
 
 
 def classificar(preco: float, mm200: float | None, inclinacao: float | None,
                 oportunidade_ate: float, cara_acima: float) -> dict:
-    """Passos 1 e 2 do SIMONS: distância até a MM200 e classificação, só pela MM200.
+    """Passos 1 e 2 do SIMONS: faixa de 52 semanas (30/70) e distância até a MM200.
 
-    Bem abaixo: menos de MM200 -10%. Oportunidade: MM200 -10% até +5%. Neutro: +5% a +15%.
-    Caro: +15% ou mais. "Bem abaixo" conta como oportunidade para a entrada, mas aparece separado.
-    Sem MM200 (histórico curto), usa a faixa de 52 semanas (30/70).
+    Oportunidade: zona de oportunidade da faixa E até +5% da MM200.
+    Caro: zona cara da faixa OU +15% ou mais acima da MM200. O resto é Neutro.
     "conservador": preço abaixo da MM200 com a média caindo (tendência de baixa)."""
+    dist = round((preco / mm200 - 1) * 100, 2) if mm200 else None   # arredonda como na tela
+    zona = "Oportunidade" if preco <= oportunidade_ate else "Cara" if preco > cara_acima else "Neutra"
     caindo = inclinacao is not None and not pd.isna(inclinacao) and inclinacao < -1
-    if not mm200 or mm200 <= 0:
-        zona = "Oportunidade" if preco <= oportunidade_ate else "Cara" if preco > cara_acima else "Neutra"
-        classe = {"Oportunidade": "OPORTUNIDADE", "Cara": "CARO"}.get(zona, "NEUTRO")
-        return {"classe": classe, "subzona": zona, "distMM200": None, "conservador": False, "mm200Caindo": caindo,
-                "bemAbaixoAte": None, "oportunidadeAte": oportunidade_ate, "caroAcima": cara_acima, "pelaMM200": False}
-    dist = round((preco / mm200 - 1) * 100, 2)   # arredonda como na tela (evita 14,9999...)
-    if dist >= MM200_CARO:
-        classe, sub = "CARO", "Cara"
-    elif dist > MM200_OPORTUNIDADE:
-        classe, sub = "NEUTRO", "Neutra"
-    elif dist >= MM200_BEM_ABAIXO:
-        classe, sub = "OPORTUNIDADE", "Oportunidade"
+    if zona == "Cara" or (dist is not None and dist >= MM200_CARO):
+        classe = "CARO"
+    elif zona == "Oportunidade" and (dist is None or dist <= MM200_OPORTUNIDADE):
+        classe = "OPORTUNIDADE"
     else:
-        classe, sub = "OPORTUNIDADE", "Bem abaixo da MM200"
-    return {"classe": classe, "subzona": sub, "distMM200": dist, "conservador": bool(preco < mm200 and caindo),
-            "mm200Caindo": caindo, "bemAbaixoAte": mm200 * (1 + MM200_BEM_ABAIXO / 100),
-            "oportunidadeAte": mm200 * (1 + MM200_OPORTUNIDADE / 100),
-            "caroAcima": mm200 * (1 + MM200_CARO / 100), "pelaMM200": True}
+        classe = "NEUTRO"
+    return {"classe": classe, "subzona": zona, "distMM200": dist, "conservador": bool(mm200 and preco < mm200 and caindo),
+            "mm200Caindo": caindo, "bemAbaixoAte": None, "oportunidadeAte": oportunidade_ate,
+            "caroAcima": cara_acima, "pelaMM200": False}
 
 
 def timing(classe: str, dias: int, conservador: bool) -> dict:

@@ -83,3 +83,28 @@ def veredito(peg_futuro: float | None, receita: float | None, status_prejuizo: s
         motivo = "PEG calculado, mas sem dado de crescimento da receita."
     return {"cor": "amarelo", "titulo": "Lynch fica de olho", "motivo": motivo}
 
+
+# ------------------------------------------------------------ preço no modo Lynch: só pela MM200 (ignora a faixa 30/70)
+LYNCH_BEM_ABAIXO = -10.0   # abaixo de MM200 -10%: "Bem abaixo da MM200", mostrado à parte
+LYNCH_OPORTUNIDADE = 5.0   # oportunidade: MM200 -10% até MM200 +5%
+LYNCH_CARO = 15.0          # caro: +15% ou mais acima da MM200
+
+
+def preco_lynch(preco: float, mm200: float | None, simbolo: str = "R$") -> dict | None:
+    """Bem abaixo (< -10%) e Oportunidade (-10% a +5%) = COMPRAR; Neutro (+5% a +15%); Caro (+15% ou mais)."""
+    if not mm200 or mm200 <= 0 or preco is None:
+        return None
+    dist = round((preco / mm200 - 1) * 100, 2)   # arredonda como na tela (evita 14,9999...)
+    if dist >= LYNCH_CARO:
+        codigo, rotulo, zona = "CARO", "CARO - Evitar", "Zona cara"
+    elif dist > LYNCH_OPORTUNIDADE:
+        codigo, rotulo, zona = "AGUARDAR", "AGUARDAR - Neutro", "Zona neutra"
+    elif dist >= LYNCH_BEM_ABAIXO:
+        codigo, rotulo, zona = "COMPRAR", "COMPRAR - Oportunidade", "Zona de oportunidade"
+    else:
+        codigo, rotulo, zona = "COMPRAR", "COMPRAR - Oportunidade", "Bem abaixo da MM200"
+    ate = mm200 * (1 + LYNCH_OPORTUNIDADE / 100)
+    num = f"{ate:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return {"codigo": codigo, "rotulo": rotulo, "zona": zona, "dist": dist,
+            "bemAbaixoAte": mm200 * (1 + LYNCH_BEM_ABAIXO / 100), "oportunidadeAte": ate,
+            "caroAcima": mm200 * (1 + LYNCH_CARO / 100), "texto": f"Ponto de oportunidade em {simbolo} {num}"}

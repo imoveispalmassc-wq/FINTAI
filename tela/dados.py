@@ -11,7 +11,7 @@ import pandas as pd
 
 from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, lpa_contabil_ttm, media_no_periodo, pl_medio_12m, pl_medio_contabil,
                       graham_duas_versoes, pl_medio_longo, preco_justo_graham, preco_teto_bazin)
-from utils.lynch import crescimento_anual, peg, regra_prejuizo, veredito
+from utils.lynch import crescimento_anual, peg, preco_lynch, regra_prejuizo, veredito
 from utils.override import guidance as guidance_oficial
 from utils.percentile import percentil_na_faixa, zonas
 from utils.signals import (backtest_percentil, decidir_estado, fundamento_quebrou,
@@ -338,6 +338,9 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
 
     # guidance oficial da empresa (OVERRIDE) ganha do consenso do Yahoo no LPA projetado
     lynch = modo_lynch(d, f["pl"], regra)
+    pl_ = preco_lynch(r.preco_atual, r.mm200, moeda)
+    lynch["preco"] = None if not pl_ else {**pl_, "dist": _n(pl_["dist"], 2), "mm200": _n(r.mm200, 4),
+                                           **{k: _n(pl_[k], 4) for k in ("bemAbaixoAte", "oportunidadeAte", "caroAcima")}}
     g = guidance_oficial(curto, acoes_padrao=f["acoes"])
     guia = None
     # consenso do Yahoo para o ano em curso, guardado antes do guidance substituir (card de P/L mostra os dois)
