@@ -128,7 +128,8 @@ def baixar_indice(simbolos: tuple[str, ...]):
 
 # muda quando o código dos cálculos muda: um deploy novo não reaproveita resultado antigo do cache
 VERSAO_CALCULO = hashlib.md5(b"".join(open(m.__file__, "rb").read() for m in (
-    calculos, tela.dados, utils.lynch, utils.override, utils.benchmarks)) + open(__file__, "rb").read()).hexdigest()[:10]
+    calculos, tela.dados, utils.lynch, utils.override, utils.benchmarks, utils.simons, utils.signals,
+    utils.percentile, utils.formato)) + open(__file__, "rb").read()).hexdigest()[:10]
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
