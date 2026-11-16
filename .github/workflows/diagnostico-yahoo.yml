@@ -1,0 +1,20 @@
+name: Diagnóstico Yahoo (temporário)
+on:
+  workflow_dispatch:
+    inputs:
+      tickers:
+        description: "Tickers separados por espaço"
+        default: "BBAS3.SA"
+permissions:
+  contents: read
+jobs:
+  diagnostico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install yfinance pandas
+      - run: python tools/diagnostico_yahoo.py ${{ github.event.inputs.tickers }}
