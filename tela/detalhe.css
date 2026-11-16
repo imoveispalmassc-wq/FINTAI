@@ -288,4 +288,4 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .vbarras .vc em small { display: block; font-size: 8.5px; opacity: .8; }
 .vbarras .vc.acao em { color: var(--texto); font-weight: 700; }
 .linhas-pl { line-height: 1.5; }
-.tab-pl .rot .un { text-transform: none; }
+.tab-pl .conta-pl { font-size: 10.5px; color: var(--suave); white-space: nowrap; }
