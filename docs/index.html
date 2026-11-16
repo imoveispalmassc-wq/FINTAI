@@ -470,10 +470,9 @@ function montar(root, d) {
       classe = e.codigo === 'COMPRAR' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
       alerta = e.alerta || '';
     } else if (modo === 'lynch') {
-      // Lynch não usa a faixa 30/70: oportunidade até +5% da MM200 (fora da zona cara), neutro até +15%, caro acima
-      const LP = d.lynch.preco, e = LP || fx.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
-      classe = e.codigo === 'COMPRAR' ? (LP || e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
-      alerta = LP ? `Preço ${sinal(LP.dist, 1)} da média de 200 dias (${din(LP.mm200)}). Lynch: oportunidade até +5%, caro a partir de +15%.` : (e.alerta || '');
+      const e = fx.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
+      classe = e.codigo === 'COMPRAR' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
+      alerta = e.alerta || '';
       const zona = { COMPRAR: 'Zona de Oportunidade', AGUARDAR: 'Zona Neutra', CARO: 'Zona Cara' }[e.codigo];
       const conclusao = v.cor === 'verde'
         ? (e.codigo === 'COMPRAR' ? 'Lynch aprova o crescimento e o preço está na Zona de Oportunidade.'
@@ -491,7 +490,7 @@ function montar(root, d) {
       rotulo = R[0]; classe = R[1];
       const mmTxt = tem(sm.mm200) ? `Média 200d ${din(sm.mm200)}: preço ${sinal(sm.distMM200, 1)} ${sm.distMM200 < 0 ? 'abaixo' : 'acima'}${sm.mm200Caindo ? ', média caindo' : ''}.` : 'Sem média de 200 dias (histórico curto).';
       const diasTxt = sm.dias ? `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda desde o topo${sm.altas ? ` (${sm.altas} ${sm.altas === 1 ? 'alta' : 'altas'} no meio)` : ''}, ${sinal(sm.queda)}` : 'sem queda no último pregão';
-      texto = `1. ${mmTxt} 2. ${sm.classe === 'OPORTUNIDADE' ? 'Oportunidade' : sm.classe === 'CARO' ? 'Caro' : 'Neutro'} (faixa de 52 semanas: ${(sm.zona52 || '').toLowerCase()}). 3. ${diasTxt}: ${sm.entrada}. ${sm.entradaDetalhe}.`
+      texto = `1. ${mmTxt} 2. ${sm.classe === 'OPORTUNIDADE' ? 'Oportunidade' : sm.classe === 'CARO' ? 'Caro' : 'Neutro'} (${sm.pelaMM200 ? 'oportunidade até +5% da MM200, caro a partir de +15%' : `faixa de 52 semanas: ${(sm.zona52 || '').toLowerCase()}`}). 3. ${diasTxt}: ${sm.entrada}. ${sm.entradaDetalhe}.`
         + (hA && hA.vezes && sm.classe === 'OPORTUNIDADE' ? ` Histórico da ação: subiu no dia seguinte em ${f(hA.pct, 0)}% de ${hA.vezes} ${hA.vezes === 1 ? 'vez' : 'vezes'}${hA.vezes < 20 ? ' (poucos casos)' : ''}.` : '')
         + ` Ponto de oportunidade em ${din(sm.oportunidadeAte)}.`;
       selo = ['sem', sm.selo];
@@ -546,7 +545,6 @@ function montar(root, d) {
       if (!W || !H) return;
       if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
-      const zOportF = zOport, zCaraF = zCara;
       const eixoW = 58, x0 = 4, x1 = W - eixoW, yTop = 44, yBase = H - 22, volH = 30, yPlot = yBase - volH - 8;
       const hi = velas ? s.h.map((v, i) => (tem(v) ? v : s.c[i])) : s.c, lo = velas ? s.l.map((v, i) => (tem(v) ? v : s.c[i])) : s.c;
       // SIMONS: a escala inclui a MM200 e os limites da faixa, como no painel (preço aparece na zona em que está)
@@ -560,8 +558,6 @@ function montar(root, d) {
 
       // zonas, linhas e rótulos: nos modos Graham e Lynch
       if (modo !== 'simons') {
-      const LPg = modo === 'lynch' && d.lynch && d.lynch.preco;
-      const zOport = LPg ? LPg.oportunidadeAte : zOportF, zCara = LPg ? LPg.caroAcima : zCaraF;
       ctx.save(); ctx.beginPath(); ctx.rect(x0, yTop - 6, x1 - x0, yPlot - yTop + 6); ctx.clip();
       ctx.fillStyle = '#2fbf8a1c'; ctx.fillRect(x0, Y(zOport), x1 - x0, 4000);
       ctx.fillStyle = '#f06a6a1a'; ctx.fillRect(x0, Y(zCara) - 4000, x1 - x0, 4000);
@@ -1399,13 +1395,19 @@ function montar(root, d) {
       const corClasse = { OPORTUNIDADE: 'var(--verde)', CARO: 'var(--vermelho)' }[sm.classe] || 'var(--texto)';
       const tendTxt = !tem(sm.mm200Incl) ? '' : `Média 200d ${sm.mm200Incl > 1 ? 'subindo' : sm.mm200Incl < -1 ? 'caindo' : 'de lado'} (${sinal(sm.mm200Incl, 1)} em 3 meses); preço ${sinal(sm.distMM200, 1)} da média.`;
       // 2. classificação na faixa de 52 semanas, com a MM200 marcada
+      // barra da classificação: limites pela MM200 (oportunidade até +5%, caro a partir de +15%), pontas = mín./máx. de 52 semanas
       const temFaixa = [sm.min52, sm.max52, sm.oportunidadeAte, sm.caraAcima].every(tem) && sm.max52 > sm.min52;
+      const ini2 = temFaixa ? Math.min(sm.min52, sm.oportunidadeAte * 0.95, d.preco) : 0;
+      const fim2 = temFaixa ? Math.max(sm.max52, sm.caraAcima * 1.05, d.preco) : 1, amp2 = fim2 - ini2;
+      const marcas2 = [{ v: ini2, t: f(ini2), ponta: 1 }, { v: sm.oportunidadeAte, t: f(sm.oportunidadeAte) }, { v: sm.caraAcima, t: f(sm.caraAcima) }, { v: fim2, t: f(fim2), ponta: 1 }]
+        .filter(m => !m.ponta || Math.min(Math.abs(m.v - sm.oportunidadeAte), Math.abs(m.v - sm.caraAcima)) / amp2 > 0.12);
       const cartao2 = !temFaixa ? '<div class="nota">Sem faixa de 52 semanas.</div>' : barra({
-        ini: sm.min52, fim: sm.max52, bola: d.preco, rotBola: `Hoje ${f(d.preco)}`,
-        segs: [{ ate: sm.oportunidadeAte, cor: 'var(--verde)', nome: 'Oportunidade' }, { ate: sm.caraAcima, cor: 'var(--ardosia)', corTxt: '#aab4c6', nome: 'Neutra' }, { ate: sm.max52, cor: 'var(--ambar)', nome: 'Cara' }],
-        marcas: [{ v: sm.min52, t: f(sm.min52) }, { v: sm.oportunidadeAte, t: f(sm.oportunidadeAte) }, { v: sm.caraAcima, t: f(sm.caraAcima) }, { v: sm.max52, t: f(sm.max52) }],
+        ini: ini2, fim: fim2, bola: d.preco, rotBola: `Hoje ${f(d.preco)}`,
+        segs: [{ ate: sm.oportunidadeAte, cor: 'var(--verde)', nome: 'Oportunidade' }, { ate: sm.caraAcima, cor: 'var(--ardosia)', corTxt: '#aab4c6', nome: 'Neutra' }, { ate: fim2, cor: 'var(--ambar)', nome: 'Cara' }],
+        marcas: marcas2,
         // rótulo da MM200 embaixo; se ficar perto do "Hoje", desce uma linha para não sobrepor
-        extra: tem(sm.mm200) && sm.mm200 >= sm.min52 && sm.mm200 <= sm.max52 ? `<span class="traco mm" style="left:POS(${sm.mm200})%"></span><span class="mm-rot" style="left:POS(${sm.mm200})%;${Math.abs(sm.mm200 - d.preco) / (sm.max52 - sm.min52) < 0.25 ? 'top:38px' : ''}">MM200 ${f(sm.mm200)}</span>` : '' });
+        extra: tem(sm.mm200) ? `<span class="traco mm" style="left:POS(${sm.mm200})%"></span><span class="mm-rot" style="left:POS(${sm.mm200})%;${Math.abs(sm.mm200 - d.preco) / amp2 < 0.25 ? 'top:38px' : ''}">MM200 ${f(sm.mm200)}</span>` : '' });
+      const mmPerto = tem(sm.mm200) && temFaixa && Math.abs(sm.mm200 - d.preco) / amp2 < 0.25;
       // 3. dias de queda: régua de 0 a 10 com as partes da entrada
       const foraOp = sm.classe !== 'OPORTUNIDADE';
       const segsBase = sm.conservador
@@ -1433,7 +1435,7 @@ function montar(root, d) {
         <div class="card"><span class="rot">1-2. Média de 200 dias e classificação</span>
           <div class="duas" style="margin:8px 0 2px"><span class="esq">Classificação</span><span class="dir" style="color:${corClasse}">${nomeClasse}${sm.conservador ? ' · conservador' : ''}</span></div>
           ${cartao2}
-          <div class="nota" style="margin-top:${tem(sm.mm200) && temFaixa && Math.abs(sm.mm200 - d.preco) / (sm.max52 - sm.min52) < 0.25 ? 20 : 2}px">${tendTxt} Oportunidade = zona verde e preço até 5% acima da MM200. Caro = zona cara ou 15%+ acima da MM200.${sm.conservador ? ' Conservador: abaixo da MM200 com a média caindo.' : ''}</div></div>
+          <div class="nota" style="margin-top:${mmPerto ? 20 : 2}px">${tendTxt} ${sm.pelaMM200 ? `Oportunidade = até +5% da MM200 (${din(sm.oportunidadeAte)}) e fora da zona cara da faixa de 52 semanas (acima de ${din(sm.caraAcima52)}). Neutro = +5% a +15%. Caro = +15% ou mais (${din(sm.caraAcima)}).` : 'Sem média de 200 dias: classificação pela faixa de 52 semanas (30/70).'}${sm.conservador ? ' Conservador: abaixo da MM200 com a média caindo.' : ''}</div></div>
         <div class="card" style="margin-top:8px"><span class="rot">3. Dias de queda (momento da entrada)</span>
           <div class="duas" style="margin:8px 0 2px"><span class="esq">Entrada hoje</span><span class="dir">${sm.entrada}</span></div>
           <div class="nota" style="margin:0 0 4px">${foraOp ? `Régua apagada: a classificação é ${nomeClasse}, então os dias de queda não abrem compra. As partes mostram como seria numa oportunidade.` : `Quanto comprar conforme os dias de queda${sm.conservador ? ' (modo conservador)' : ''}.`}</div>

@@ -143,16 +143,15 @@ def test_leitura_ate_10_dias_usa_a_ultima_linha_da_regua():
 
 
 # ------------------------------------------------------------ SIMONS: MM200 -> oportunidade -> dias
-def test_classificacao_usa_mm200_e_faixa():
+def test_classificacao_usa_mm200_e_zona_cara():
     from utils.simons import classificar
-    # faixa: oportunidade até 12, caro acima de 18
     assert classificar(11, 11.5, 0.5, 12, 18)["classe"] == "OPORTUNIDADE"
     assert classificar(11, 10.0, 0.5, 12, 18)["classe"] == "NEUTRO"          # 10% acima da MM200
-    assert classificar(15, 15, 0, 12, 18)["classe"] == "NEUTRO"
-    assert classificar(19, 18, 0, 12, 18)["classe"] == "CARO"                # zona cara
+    assert classificar(15, 15, 0, 12, 18)["classe"] == "OPORTUNIDADE"        # na MM200, faixa neutra
+    assert classificar(19, 18, 0, 12, 18)["classe"] == "NEUTRO"              # zona cara, só 5,6% acima
     assert classificar(17, 14.5, 0, 12, 18)["classe"] == "CARO"              # 17% acima da MM200
     c = classificar(11, 14, -3, 12, 18)
-    assert c["classe"] == "OPORTUNIDADE" and c["conservador"] and round(c["distMM200"], 2) == -21.43
+    assert c["classe"] == "OPORTUNIDADE" and c["conservador"] and c["distMM200"] == -21.43
 
 
 @pytest.mark.parametrize("dias,parte", [(0, 0), (1, 0), (2, 1), (3, 1), (4, 2), (5, 2), (6, 2), (7, 3), (10, 3)])
@@ -182,24 +181,24 @@ def test_historico_conta_queda_longa_uma_vez_no_grupo_de_10():
     assert h[10]["vezes"] == 1 and h[9]["vezes"] == 1
 
 
-# ------------------------------------------------------------ Lynch: preço pela MM200
-def test_lynch_csmg3_abaixo_da_mm200_e_oportunidade():
-    from utils.lynch import preco_lynch
-    p = preco_lynch(54.67, 56.94, 58.68)
-    assert p["codigo"] == "COMPRAR" and round(p["dist"], 1) == -4.0
-    assert p["texto"] == "Ponto de oportunidade em R$ 59,79"
+# ------------------------------------------------------------ SIMONS: classificação pela MM200
+def test_simons_csmg3_abaixo_da_mm200_e_oportunidade():
+    from utils.simons import classificar
+    c = classificar(54.67, 56.94, 8.7, 46.48, 58.68)
+    assert c["classe"] == "OPORTUNIDADE" and c["distMM200"] == -3.99 and not c["conservador"]
+    assert round(c["oportunidadeAte"], 2) == 59.79 and round(c["caroAcima"], 2) == 65.48
 
 
-@pytest.mark.parametrize("preco,codigo", [(105, "COMPRAR"), (106, "AGUARDAR"), (114.9, "AGUARDAR"), (115, "CARO"), (130, "CARO")])
-def test_lynch_faixas_pela_mm200(preco, codigo):
-    from utils.lynch import preco_lynch
-    assert preco_lynch(preco, 100, 200)["codigo"] == codigo
+@pytest.mark.parametrize("preco,classe", [(105, "OPORTUNIDADE"), (106, "NEUTRO"), (114.9, "NEUTRO"), (115, "CARO"), (130, "CARO")])
+def test_simons_faixas_pela_mm200(preco, classe):
+    from utils.simons import classificar
+    assert classificar(preco, 100, 0, 60, 200)["classe"] == classe
 
 
-def test_lynch_na_zona_cara_da_faixa_nao_e_oportunidade():
-    from utils.lynch import preco_lynch
-    assert preco_lynch(102, 100, 101)["codigo"] == "AGUARDAR"
-    assert preco_lynch(102, None, 101) is None
+def test_simons_na_zona_cara_da_faixa_nao_e_oportunidade_e_sem_mm200_usa_a_faixa():
+    from utils.simons import classificar
+    assert classificar(102, 100, 0, 60, 101)["classe"] == "NEUTRO"
+    assert classificar(50, None, None, 60, 101)["classe"] == "OPORTUNIDADE"
 
 
 # ------------------------------------------------------------ "melhor" linha do histórico

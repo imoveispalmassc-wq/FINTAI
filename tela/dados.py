@@ -11,7 +11,7 @@ import pandas as pd
 
 from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, lpa_contabil_ttm, media_no_periodo, pl_medio_12m, pl_medio_contabil,
                       graham_duas_versoes, pl_medio_longo, preco_justo_graham, preco_teto_bazin)
-from utils.lynch import crescimento_anual, peg, preco_lynch, regra_prejuizo, veredito
+from utils.lynch import crescimento_anual, peg, regra_prejuizo, veredito
 from utils.override import guidance as guidance_oficial
 from utils.percentile import percentil_na_faixa, zonas
 from utils.signals import (backtest_percentil, decidir_estado, fundamento_quebrou,
@@ -239,7 +239,8 @@ def modo_simons(hist: pd.DataFrame, r: Resultado | None = None, faixa=None) -> d
         passo = {"mm200": _n(r.mm200, 4), "distMM200": _n(c["distMM200"], 2), "mm200Caindo": c["mm200Caindo"], "mm200Incl": _n(r.inclinacao_mm200, 2),
                  "classe": c["classe"], "zona52": c["zona52"], "conservador": c["conservador"],
                  "parte": t["parte"], "entrada": t["acao"], "entradaDetalhe": t["detalhe"],
-                 "oportunidadeAte": _n(faixa.oportunidade_ate, 4), "caraAcima": _n(faixa.cara_acima, 4),
+                 "oportunidadeAte": _n(c["oportunidadeAte"], 4), "caraAcima": _n(c["caroAcima"], 4),
+                 "caraAcima52": _n(faixa.cara_acima, 4), "pelaMM200": c["pelaMM200"],
                  "min52": _n(faixa.minimo, 4), "max52": _n(faixa.maximo, 4)}
     return {**passo, "dias": q["dias"], "queda": _n(q["queda"], 2), "altas": q["altas"],
             **leitura(q["dias"], JANELA), "maximo": JANELA, "selo": SELO_SIMONS,
@@ -337,9 +338,6 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
 
     # guidance oficial da empresa (OVERRIDE) ganha do consenso do Yahoo no LPA projetado
     lynch = modo_lynch(d, f["pl"], regra)
-    pl_ = preco_lynch(r.preco_atual, r.mm200, faixa.cara_acima, moeda)
-    lynch["preco"] = None if not pl_ else {**pl_, "dist": _n(pl_["dist"], 2), "oportunidadeAte": _n(pl_["oportunidadeAte"], 4),
-                                           "caroAcima": _n(pl_["caroAcima"], 4), "mm200": _n(r.mm200, 4)}
     g = guidance_oficial(curto, acoes_padrao=f["acoes"])
     guia = None
     # consenso do Yahoo para o ano em curso, guardado antes do guidance substituir (card de P/L mostra os dois)
