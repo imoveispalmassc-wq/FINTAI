@@ -1071,7 +1071,11 @@ function montar(root, d) {
         <div class="card" style="margin-top:8px"><span class="rot">O que aconteceu no dia seguinte · desde ${sm.histDesde}</span>
           ${(() => { const h = (sm.historico || []).find(x => x.dias === Math.min(sm.dias, mx)); return h && h.vezes ? `<p class="destaque" style="margin:8px 0 10px;font-size:14px">Nos últimos 5 anos, a ${d.ticker} chegou a ${h.dias}${h.dias === mx ? ' ou mais' : ''} ${h.dias === 1 ? 'dia' : 'dias'} de queda <b>${h.vezes} vezes</b>. No pregão seguinte, <b style="color:var(--verde)">subiu em ${h.altas}</b> e <b style="color:var(--vermelho)">caiu em ${h.vezes - h.altas}</b>.</p>` : ''; })()}
           ${melhor ? `<p class="nota" style="margin:-4px 0 10px"><b style="color:var(--texto)">★ Melhor resultado no período:</b> ${melhor.dias}${melhor.dias === mx ? ' ou mais' : ''} ${melhor.dias === 1 ? 'dia' : 'dias'} de queda. Subiu no dia seguinte em ${melhor.altas} de ${melhor.vezes} vezes (${f(M.pct, 0)}%, contra ${f(M.media, 0)}% na média de todas as linhas)${melhor.dias === Math.min(sm.dias, mx) ? '. É a situação de hoje' : ''}.</p>`
-            : M.motivo === 'ruido' ? `<p class="nota" style="margin:-4px 0 10px"><b style="color:var(--texto)">Nenhum padrão forte</b> - todos entre ${f(M.min, 0)}% e ${f(M.max, 0)}%, dentro do ruído.</p>`
+            : M.motivo === 'ruido' ? (() => {
+                const dd = n => `${n}${n === mx ? '+' : ''} ${n === 1 ? 'dia' : 'dias'}`;
+                const porque = [M.falhaMedia ? `fica só ${f(M.topPct - M.media, 0)} pontos acima da média geral (${f(M.media, 0)}%; precisa de 8)` : '',
+                  M.falhaSegundo ? `fica só ${f(M.topPct - M.segundo, 0)} pontos acima do segundo, ${dd(M.segundoDias)} com ${f(M.segundo, 0)}% (precisa de 5)` : ''].filter(Boolean).join(' e ');
+                return `<p class="nota" style="margin:-4px 0 10px"><b style="color:var(--texto)">Nenhum padrão forte.</b> O maior resultado, ${dd(M.topDias)} com ${f(M.topPct, 0)}% de alta no dia seguinte, ${porque}. Diferença dentro do ruído.</p>`; })()
             : `<p class="nota" style="margin:-4px 0 10px">Poucos casos para apontar um padrão.</p>`}
           <div class="hist-l cab"><span class="n">Dias de queda</span><span class="t-cab"><i style="--c:var(--verde)">subiu</i><i style="--c:var(--vermelho)">caiu</i></span><span class="v">subiu / caiu</span></div>
           <div class="hist">${linhasHist}</div>

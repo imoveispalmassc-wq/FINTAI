@@ -153,6 +153,9 @@ def melhor_linha(hist: dict) -> dict:
     pcts = [e[1] for e in elegiveis]
     forte = pct >= media + MELHOR_ACIMA_MEDIA and (segundo is None or pct >= segundo + MELHOR_ACIMA_SEGUNDO)
     if not forte:
-        return {"dias": None, "media": media, "min": min(pcts), "max": max(pcts), "motivo": "ruido"}
+        return {"dias": None, "media": media, "min": min(pcts), "max": max(pcts), "motivo": "ruido",
+                "topDias": n, "topPct": pct, "segundoDias": elegiveis[1][0] if len(elegiveis) > 1 else None,
+                "segundo": segundo, "falhaMedia": pct < media + MELHOR_ACIMA_MEDIA,
+                "falhaSegundo": segundo is not None and pct < segundo + MELHOR_ACIMA_SEGUNDO}
     return {"dias": n, "pct": pct, "vezes": v["vezes"], "altas": v["altas"], "media": media,
             "segundo": segundo, "min": min(pcts), "max": max(pcts), "motivo": ""}
