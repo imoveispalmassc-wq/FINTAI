@@ -299,12 +299,11 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .hist-l .t i { display: block; height: 100%; } .hist-l .t i.s { background: var(--verde); } .hist-l .t i.c { background: var(--vermelho); opacity: .85; }
 .hist-l .v { text-align: right; white-space: nowrap; } .hist-l .vs { color: var(--verde); } .hist-l .vc { color: var(--vermelho); }
 .hist-l.atual, .hist-l.melhor { color: var(--texto); font-weight: 700; }
-.hist-l.atual .t { outline: 2px solid var(--vermelho); outline-offset: 2px; }
-.hist-l.melhor .t { outline: 2px solid var(--verde); outline-offset: 2px; }
-.hist-l.atual.melhor .t { outline-color: var(--verde); box-shadow: 0 0 0 5px var(--vermelho); }
+.hist-l.atual .t { outline: 2px solid var(--azul); outline-offset: 2px; }
+.selo-melhor { font-style: normal; display: inline-block; margin-top: 2px; padding: 0 5px; border-radius: 999px; background: #f2c94c; color: #1a1406; font-size: 9px; font-weight: 800; letter-spacing: .03em; white-space: nowrap; width: max-content; }
 .hist-l .n { display: flex; flex-direction: column; line-height: 1.15; }
 .tag-h { font-style: normal; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-.tag-h.hoje { color: var(--vermelho); } .tag-h.top { color: var(--verde); }
+.tag-h.hoje { color: var(--azul); } .tag-h.top { color: var(--verde); }
 
 .hist-l.cab { font-size: 10.5px; letter-spacing: .03em; text-transform: uppercase; color: var(--suave); margin-bottom: 4px; }
 .hist-l.cab .n { white-space: normal; line-height: 1.15; }

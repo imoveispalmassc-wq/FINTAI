@@ -93,7 +93,7 @@ def classificar(preco: float, mm200: float | None, inclinacao: float | None,
     Oportunidade: preço na zona de oportunidade da faixa de 52 semanas E até 5% acima da MM200.
     Caro: zona cara da faixa OU 15%+ acima da MM200. O resto é Neutro.
     "conservador": preço abaixo da MM200 com a média caindo (tendência de baixa)."""
-    dist = (preco / mm200 - 1) * 100 if mm200 else None
+    dist = round((preco / mm200 - 1) * 100, 2) if mm200 else None   # arredonda como na tela
     zona = "Oportunidade" if preco <= oportunidade_ate else "Cara" if preco > cara_acima else "Neutra"
     caindo = inclinacao is not None and not pd.isna(inclinacao) and inclinacao < -1
     conservador = bool(mm200 and preco < mm200 and caindo)
@@ -128,3 +128,31 @@ def timing(classe: str, dias: int, conservador: bool) -> dict:
                 "detalhe": f"Oportunidade validada; esperar {4 if conservador else 2} dias de queda para a 1ª parte{limite}"}
     return {"parte": parte, "acao": f"ENTRADA {parte}/3",
             "detalhe": f"Movimento curto: {parte}ª parte de 3{limite}"}
+
+
+# ------------------------------------------------------------ "melhor" linha do histórico: só com padrão forte
+MELHOR_MIN_CASOS = 30
+MELHOR_ACIMA_MEDIA = 8.0    # pontos acima da média geral
+MELHOR_ACIMA_SEGUNDO = 5.0  # pontos acima da segunda melhor
+
+
+def melhor_linha(hist: dict) -> dict:
+    """Linha com padrão forte de alta no dia seguinte, ou o aviso de que não há.
+
+    Regras: 30+ casos; 8+ pontos acima da média geral (todas as linhas somadas);
+    5+ pontos acima da segunda melhor (entre as com 30+ casos)."""
+    tv = sum(v["vezes"] for v in hist.values())
+    ta = sum(v["altas"] for v in hist.values())
+    media = ta / tv * 100 if tv else None
+    elegiveis = sorted(((n, v["altas"] / v["vezes"] * 100, v) for n, v in hist.items() if v["vezes"] >= MELHOR_MIN_CASOS),
+                       key=lambda x: (-x[1], -x[2]["vezes"]))
+    if not elegiveis or media is None:
+        return {"dias": None, "media": media, "min": None, "max": None, "motivo": "poucos casos"}
+    n, pct, v = elegiveis[0]
+    segundo = elegiveis[1][1] if len(elegiveis) > 1 else None
+    pcts = [e[1] for e in elegiveis]
+    forte = pct >= media + MELHOR_ACIMA_MEDIA and (segundo is None or pct >= segundo + MELHOR_ACIMA_SEGUNDO)
+    if not forte:
+        return {"dias": None, "media": media, "min": min(pcts), "max": max(pcts), "motivo": "ruido"}
+    return {"dias": n, "pct": pct, "vezes": v["vezes"], "altas": v["altas"], "media": media,
+            "segundo": segundo, "min": min(pcts), "max": max(pcts), "motivo": ""}

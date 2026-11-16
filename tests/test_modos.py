@@ -180,3 +180,45 @@ def test_historico_conta_queda_longa_uma_vez_no_grupo_de_10():
     c = np.r_[np.linspace(10, 12, 15), np.linspace(11.9, 9, 20), np.linspace(9.1, 10, 10)]
     h = historico(_fech(list(c)), anos=50)
     assert h[10]["vezes"] == 1 and h[9]["vezes"] == 1
+
+
+# ------------------------------------------------------------ Lynch: preço pela MM200
+def test_lynch_csmg3_abaixo_da_mm200_e_oportunidade():
+    from utils.lynch import preco_lynch
+    p = preco_lynch(54.67, 56.94, 58.68)
+    assert p["codigo"] == "COMPRAR" and round(p["dist"], 1) == -4.0
+    assert p["texto"] == "Ponto de oportunidade em R$ 59,79"
+
+
+@pytest.mark.parametrize("preco,codigo", [(105, "COMPRAR"), (106, "AGUARDAR"), (114.9, "AGUARDAR"), (115, "CARO"), (130, "CARO")])
+def test_lynch_faixas_pela_mm200(preco, codigo):
+    from utils.lynch import preco_lynch
+    assert preco_lynch(preco, 100, 200)["codigo"] == codigo
+
+
+def test_lynch_na_zona_cara_da_faixa_nao_e_oportunidade():
+    from utils.lynch import preco_lynch
+    assert preco_lynch(102, 100, 101)["codigo"] == "AGUARDAR"
+    assert preco_lynch(102, None, 101) is None
+
+
+# ------------------------------------------------------------ "melhor" linha do histórico
+def _h(**linhas):
+    return {int(k[1:]): {"vezes": v, "altas": a} for k, (v, a) in linhas.items()}
+
+
+def test_melhor_csmg3_sem_padrao_forte():
+    from utils.simons import melhor_linha
+    # números do print da CSMG3: 2 dias = 64% mas a média geral é ~56% e o 5 dias (61%) fica a 3 pontos
+    h = _h(d1=(147, 82), d2=(66, 42), d3=(46, 26), d4=(38, 20), d5=(36, 22), d6=(33, 19), d7=(37, 21),
+           d8=(31, 13), d9=(44, 26), d10=(61, 34))
+    m = melhor_linha(h)
+    assert m["dias"] is None and m["motivo"] == "ruido"
+
+
+def test_melhor_exige_30_casos_8_pontos_da_media_e_5_do_segundo():
+    from utils.simons import melhor_linha
+    base = dict(d1=(200, 100), d3=(40, 20))
+    assert melhor_linha(_h(**base, d2=(40, 28)))["dias"] == 2           # 70%: +18 da média e +20 do segundo
+    assert melhor_linha(_h(**base, d2=(29, 25)))["dias"] is None         # só 29 casos
+    assert melhor_linha(_h(**base, d2=(40, 28), d4=(40, 27)))["dias"] is None   # 70% x 67,5%: empate

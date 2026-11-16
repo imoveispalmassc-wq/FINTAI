@@ -11,13 +11,13 @@ import pandas as pd
 
 from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, lpa_contabil_ttm, media_no_periodo, pl_medio_12m, pl_medio_contabil,
                       graham_duas_versoes, pl_medio_longo, preco_justo_graham, preco_teto_bazin)
-from utils.lynch import crescimento_anual, peg, regra_prejuizo, veredito
+from utils.lynch import crescimento_anual, peg, preco_lynch, regra_prejuizo, veredito
 from utils.override import guidance as guidance_oficial
 from utils.percentile import percentil_na_faixa, zonas
 from utils.signals import (backtest_percentil, decidir_estado, fundamento_quebrou,
                            selo_backtest)
 from utils.simons import SELO as SELO_SIMONS
-from utils.simons import JANELA, classificar, historico, leitura, queda_desde_topo, timing
+from utils.simons import JANELA, classificar, historico, leitura, melhor_linha, queda_desde_topo, timing
 
 SIMBOLO = {"BRL": "R$", "USD": "US$", "EUR": "€", "GBP": "£"}
 ROTULO_PERIODOS = ["1 ano", "3 anos", "5 anos"]
@@ -247,6 +247,7 @@ def modo_simons(hist: pd.DataFrame, r: Resultado | None = None, faixa=None) -> d
             "topoData": f"{janela.index[topo_pos]:%d/%m/%Y}" if q["dias"] else None,
             "historico": [{"dias": n, "vezes": v["vezes"], "altas": v["altas"], "pct": _n(v["pct"], 1)} for n, v in hist_n.items()],
             "histAtual": None if not atual else {"vezes": atual["vezes"], "pct": _n(atual["pct"], 1)},
+            "melhor": {k: (_n(v, 1) if isinstance(v, float) else v) for k, v in melhor_linha(hist_n).items()},
             "histDesde": f"{fech[fech.index > fech.index[-1] - pd.DateOffset(years=5)].index[0]:%d/%m/%Y}",
             "janelaDe": f"{janela.index[0]:%d/%m/%Y}", "janelaAte": f"{janela.index[-1]:%d/%m/%Y}",
             "pregoes": len(janela) - 1,
@@ -336,6 +337,9 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
 
     # guidance oficial da empresa (OVERRIDE) ganha do consenso do Yahoo no LPA projetado
     lynch = modo_lynch(d, f["pl"], regra)
+    pl_ = preco_lynch(r.preco_atual, r.mm200, faixa.cara_acima, moeda)
+    lynch["preco"] = None if not pl_ else {**pl_, "dist": _n(pl_["dist"], 2), "oportunidadeAte": _n(pl_["oportunidadeAte"], 4),
+                                           "caroAcima": _n(pl_["caroAcima"], 4), "mm200": _n(r.mm200, 4)}
     g = guidance_oficial(curto, acoes_padrao=f["acoes"])
     guia = None
     # consenso do Yahoo para o ano em curso, guardado antes do guidance substituir (card de P/L mostra os dois)

@@ -62,8 +62,11 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   (cada queda conta uma vez por linha; "10 ou mais" só no dia em que chega a 10). Gráfico 10D do SIMONS: escala
   inclui MM200, oportunidade e caro (nome e valor escritos na linha, à esquerda), % de cada dia de queda no ponto.
   Cartões em barras visuais: classificação na faixa de 52 semanas com a MM200 marcada; dias de 0 a 10+ com as
-  partes da entrada; histórico em vezes que subiu/caiu (sem % solto; contorno vermelho = hoje, verde = a linha com maior
-  proporção de alta entre as com 20+ casos); régua fixa de 1 a 5+.
+  partes da entrada; histórico em vezes que subiu/caiu (sem % solto; contorno azul = hoje; ★ MELHOR só com 30+ casos, 8+ pontos
+  acima da média geral e 5+ acima da segunda melhor; senão "Nenhum padrão forte - todos entre X% e Y%"); régua fixa de 1 a 5+.
+- LYNCH não usa a faixa 30/70: Oportunidade = preço até +5% da MM200 e fora da zona cara da faixa de 52 semanas;
+  Neutro = +5% a +15% (ou na zona cara); Caro = +15% ou mais acima da MM200. Ponto de oportunidade = MM200 × 1,05.
+  A faixa 30/70 fica para Graham e SIMONS.
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 

@@ -99,9 +99,10 @@ function montar(root, d) {
       classe = e.codigo === 'COMPRAR' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
       alerta = e.alerta || '';
     } else if (modo === 'lynch') {
-      const e = fx.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
-      classe = e.codigo === 'COMPRAR' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
-      alerta = e.alerta || '';
+      // Lynch não usa a faixa 30/70: oportunidade até +5% da MM200 (fora da zona cara), neutro até +15%, caro acima
+      const LP = d.lynch.preco, e = LP || fx.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
+      classe = e.codigo === 'COMPRAR' ? (LP || e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
+      alerta = LP ? `Preço ${sinal(LP.dist, 1)} da média de 200 dias (${din(LP.mm200)}). Lynch: oportunidade até +5%, caro a partir de +15%.` : (e.alerta || '');
       const zona = { COMPRAR: 'Zona de Oportunidade', AGUARDAR: 'Zona Neutra', CARO: 'Zona Cara' }[e.codigo];
       const conclusao = v.cor === 'verde'
         ? (e.codigo === 'COMPRAR' ? 'Lynch aprova o crescimento e o preço está na Zona de Oportunidade.'
@@ -174,6 +175,7 @@ function montar(root, d) {
       if (!W || !H) return;
       if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+      const zOportF = zOport, zCaraF = zCara;
       const eixoW = 58, x0 = 4, x1 = W - eixoW, yTop = 44, yBase = H - 22, volH = 30, yPlot = yBase - volH - 8;
       const hi = velas ? s.h.map((v, i) => (tem(v) ? v : s.c[i])) : s.c, lo = velas ? s.l.map((v, i) => (tem(v) ? v : s.c[i])) : s.c;
       // SIMONS: a escala inclui a MM200 e os limites da faixa, como no painel (preço aparece na zona em que está)
@@ -187,6 +189,8 @@ function montar(root, d) {
 
       // zonas, linhas e rótulos: nos modos Graham e Lynch
       if (modo !== 'simons') {
+      const LPg = modo === 'lynch' && d.lynch && d.lynch.preco;
+      const zOport = LPg ? LPg.oportunidadeAte : zOportF, zCara = LPg ? LPg.caroAcima : zCaraF;
       ctx.save(); ctx.beginPath(); ctx.rect(x0, yTop - 6, x1 - x0, yPlot - yTop + 6); ctx.clip();
       ctx.fillStyle = '#2fbf8a1c'; ctx.fillRect(x0, Y(zOport), x1 - x0, 4000);
       ctx.fillStyle = '#f06a6a1a'; ctx.fillRect(x0, Y(zCara) - 4000, x1 - x0, 4000);
@@ -1042,13 +1046,11 @@ function montar(root, d) {
       const cartao3 = barra({ ini: 0, fim: 10, segs: segsDias, marcas: marcasDias, bola: Math.min(sm.dias, 10), rotBola: sm.dias ? `Hoje: ${dias} de queda (${sinal(sm.queda)})` : 'Hoje: sem queda' });
       // histórico: quantas vezes subiu e caiu no dia seguinte (sem porcentagem solta)
       const maxV = Math.max(1, ...(sm.historico || []).map(h => h.vezes));
-      // linha que mais deu alta no dia seguinte (proporção), só entre as que têm 20+ casos
-      const MIN_CASOS = 20;
-      const melhor = (sm.historico || []).filter(h => h.vezes >= MIN_CASOS)
-        .reduce((m, h) => !m || h.altas / h.vezes > m.altas / m.vezes || (h.altas / h.vezes === m.altas / m.vezes && h.vezes > m.vezes) ? h : m, null);
+      // "melhor" vem do cálculo: 30+ casos, 8+ pontos acima da média geral e 5+ acima da segunda melhor
+      const M = sm.melhor || {}, melhor = M.dias ? (sm.historico || []).find(h => h.dias === M.dias) : null;
       const linhasHist = (sm.historico || []).map(h => {
         const caiu = h.vezes - h.altas, wS = h.altas / maxV * 100, wC = caiu / maxV * 100, atual = h.dias === Math.min(sm.dias, mx), top = melhor && h.dias === melhor.dias;
-        return `<div class="hist-l${atual ? ' atual' : ''}${top ? ' melhor' : ''}"><span class="n">${h.dias}${h.dias === mx ? '+' : ''} ${h.dias === 1 ? 'dia' : 'dias'}${atual ? '<em class="tag-h hoje">hoje</em>' : ''}${top ? '<em class="tag-h top">melhor</em>' : ''}</span>
+        return `<div class="hist-l${atual ? ' atual' : ''}${top ? ' melhor' : ''}"><span class="n">${h.dias}${h.dias === mx ? '+' : ''} ${h.dias === 1 ? 'dia' : 'dias'}${atual ? '<em class="tag-h hoje">hoje</em>' : ''}${top ? '<em class="selo-melhor">★ MELHOR</em>' : ''}</span>
           <span class="t">${h.vezes ? `<i class="s" style="width:${wS}%"></i><i class="c" style="width:${wC}%"></i>` : ''}</span>
           <span class="v num">${h.vezes ? `<b class="vs">${h.altas}</b> / <b class="vc">${caiu}</b>` : 'nenhum caso'}</span></div>`;
       }).join('');
@@ -1068,10 +1070,12 @@ function montar(root, d) {
           <div class="nota" style="margin-top:2px">${sm.dias ? `Topo ${din(sm.topo)} em ${sm.topoData}${sm.altas ? `, ${sm.altas} ${sm.altas === 1 ? 'alta' : 'altas'} no meio` : ''}. ` : ''}${sm.entradaDetalhe}. ${sm.classe === 'OPORTUNIDADE' ? (sm.conservador ? 'A última parte só com o preço acima da MM200 ou a média parando de cair.' : 'O 5º dia sozinho nunca manda a compra toda.') : ''}</div></div>
         <div class="card" style="margin-top:8px"><span class="rot">O que aconteceu no dia seguinte · desde ${sm.histDesde}</span>
           ${(() => { const h = (sm.historico || []).find(x => x.dias === Math.min(sm.dias, mx)); return h && h.vezes ? `<p class="destaque" style="margin:8px 0 10px;font-size:14px">Nos últimos 5 anos, a ${d.ticker} chegou a ${h.dias}${h.dias === mx ? ' ou mais' : ''} ${h.dias === 1 ? 'dia' : 'dias'} de queda <b>${h.vezes} vezes</b>. No pregão seguinte, <b style="color:var(--verde)">subiu em ${h.altas}</b> e <b style="color:var(--vermelho)">caiu em ${h.vezes - h.altas}</b>.</p>` : ''; })()}
-          ${melhor ? `<p class="nota" style="margin:-4px 0 10px"><span style="color:var(--verde);font-weight:700">Melhor resultado no período:</span> ${melhor.dias}${melhor.dias === mx ? ' ou mais' : ''} ${melhor.dias === 1 ? 'dia' : 'dias'} de queda. Subiu no dia seguinte em ${melhor.altas} de ${melhor.vezes} vezes${melhor.dias === Math.min(sm.dias, mx) ? ', que é a situação de hoje' : ''}.</p>` : ''}
+          ${melhor ? `<p class="nota" style="margin:-4px 0 10px"><b style="color:var(--texto)">★ Melhor resultado no período:</b> ${melhor.dias}${melhor.dias === mx ? ' ou mais' : ''} ${melhor.dias === 1 ? 'dia' : 'dias'} de queda. Subiu no dia seguinte em ${melhor.altas} de ${melhor.vezes} vezes (${f(M.pct, 0)}%, contra ${f(M.media, 0)}% na média de todas as linhas)${melhor.dias === Math.min(sm.dias, mx) ? '. É a situação de hoje' : ''}.</p>`
+            : M.motivo === 'ruido' ? `<p class="nota" style="margin:-4px 0 10px"><b style="color:var(--texto)">Nenhum padrão forte</b> - todos entre ${f(M.min, 0)}% e ${f(M.max, 0)}%, dentro do ruído.</p>`
+            : `<p class="nota" style="margin:-4px 0 10px">Poucos casos para apontar um padrão.</p>`}
           <div class="hist-l cab"><span class="n">Dias de queda</span><span class="t-cab"><i style="--c:var(--verde)">subiu</i><i style="--c:var(--vermelho)">caiu</i></span><span class="v">subiu / caiu</span></div>
           <div class="hist">${linhasHist}</div>
-          <div class="nota" style="margin-top:6px">Cada linha: quantas vezes a ação chegou àquele número de dias de queda e, no pregão seguinte, quantas vezes subiu (verde) e caiu (vermelho). Barra maior = mais casos. Contorno vermelho = hoje; contorno verde = a quantidade de dias que mais subiu no dia seguinte (entre as linhas com ${MIN_CASOS}+ casos).</div></div>
+          <div class="nota" style="margin-top:6px">Cada linha: quantas vezes a ação chegou àquele número de dias de queda e, no pregão seguinte, quantas vezes subiu (verde) e caiu (vermelho). Barra maior = mais casos. Contorno azul = hoje. ★ MELHOR só aparece com 30+ casos, 8+ pontos acima da média geral e 5+ pontos acima da segunda melhor.</div></div>
         <div class="card" style="margin-top:8px"><span class="rot">Régua fixa (igual para qualquer ação)</span>
           ${cartaoRegua}</div>
         <div style="margin-top:10px"><span class="selo sem">${sm.selo}</span></div>
