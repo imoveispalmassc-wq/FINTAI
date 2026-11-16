@@ -319,7 +319,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "lynch": lynch,
         "guidance": guia,
         "simons": modo_simons(hist),
-        "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "plMetodo": f["metodo"],
+        "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "precoMedio12": _n(float(r.fechamentos_1a.mean()), 4) if len(r.fechamentos_1a) else None, "plMetodo": f["metodo"],
         "lpa": _n(f["lpa"], 4), "lpaAgora": _n(f["lpa_agora"], 4), "lpa12Atras": _n(f["lpa_antes"], 4),
         "baseLpa": f["base_lpa"],
         "dividendo": _n(f["div"], 4), "dividendo12Atras": _n(f["div_antes"], 4),
