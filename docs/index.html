@@ -345,6 +345,9 @@ function montar(root, d) {
   const FOLHAS = {};
   const fonte = `<p><b>Fonte:</b> ${d.fonte} · atualizado em ${d.atualizado}.</p>`;
   const zOport = d.zOport, zCara = d.zCara;
+  // rótulo embaixo da bolinha: centrado nela; perto das pontas, alinhado à ponta para não sair da barra
+  const ancora = p => p < 8 ? 'left:0;transform:none;text-align:left'
+    : p > 92 ? 'left:auto;right:0;transform:none;text-align:right' : `left:${p}%`;
   const dy = tem(d.dividendo) && d.preco ? d.dividendo / d.preco * 100 : null;
   const naoPagadora = tem(dy) && dy < 0.5;
   const metodosJusto = [['Graham', d.graham], ['P/L histórico', d.justoPL]]
@@ -673,7 +676,7 @@ function montar(root, d) {
             <span class="traco" style="left:${a}%"></span><span class="traco" style="left:${b}%"></span>
             <span class="bola" style="left:${p}%"></span>
           </div>
-          <div class="marca-baixo so-valor num"><span style="left:${Math.min(Math.max(p, 10), 90)}%">${f(d.preco)}</span></div>
+          <div class="marca-baixo so-valor num"><span style="${ancora(p)}">${f(d.preco)}</span></div>
           <div class="nota" style="margin-top:2px">Mínima e máxima das últimas 52 semanas nas pontas da barra.</div>
         </div>
       </div>`;
@@ -747,7 +750,7 @@ function montar(root, d) {
         <div class="cab"><strong>${titulo}</strong><button class="link" data-folha="${id}">Ver como calculamos</button></div>
         <div class="marca-cima num"><span class="esq">Mín.<b>${f(min)}</b></span><span style="left:50%">Ponto médio<b>${f(meio)}</b></span><span class="dir">Máx.<b>${f(max)}</b></span></div>
         <div class="regua" style="background:var(--ardosia);margin-top:6px"><span class="traco" style="left:50%"></span><span class="bola" style="left:${p}%"></span></div>
-        <div class="marca-baixo num"><span style="left:${Math.min(Math.max(p, 10), 90)}%">Agora<b>${f(d.preco)}</b></span></div>
+        <div class="marca-baixo num"><span style="${ancora(p)}">Agora<b>${f(d.preco)}</b></span></div>
         <div class="destaque num">Você está ${din(Math.abs(dif))} ${dif >= 0 ? 'acima' : 'abaixo'} do ponto médio</div>
         <div class="nota">Preço na metade mais ${dif >= 0 ? 'cara' : 'barata'} do range de ${periodo}</div>
       </div>`;
