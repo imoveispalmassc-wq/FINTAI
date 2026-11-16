@@ -25,6 +25,8 @@ confiável (Yahoo Finance ou Banco Central), nada é inventado nem travado por a
 - `utils/signals.py`: decisão de estado, selo do teste histórico, backtest de 5 anos.
 - `utils/lynch.py`: regra de prejuízo em 3 anos (modos Graham e Lynch), crescimento e PEG do futuro.
 - `utils/simons.py`: sequência de quedas e régua fixa do modo Simons.
+- `utils/fetch_guidance.py`: robô diário que busca guidance oficial na CVM e grava `utils/guidance_auto.json`
+  (lista de tickers em `utils/guidance_tickers.json`; agendamento em `.github/workflows/update-guidance.yml`).
 - `utils/override.py`: guidance oficial das empresas (`OVERRIDE`), que substitui a projeção do Yahoo.
 - `utils/benchmarks.py`: CDI, Selic, IPCA e Poupança pelo SGS do Banco Central.
 - `calculos.py`: médias, tendência, P/L médio, dividendos e preço justo.

@@ -35,3 +35,21 @@ def test_tabela_real_comeca_vazia_ou_valida():
     # nenhum valor sem fonte: tudo que estiver cadastrado precisa passar na validação
     for ticker, o in OVERRIDE.items():
         assert validar(ticker, o) == [], ticker
+
+
+def test_payout_e_opcional():
+    o = {k: v for k, v in TABELA["XXXX3"].items() if k != "payout"}
+    g = guidance("XXXX3", {"XXXX3": o})
+    assert g is not None and g["payout"] is None and g["dividendo"] is None
+
+
+def test_cadastro_manual_ganha_do_automatico(tmp_path, monkeypatch):
+    import json
+    import utils.override as ov
+    auto = tmp_path / "auto.json"
+    auto.write_text(json.dumps({"XXXX3": {**TABELA["XXXX3"], "lucro_min": 1e9, "lucro_max": 2e9},
+                                "YYYY3": TABELA["XXXX3"]}))
+    monkeypatch.setattr(ov, "ARQ_AUTO", auto)
+    monkeypatch.setattr(ov, "OVERRIDE", {"XXXX3": TABELA["XXXX3"]})
+    assert ov.guidance("XXXX3")["lucroMin"] == 21e9      # manual
+    assert ov.guidance("YYYY3") is not None               # automático

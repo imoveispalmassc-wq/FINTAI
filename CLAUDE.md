@@ -17,6 +17,12 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   `utils/override.py` (lucro_min, lucro_max, acoes, payout, fonte, data). Com override, o guidance ganha
   do Yahoo: LPA projetado = (lucro_min + lucro_max) / 2 / acoes; dividendo projetado = LPA × payout.
   A tela mostra o selo "GUIDANCE OFICIAL" com a data. Sem override, vale o consenso do Yahoo.
+- Guidance automático: `utils/fetch_guidance.py` roda todo dia às 9h (`.github/workflows/update-guidance.yml`)
+  para os tickers de `utils/guidance_tickers.json` e grava em `utils/guidance_auto.json`. Busca nos documentos
+  entregues à CVM; padrões de texto primeiro, API do Claude só se falharem (chave em GitHub Secrets).
+  Confiança alta: commit direto. API do Claude, confiança baixa ou LPA mudando mais de 50%: pull request.
+  Nunca usa documento mais antigo que o mais novo com faixa de lucro. Cadastro manual em override.py ganha
+  do automático. Ações dos EUA desligadas até haver e-mail de contato para a SEC.
 - A página de exemplo (`docs/index.html`, gerada por `tools/gerar_demo.py`) não busca dados.
   Qualquer valor nela sem fonte real fica vazio ou marcado como EXEMPLO.
 

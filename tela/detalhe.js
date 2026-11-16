@@ -578,7 +578,7 @@ function montar(root, d) {
             <div>Dividendo por ação / ano<b>${din(d.dividendo)}</b></div>
             <div>DY atual<b>${tem(dy) ? f(dy) + '%' : '—'}</b></div>
             <div>DY média 12m<b>${tem(d.dyMedio12) ? f(d.dyMedio12) + '%' : '—'}</b></div>
-            ${d.guidance ? `<div>Projetado (guidance, payout ${f(d.guidance.payout * 100, 0)}%)<b>${din(d.guidance.dividendo)} · ${f(d.guidance.dividendo / d.preco * 100, 1)}%</b></div>` : ''}
+            ${d.guidance && tem(d.guidance.payout) ? `<div>Projetado (guidance, payout ${f(d.guidance.payout * 100, 0)}%)<b>${din(d.guidance.dividendo)} · ${f(d.guidance.dividendo / d.preco * 100, 1)}%</b></div>` : ''}
             <div>Diferença<b>${sinal(dyDif, 0)}</b></div>
           </div>
           ${exemplo}
@@ -863,12 +863,15 @@ function montar(root, d) {
       const consenso = !tem(proj) ? '' : G ? `Guidance oficial da empresa (${G.fonte}, ${G.data}): lucro de ${din(G.lucroMin / 1e9, 1)} a ${din(G.lucroMax / 1e9, 1)} bi ÷ ${f(G.acoes / 1e9, 2)} bi de ações = LPA de ${din(G.lpaMin)} a ${din(G.lpaMax)}, ponto médio ${din(G.lpa)}` : `Consenso${tem(Fu.analistas) ? ` de ${f(Fu.analistas, 0)} ${Fu.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance`
         + (tem(Fu.lpaBaixa) && tem(Fu.lpaAlta) ? `, de ${din(Fu.lpaBaixa)} a ${din(Fu.lpaAlta)}` : '')
         + (tem(Fu.analistas) && Fu.analistas < 3 ? '. Poucos analistas: estimativa pouco confiável' : '');
-      const divG = G ? ` Dividendo projetado: ${din(G.lpa)} × payout ${f(G.payout * 100, 0)}% = ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.` : '';
+      const divG = G && tem(G.payout) ? ` Dividendo projetado: ${din(G.lpa)} × payout ${f(G.payout * 100, 0)}% = ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.` : '';
       const linhaProj = anoProj ? `<div class="proj"><span>${anoProj} <span class="tag-proj">${G ? 'guidance' : 'projeção'}</span>${ex('lpaEsteAno')}</span><b>${tem(proj) ? din(proj) : 'Sem estimativa'}</b></div>` : '';
       el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>
-        <div class="card">${G ? `<div style="margin-bottom:10px"><span class="selo ok">GUIDANCE OFICIAL · ${G.data}</span></div>` : ''}${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}${linhaProj}</div>` : ''}
+        <div class="card">${G ? `<div style="margin-bottom:10px"><span class="selo ok">GUIDANCE OFICIAL · ${G.data}</span>
+          <div class="nota" style="margin-top:6px">Fonte: ${G.url ? `<a class="link" href="${G.url}" target="_blank" rel="noopener" id="g-fonte"></a>` : '<span id="g-fonte"></span>'}</div></div>` : ''}${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}${linhaProj}</div>` : ''}
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
-          <div class="nota">${nota}${anoProj ? ` ${tem(proj) ? `Projeção ${anoProj}: ${consenso}${tem(varProj) ? `; ${sinal(varProj, 0)} sobre ${anos[anos.length - 1].ano}` : ''}.${divG} Não entra na média.${G ? ' O guidance oficial substitui o consenso dos analistas do Yahoo.' : ''}` : `Sem estimativa no Yahoo para ${anoProj}.`}` : ''}</div></div>`;
+          <div class="nota" id="g-nota"></div></div>`;
+      if (G) { const fz = el.querySelector('#g-fonte'); if (fz) fz.textContent = G.fonte; }
+      el.querySelector('#g-nota').textContent = `${nota}${anoProj ? ` ${tem(proj) ? `Projeção ${anoProj}: ${consenso}${tem(varProj) ? `; ${sinal(varProj, 0)} sobre ${anos[anos.length - 1].ano}` : ''}.${divG} Não entra na média.${G ? ' O guidance oficial substitui o consenso dos analistas do Yahoo.' : ''}` : `Sem estimativa no Yahoo para ${anoProj}.`}` : ''}`;
     } else if (modo === 'lynch') {
       const L = d.lynch, v = L.veredito, F = L.futuro, pc = x => tem(x) ? `${sinal(x, 1)} ao ano` : 'Sem dado';
       // crescimento acima de 100% ao ano vem de base quase zero: mostra quantas vezes multiplicou

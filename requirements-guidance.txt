@@ -1,0 +1,5 @@
+# Só para o robô diário de guidance (GitHub Actions); o app não precisa destes.
+requests>=2.31
+pypdf>=4.0
+yfinance>=0.2.40
+anthropic>=0.70

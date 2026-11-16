@@ -1,0 +1,73 @@
+name: Atualizar guidance oficial
+
+on:
+  schedule:
+    - cron: "0 12 * * *"   # todo dia às 9h de Brasília (12h UTC)
+  workflow_dispatch: {}    # botão "Run workflow" para rodar na hora
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: update-guidance
+  cancel-in-progress: false
+
+jobs:
+  guidance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências do robô
+        run: pip install -r requirements-guidance.txt
+
+      # documentos já tentados sem confiança: evita chamar a API do Claude todo dia no mesmo documento
+      - uses: actions/cache@v4
+        with:
+          path: .guidance_cache
+          key: guidance-vistos-${{ github.run_id }}
+          restore-keys: guidance-vistos-
+
+      - name: Buscar guidance (CVM)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m utils.fetch_guidance planejar --saida plano.json
+
+      - name: Publicar o que tem confiança alta
+        run: |
+          python -m utils.fetch_guidance aplicar plano.json --tipo commit
+          if ! git diff --quiet -- utils/guidance_auto.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add utils/guidance_auto.json
+            git commit -m "Guidance oficial atualizado automaticamente (CVM)"
+            git push origin HEAD:main
+          else
+            echo "Nada com confiança alta para publicar."
+          fi
+
+      - name: Abrir pull request para revisar o resto
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python -m utils.fetch_guidance aplicar plano.json --tipo pr --resumo pr.md
+          if ! git diff --quiet -- utils/guidance_auto.json; then
+            ramo="guidance/revisar-$(date -u +%Y%m%d)"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -b "$ramo"
+            git add utils/guidance_auto.json
+            git commit -m "Guidance para revisar ($(date -u +%d/%m/%Y))"
+            git push --force origin "$ramo"
+            gh pr create --base main --head "$ramo" \
+              --title "Guidance para revisar ($(date -u +%d/%m/%Y))" --body-file pr.md \
+              || gh pr edit "$ramo" --body-file pr.md
+          else
+            echo "Nada para revisar."
+          fi
