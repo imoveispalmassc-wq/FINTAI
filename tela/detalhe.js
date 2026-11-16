@@ -80,7 +80,7 @@ function montar(root, d) {
   const TEXTO_MODO = {
     graham: 'Modo longo prazo. Para segurar por anos. Pode demorar anos até comprar.',
     lynch: 'Modo longo prazo. Para quem entende a empresa e o crescimento. Não é para movimento curto.',
-    simons: 'Modo movimento curto. Para aproveitar repique de 1 a 5 dias. Não é para segurar anos.',
+    simons: 'Modo movimento curto. Para aproveitar repique depois de 1 a 10 dias de queda. Não é para segurar anos.',
   };
   // selo do modo Graham: vem do teste real das zonas em 5 anos
   const bt5 = d.backtest['5a'];
@@ -116,7 +116,9 @@ function montar(root, d) {
     } else {
       const sm = d.simons; rotulo = sm.acao;
       classe = sm.acao === 'MOVIMENTO CURTO' ? 'COMPRAR' : sm.acao === 'OBSERVA' ? 'CARO' : '';
-      texto = sm.dias ? `Hoje: ${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda seguidos, ${sinal(sm.queda)} na sequência. ${sm.detalhe}.`
+      const hA = sm.histAtual;
+      texto = sm.dias ? `Hoje: ${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda desde o topo${sm.altas ? ` (${sm.altas} ${sm.altas === 1 ? 'alta' : 'altas'} no meio)` : ''}, ${sinal(sm.queda)}. ${sm.detalhe}.`
+          + (hA && hA.vezes ? ` No histórico da ação, subiu no dia seguinte em ${f(hA.pct, 0)}% de ${hA.vezes} ${hA.vezes === 1 ? 'vez' : 'vezes'}${hA.vezes < 20 ? ' (poucos casos)' : ''}.` : '')
         : 'Sem queda no último pregão. Nada a fazer no movimento curto.';
       selo = ['sem', sm.selo];
     }
@@ -279,11 +281,11 @@ function montar(root, d) {
           ctx.beginPath(); ctx.arc(X(i), Y(s.c[i]), naQueda ? 4 : 2.6, 0, 7); ctx.fill();
         }
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.font = '600 11px Inter, system-ui, sans-serif';
-        const rot = `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda`, lw = ctx.measureText(rot).width;
-        ctx.fillStyle = '#0e1420cc'; ctx.beginPath(); ctx.roundRect(x0 + 44, 8, lw + 96, 26, 8); ctx.fill();
+        const rot = `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda`, lw = ctx.measureText(rot).width, mx = sm.maximo || 5;
+        ctx.fillStyle = '#0e1420cc'; ctx.beginPath(); ctx.roundRect(x0 + 44, 8, lw + 30 + mx * 11, 26, 8); ctx.fill();
         ctx.fillStyle = css('--texto'); ctx.fillText(rot, x0 + 52, 21);
-        for (let k = 0; k < 5; k++) {
-          ctx.beginPath(); ctx.arc(x0 + 66 + lw + k * 14, 21, 4.5, 0, 7);
+        for (let k = 0; k < mx; k++) {
+          ctx.beginPath(); ctx.arc(x0 + 64 + lw + k * 11, 21, 3.6, 0, 7);
           if (k < sm.nivel) { ctx.fillStyle = css('--azul'); ctx.fill(); }
           ctx.strokeStyle = css('--azul'); ctx.lineWidth = 1.5; ctx.stroke();
         }
@@ -972,24 +974,29 @@ function montar(root, d) {
         </div>
         <div class="aviso" style="margin-top:10px">PEG do futuro usa estimativa. Se a empresa não entregar esse crescimento, a tese cai.</div>`;
     } else {
-      const sm = d.simons, bolas = Array.from({ length: 5 }, (_, k) => `<i class="${k < sm.nivel ? 'on' : ''}"></i>`).join('');
+      const sm = d.simons, mx = sm.maximo || 5, bolas = Array.from({ length: mx }, (_, k) => `<i class="${k < sm.nivel ? 'on' : ''}"></i>`).join('');
       const REGUA = [[1, 51, 'Não faz nada'], [2, 54, 'Observa'], [3, 58, 'Movimento curto pequeno'], [4, 61, 'Movimento curto médio'], [5, 64, 'Movimento curto maior']];
       const dias = `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'}`;
       el.innerHTML = `<h2>Movimento curto <small>últimos 10 dias</small></h2>
         <div class="card">
           <div class="nota num" style="margin-bottom:10px">${ex('simons') ? ex('simons') + ' ' : ''}Janela: últimos ${sm.pregoes} dias - de ${sm.janelaDe} a ${sm.janelaAte}</div>
           <div class="lista-v num" style="margin:0">
-          <div>Hoje<b>${dias} de queda seguidos</b></div>
-          <div>Queda nos ${dias}<b>${sm.dias ? sinal(sm.queda) : '—'}</b></div>
+          <div>Hoje<b>${dias} de queda desde o topo</b></div>
+          ${sm.dias ? `<div>Topo<b>${din(sm.topo)} em ${sm.topoData}</b></div>` : ''}
+          ${sm.dias ? `<div>Altas no meio<b>${sm.altas}</b></div>` : ''}
+          <div>Queda desde o topo<b>${sm.dias ? sinal(sm.queda) : '—'}</b></div>
           <div>Variação nos ${sm.pregoes} dias<b>${sinal(sm.variacao10)}</b></div>
-          <div>Termômetro<b><span class="termo">${bolas}</span> ${sm.nivel} de 5</b></div>
-          <div>Probabilidade de repique amanhã<b>${tem(sm.prob) ? sm.prob + '%' : '—'}</b></div>
+          <div>Termômetro<b><span class="termo">${bolas}</span> ${sm.nivel} de ${mx}</b></div>
+          <div>Régua fixa (repique amanhã)<b>${tem(sm.prob) ? sm.prob + '%' : '—'}</b></div>
+          <div>Histórico da ação<b>${sm.histAtual && sm.histAtual.vezes ? `${f(sm.histAtual.pct, 0)}% de ${sm.histAtual.vezes}` : '—'}</b></div>
           <div>Ação<b>${sm.acao}</b></div>
         </div></div>
+        <div class="card" style="margin-top:8px"><span class="rot">Histórico da ação desde ${sm.histDesde}: subiu no dia seguinte</span>
+          <div class="lista-v num" style="margin-bottom:0">${(sm.historico || []).map(h => `<div style="${h.dias === sm.dias ? 'color:var(--texto);font-weight:700' : ''}">${h.dias}${h.dias === mx ? ' ou mais' : ''} ${h.dias === 1 ? 'dia' : 'dias'} de queda<b style="${h.dias === sm.dias ? '' : 'color:var(--suave);font-weight:500'}">${h.vezes ? `${f(h.pct, 0)}% · ${h.vezes} ${h.vezes === 1 ? 'vez' : 'vezes'}` : 'nenhum caso'}</b></div>`).join('')}</div></div>
         <div class="card" style="margin-top:8px"><span class="rot">Régua fixa</span>
-          <div class="lista-v num" style="margin-bottom:0">${REGUA.map(([n, p, a]) => `<div style="${n === sm.nivel ? 'color:var(--texto);font-weight:700' : ''}">${n} ${n === 1 ? 'dia' : 'dias'}: ${p}%<b style="${n === sm.nivel ? '' : 'color:var(--suave);font-weight:500'}">${a}</b></div>`).join('')}</div></div>
+          <div class="lista-v num" style="margin-bottom:0">${REGUA.map(([n, p, a]) => `<div style="${n === Math.min(sm.nivel, 5) ? 'color:var(--texto);font-weight:700' : ''}">${n}${n === 5 ? ' ou mais' : ''} ${n === 1 ? 'dia' : 'dias'}: ${p}%<b style="${n === Math.min(sm.nivel, 5) ? '' : 'color:var(--suave);font-weight:500'}">${a}</b></div>`).join('')}</div></div>
         <div style="margin-top:10px"><span class="selo sem">${sm.selo}</span></div>
-        <p class="nota" style="margin:10px 2px 0">"Queda nos ${dias}" conta só a sequência atual de queda. "Variação nos ${sm.pregoes} dias" vai do primeiro dia da janela até hoje. A probabilidade vem da régua fixa, igual para qualquer ação, ainda não testada com o histórico deste ativo.</p>`;
+        <p class="nota" style="margin:10px 2px 0">Os dias contam desde o maior fechamento dos últimos ${sm.pregoes} pregões, desde que o último pregão tenha sido de queda. Uma alta no meio não quebra a contagem enquanto o preço não passar do topo. O histórico usa a mesma regra nos últimos 5 anos da ação; com menos de 20 casos, a porcentagem é pouco confiável. A régua fixa é igual para qualquer ação e ainda não foi testada.</p>`;
     }
   }
 

@@ -17,7 +17,7 @@ from utils.percentile import percentil_na_faixa, zonas
 from utils.signals import (backtest_percentil, decidir_estado, fundamento_quebrou,
                            selo_backtest)
 from utils.simons import SELO as SELO_SIMONS
-from utils.simons import leitura, sequencia_de_quedas
+from utils.simons import JANELA, historico, leitura, queda_desde_topo
 
 SIMBOLO = {"BRL": "R$", "USD": "US$", "EUR": "€", "GBP": "£"}
 ROTULO_PERIODOS = ["1 ano", "3 anos", "5 anos"]
@@ -227,9 +227,18 @@ def _veredito_com_fonte(peg_futuro, receita, status, lucro_fut, tem_estimativa: 
 
 def modo_simons(hist: pd.DataFrame) -> dict:
     fech = _sem_fuso(hist)["Close"].dropna()
-    dias, queda = sequencia_de_quedas(fech)
-    janela = fech.tail(11)   # de -10 pregões até hoje
-    return {"dias": dias, "queda": _n(queda, 2), **leitura(dias), "selo": SELO_SIMONS,
+    q = queda_desde_topo(fech)
+    janela = fech.tail(JANELA + 1)   # de -10 pregões até hoje
+    topo_pos = q["topo_pos"] - (len(fech.tail(JANELA + 1)) - len(janela))
+    hist_n = historico(fech)
+    atual = hist_n.get(q["dias"]) if q["dias"] else None
+    return {"dias": q["dias"], "queda": _n(q["queda"], 2), "altas": q["altas"],
+            **leitura(q["dias"], JANELA), "maximo": JANELA, "selo": SELO_SIMONS,
+            "topo": _n(janela.iloc[topo_pos], 4) if q["dias"] else None,
+            "topoData": f"{janela.index[topo_pos]:%d/%m/%Y}" if q["dias"] else None,
+            "historico": [{"dias": n, "vezes": v["vezes"], "altas": v["altas"], "pct": _n(v["pct"], 1)} for n, v in hist_n.items()],
+            "histAtual": None if not atual else {"vezes": atual["vezes"], "pct": _n(atual["pct"], 1)},
+            "histDesde": f"{fech[fech.index > fech.index[-1] - pd.DateOffset(years=5)].index[0]:%d/%m/%Y}",
             "janelaDe": f"{janela.index[0]:%d/%m/%Y}", "janelaAte": f"{janela.index[-1]:%d/%m/%Y}",
             "pregoes": len(janela) - 1,
             "variacao10": _n((janela.iloc[-1] / janela.iloc[0] - 1) * 100, 2)}

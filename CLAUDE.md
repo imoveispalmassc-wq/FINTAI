@@ -53,6 +53,9 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 - Card de P/L: linhas P/L, Lucro líquido (lucro/ação × ações do Yahoo), Lucro/ação, Cotação; colunas Contábil (LPA 12 meses, data do último balanço), Previsão do ano (consenso do Yahoo,
   com analistas e faixa) e Média 12m. Guidance oficial e lucro ajustado aparecem em linhas à parte, com fonte.
 - Retorno acumulado: período (1/3/5 anos) no topo; barras com o ativo primeiro e os indicadores em ordem crescente.
+- SIMONS: conta os dias desde o maior fechamento dos últimos 10 pregões (termômetro 0 a 10), se o último pregão
+  caiu; alta no meio não quebra enquanto o preço não passar do topo. Chances: régua fixa (1 a 5+, A VALIDAR) e o
+  histórico de 5 anos do próprio ativo com a mesma regra (vezes e % de alta no dia seguinte; < 20 casos = poucos).
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 

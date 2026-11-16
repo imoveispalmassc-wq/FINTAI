@@ -106,3 +106,37 @@ def test_app_nao_usa_a_palavra_proibida():
                  "utils/simons.py", "utils/lynch.py", "utils/signals.py"):
         assert proibida not in (raiz / nome).read_text(encoding="utf-8").lower(), nome
     assert all(proibida not in " ".join(map(str, v)).lower() for v in REGUA.values())
+
+
+def test_queda_desde_o_topo_nao_quebra_com_alta_no_meio():
+    from utils.simons import queda_desde_topo
+    c = [16.5, 16.4, 16.1, 16.4, 16.4, 17.13, 17.0, 17.1, 16.9, 15.5, 15.1, 14.73]   # -11 .. hoje
+    q = queda_desde_topo(_fech(c))
+    assert q["dias"] == 6 and q["altas"] == 1
+    assert q["queda"] == pytest.approx((14.73 / 17.13 - 1) * 100)
+
+
+def test_queda_desde_o_topo_zera_se_hoje_subiu_ou_hoje_e_o_topo():
+    from utils.simons import queda_desde_topo
+    assert queda_desde_topo(_fech([10, 9, 8, 8.5]))["dias"] == 0
+    assert queda_desde_topo(_fech([8, 9, 10]))["dias"] == 0
+
+
+def test_queda_desde_o_topo_vai_ate_10_dias():
+    from utils.simons import queda_desde_topo
+    assert queda_desde_topo(_fech(list(range(40, 20, -1))))["dias"] == 10
+
+
+def test_historico_conta_casos_e_altas_no_dia_seguinte():
+    from utils.simons import historico
+    # padrão repetido: topo 11, três quedas (10, 9, 8), volta ao topo
+    c = [10, 9, 8, 11] * 30
+    h = historico(_fech(c), anos=50)
+    assert h[1]["vezes"] > 0 and h[1]["pct"] == 0 and h[2]["pct"] == 0   # depois de 1 e 2 dias, mais queda
+    assert h[3]["pct"] == 100                                            # depois de 3 dias, sempre subiu
+    assert h[7]["vezes"] == 0 and h[7]["pct"] is None
+
+
+def test_leitura_ate_10_dias_usa_a_ultima_linha_da_regua():
+    l = leitura(8, 10)
+    assert l["nivel"] == 8 and l["prob"] == 64 and l["acao"] == "MOVIMENTO CURTO"
