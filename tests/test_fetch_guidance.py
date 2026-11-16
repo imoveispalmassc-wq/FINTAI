@@ -79,17 +79,27 @@ GUIDANCE_NOV = {"lucro_min": 9e9, "lucro_max": 11e9, "acoes": 5.73e9, "payout": 
                 "data": "11/11/2026", "documento": "https://cvm.example/release-3t26.pdf"}
 
 
-def test_confianca_alta_e_documento_recente_vai_direto_para_o_app():
-    item = _planejar([(NOV, FATO_BB_NOV)])
-    assert item["acao"] == "commit"
+def test_primeira_gravacao_do_ticker_sempre_abre_pr_mesmo_com_confianca_alta():
+    item = _planejar([(NOV, FATO_BB_NOV)])          # documento recente, faixa única, sem guidance salvo
+    assert item["acao"] == "pr" and "primeira gravação" in item["motivo"]
     n = item["novo"]
     assert (n["lucro_min"], n["lucro_max"], n["payout"], n["acoes"]) == (9e9, 11e9, 0.25, 5.73e9)
     assert n["data"] == "11/11/2026"
     assert n["fonte"] == "BANCO DO BRASIL S.A., Fato Relevante de 11/11/2026 (CVM)" and n["url"].startswith("https://")
 
 
+GUIDANCE_APROVADO = {"lucro_min": 9.5e9, "lucro_max": 11.5e9, "acoes": 5.73e9, "payout": 0.25, "ano": 2026,
+                     "data": "15/08/2026", "documento": "https://cvm.example/antigo.pdf"}
+
+
+def test_depois_de_aprovado_confianca_alta_e_variacao_pequena_vai_direto():
+    item = _planejar([(NOV, FATO_BB_NOV)], anterior=GUIDANCE_APROVADO)     # LPA de 10,5 para 10: -5%
+    assert item["acao"] == "commit" and "primeira" not in item["motivo"]
+
+
 def test_documento_mais_novo_sem_guidance_e_pulado():
-    assert _planejar([("2026-11-14", RELEASE_SEM_GUIDANCE), (NOV, FATO_BB_NOV)])["acao"] == "commit"
+    item = _planejar([("2026-11-14", RELEASE_SEM_GUIDANCE), (NOV, FATO_BB_NOV)], anterior=GUIDANCE_APROVADO)
+    assert item["acao"] == "commit" and item["novo"]["lucro_min"] == 9e9
 
 
 def test_faixa_de_maio_e_descartada_quando_o_app_ja_tem_a_de_novembro():

@@ -20,7 +20,8 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 - Guidance automático: `utils/fetch_guidance.py` roda todo dia às 9h (`.github/workflows/update-guidance.yml`)
   para os tickers de `utils/guidance_tickers.json` e grava em `utils/guidance_auto.json`. Busca nos documentos
   entregues à CVM; padrões de texto primeiro, API do Claude só se falharem (chave em GitHub Secrets).
-  Confiança alta: commit direto. API do Claude, confiança baixa ou LPA mudando 50% ou mais: pull request.
+  Primeira gravação de cada ticker: sempre pull request. Depois de aprovada, confiança alta e variação
+  menor que 50%: commit direto. API do Claude, confiança baixa ou LPA mudando 50% ou mais: pull request.
   Nunca usa documento mais antigo que o mais novo com faixa de lucro, nem mais antigo que o guidance já
   salvo (descarta). Documento com mais de 120 dias vai para PR. Cadastro manual em override.py ganha
   do automático. Ações dos EUA desligadas até haver e-mail de contato para a SEC.

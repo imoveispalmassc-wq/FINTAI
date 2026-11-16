@@ -58,7 +58,7 @@ jobs:
         run: |
           python -m utils.fetch_guidance aplicar plano.json --tipo pr --resumo pr.md
           if ! git diff --quiet -- utils/guidance_auto.json; then
-            ramo="guidance/revisar-$(date -u +%Y%m%d)"
+            ramo="guidance/revisar"   # sempre o mesmo ramo: atualiza o PR aberto em vez de abrir outro
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git checkout -b "$ramo"
