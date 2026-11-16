@@ -302,6 +302,16 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .linhas-pl { line-height: 1.5; }
 .tab-pl .rot .un { text-transform: none; }
 
+/* SIMONS: cartões visuais */
+.regua .traco.mm { background: #f2994a; height: 24px; top: -7px; }
+.regua .mm-rot { position: absolute; top: 18px; transform: translateX(-50%); color: #f2994a; font-size: 10.5px; font-weight: 600; white-space: nowrap; }
+.hist { display: grid; gap: 6px; }
+.hist-l { display: grid; grid-template-columns: 52px 1fr 64px; align-items: center; gap: 8px; font-size: 12px; color: var(--suave); }
+.hist-l .t { display: flex; height: 12px; border-radius: 4px; overflow: hidden; background: #26314755; }
+.hist-l .t i { display: block; height: 100%; } .hist-l .t i.s { background: var(--verde); } .hist-l .t i.c { background: var(--vermelho); opacity: .85; }
+.hist-l .v { text-align: right; white-space: nowrap; } .hist-l .vs { color: var(--verde); } .hist-l .vc { color: var(--vermelho); }
+.hist-l.atual { color: var(--texto); font-weight: 700; } .hist-l.atual .t { outline: 2px solid var(--azul); outline-offset: 1px; }
+
 /* ---- página avulsa (fora do Streamlit) ---- */
 html { background: var(--bg); }
 body { margin: 0; background: var(--bg); font-family: var(--corpo); }
@@ -636,16 +646,12 @@ function montar(root, d) {
         if (tem(S.caraAcima)) { ctx.fillStyle = '#f06a6a12'; ctx.fillRect(x0, Y(S.caraAcima) - 4000, x1 - x0, 4000); }
         linhas.forEach(([v, c, dash]) => { ctx.setLineDash(dash); ctx.strokeStyle = c; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x0, Y(v)); ctx.lineTo(x1, Y(v)); ctx.stroke(); });
         ctx.setLineDash([]); ctx.restore();
-        // etiquetas no eixo: afasta as que se encostam e a do preço
-        const tags = linhas.map(([v, c]) => ({ y: Y(v), t: f(v), c })).sort((p, q) => p.y - q.y);
-        tags.forEach((t, k) => { if (k && t.y - tags[k - 1].y < 18) t.y = tags[k - 1].y + 18; });
+        // nome e valor escritos na própria linha, no canto esquerdo (afasta os que se encostam)
+        const nomes = { '#f06a6a': 'Caro acima de', '#f2994a': 'Média 200d', '#2fbf8a': 'Oportunidade até' };
+        const rots = linhas.map(([v, c]) => ({ y: Y(v) - 7, t: `${nomes[c]} ${f(v)}`, c })).sort((p, q) => q.y - p.y);
+        rots.forEach((r, k) => { if (k && rots[k - 1].y - r.y < 15) r.y = rots[k - 1].y - 15; });
         ctx.font = '600 10.5px Inter, system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        tags.forEach(t => { if (Math.abs(t.y - yPreco) < 18) t.y += t.y < yPreco ? -9 : 9; ctx.fillStyle = t.c; ctx.fillText(t.t, x1 + 7, t.y); });
-        // legenda no canto de baixo à esquerda (abaixo da zona de oportunidade, longe dos pontos)
-        ctx.font = '10px Inter, system-ui, sans-serif';
-        const leg = [['Caro acima', '#f06a6a'], ['Média 200d', '#f2994a'], ['Oportunidade até', '#2fbf8a']];
-        ctx.fillStyle = '#0e1420cc'; ctx.beginPath(); ctx.roundRect(x0 + 1, yPlot - 43, 104, 42, 7); ctx.fill();
-        leg.forEach(([t, c], k) => { const y = yPlot - 34 + k * 12; ctx.fillStyle = c; ctx.fillRect(x0 + 6, y - 1, 8, 2.5); ctx.fillStyle = css('--suave'); ctx.fillText(t, x0 + 18, y); });
+        rots.forEach(r => { const w = ctx.measureText(r.t).width + 8; ctx.fillStyle = '#0e1420d9'; ctx.beginPath(); ctx.roundRect(x0 + 2, r.y - 7, w, 14, 4); ctx.fill(); ctx.fillStyle = r.c; ctx.fillText(r.t, x0 + 6, r.y + 0.5); });
         ctx.font = '11px Inter, system-ui, sans-serif';
       }
 
@@ -1362,42 +1368,63 @@ function montar(root, d) {
         <div class="aviso" style="margin-top:10px">PEG do futuro usa estimativa. Se a empresa não entregar esse crescimento, a tese cai.</div>`;
     } else {
       const sm = d.simons, mx = sm.maximo || 5, bolas = Array.from({ length: mx }, (_, k) => `<i class="${k < sm.nivel ? 'on' : ''}"></i>`).join('');
-      const REGUA = [[1, 51, 'Não faz nada'], [2, 54, 'Observa'], [3, 58, 'Movimento curto pequeno'], [4, 61, 'Movimento curto médio'], [5, 64, 'Movimento curto maior']];
       const dias = `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'}`;
+      // régua visual (mesmo padrão das outras barras): nomes em cima, valores dos limites, bola com o valor embaixo
+      const barra = ({ ini, fim, segs, marcas = [], bola, rotBola, extra = '' }) => {
+        const pos = v => Math.max(0, Math.min(100, (v - ini) / (fim - ini) * 100));
+        let ant = ini; const cols = segs.map(g => { const w = pos(g.ate) - pos(ant); ant = g.ate; return w; });
+        let acc = 0; const grad = segs.map((g, k) => { const a0 = acc; acc += cols[k]; return `${g.cor} ${a0}% ${acc}%`; }).join(',');
+        return `<div class="zonas-rot" style="grid-template-columns:${cols.map(w => `${Math.max(w, 0.01)}fr`).join(' ')}">${segs.map(g => `<span style="color:${g.corTxt || g.cor}"><b>${g.nome}</b></span>`).join('')}</div>
+          <div class="marca-cima limites num">${marcas.map((m, k) => `<span class="${k === 0 && m.v === ini ? 'esq' : k === marcas.length - 1 && m.v === fim ? 'dir' : ''}" style="${(k === 0 && m.v === ini) || (k === marcas.length - 1 && m.v === fim) ? '' : `left:${pos(m.v)}%`};${m.cor ? `color:${m.cor}` : ''}">${m.t}</span>`).join('')}</div>
+          <div class="regua" style="background:linear-gradient(90deg,${grad});margin-top:4px">${segs.slice(0, -1).map(g => `<span class="traco" style="left:${pos(g.ate)}%"></span>`).join('')}${extra.replace(/POS\((.+?)\)/g, (_, v) => pos(+v))}${tem(bola) ? `<span class="bola" style="left:${pos(bola)}%"></span>` : ''}</div>
+          ${tem(bola) ? `<div class="marca-baixo so-valor num"><span style="${ancora(pos(bola))}">${rotBola}</span></div>` : ''}`;
+      };
       const nomeClasse = { OPORTUNIDADE: 'Oportunidade', NEUTRO: 'Neutro', CARO: 'Caro' }[sm.classe] || '—';
       const corClasse = { OPORTUNIDADE: 'var(--verde)', CARO: 'var(--vermelho)' }[sm.classe] || 'var(--texto)';
-      const terco = k => `<i class="${k < (sm.parte || 0) ? 'on' : ''}"></i>`;
+      const tendTxt = !tem(sm.mm200Incl) ? '' : `Média 200d ${sm.mm200Incl > 1 ? 'subindo' : sm.mm200Incl < -1 ? 'caindo' : 'de lado'} (${sinal(sm.mm200Incl, 1)} em 3 meses); preço ${sinal(sm.distMM200, 1)} da média.`;
+      // 2. classificação na faixa de 52 semanas, com a MM200 marcada
+      const temFaixa = [sm.min52, sm.max52, sm.oportunidadeAte, sm.caraAcima].every(tem) && sm.max52 > sm.min52;
+      const cartao2 = !temFaixa ? '<div class="nota">Sem faixa de 52 semanas.</div>' : barra({
+        ini: sm.min52, fim: sm.max52, bola: d.preco, rotBola: `Hoje ${f(d.preco)}`,
+        segs: [{ ate: sm.oportunidadeAte, cor: 'var(--verde)', nome: 'Oportunidade' }, { ate: sm.caraAcima, cor: 'var(--ardosia)', corTxt: '#aab4c6', nome: 'Neutra' }, { ate: sm.max52, cor: 'var(--ambar)', nome: 'Cara' }],
+        marcas: [{ v: sm.min52, t: f(sm.min52) }, { v: sm.oportunidadeAte, t: f(sm.oportunidadeAte) }, { v: sm.caraAcima, t: f(sm.caraAcima) }, { v: sm.max52, t: f(sm.max52) }],
+        // rótulo da MM200 embaixo; se ficar perto do "Hoje", desce uma linha para não sobrepor
+        extra: tem(sm.mm200) && sm.mm200 >= sm.min52 && sm.mm200 <= sm.max52 ? `<span class="traco mm" style="left:POS(${sm.mm200})%"></span><span class="mm-rot" style="left:POS(${sm.mm200})%;${Math.abs(sm.mm200 - d.preco) / (sm.max52 - sm.min52) < 0.25 ? 'top:38px' : ''}">MM200 ${f(sm.mm200)}</span>` : '' });
+      // 3. dias de queda: régua de 0 a 10 com as partes da entrada
+      const segsDias = sm.classe !== 'OPORTUNIDADE'
+        ? [{ ate: 10, cor: 'var(--ardosia)', corTxt: '#aab4c6', nome: 'Só alerta: fora da oportunidade' }]
+        : sm.conservador
+          ? [{ ate: 4, cor: 'var(--ardosia)', corTxt: '#aab4c6', nome: 'Observa' }, { ate: 7, cor: '#2fbf8a66', corTxt: 'var(--verde)', nome: '1/3' }, { ate: 10, cor: '#2fbf8aaa', corTxt: 'var(--verde)', nome: '2/3' }]
+          : [{ ate: 2, cor: 'var(--ardosia)', corTxt: '#aab4c6', nome: 'Observa' }, { ate: 4, cor: '#2fbf8a55', corTxt: 'var(--verde)', nome: '1/3' }, { ate: 7, cor: '#2fbf8a99', corTxt: 'var(--verde)', nome: '2/3' }, { ate: 10, cor: 'var(--verde)', nome: '3/3' }];
+      const marcasDias = [0, ...segsDias.slice(0, -1).map(g => g.ate), 10].map(v => ({ v, t: v === 10 ? '10+' : String(v) }));
+      const cartao3 = barra({ ini: 0, fim: 10, segs: segsDias, marcas: marcasDias, bola: Math.min(sm.dias, 10), rotBola: sm.dias ? `${dias} · ${sinal(sm.queda)}` : 'sem queda' });
+      // histórico: quantas vezes subiu e caiu no dia seguinte (sem porcentagem solta)
+      const maxV = Math.max(1, ...(sm.historico || []).map(h => h.vezes));
+      const linhasHist = (sm.historico || []).map(h => {
+        const caiu = h.vezes - h.altas, wS = h.altas / maxV * 100, wC = caiu / maxV * 100, atual = h.dias === sm.dias;
+        return `<div class="hist-l${atual ? ' atual' : ''}"><span class="n">${h.dias}${h.dias === mx ? '+' : ''} ${h.dias === 1 ? 'dia' : 'dias'}</span>
+          <span class="t">${h.vezes ? `<i class="s" style="width:${wS}%"></i><i class="c" style="width:${wC}%"></i>` : ''}</span>
+          <span class="v num">${h.vezes ? `<b class="vs">${h.altas}</b> / <b class="vc">${caiu}</b>` : 'nenhum caso'}</span></div>`;
+      }).join('');
+      // régua fixa: mesma barra, de 1 a 5+ dias
+      const RG = [[1, 51, 'Nada', 'var(--ardosia)', '#aab4c6'], [2, 54, 'Observa', '#f2c94c66', 'var(--ambar)'], [3, 58, 'Pequeno', '#2fbf8a55', 'var(--verde)'], [4, 61, 'Médio', '#2fbf8a99', 'var(--verde)'], [5, 64, 'Maior', 'var(--verde)', 'var(--verde)']];
+      const cartaoRegua = barra({ ini: 0.5, fim: 5.5, segs: RG.map(([n, , nome, cor, corTxt]) => ({ ate: n + 0.5, cor, corTxt, nome })),
+        marcas: RG.map(([n, p]) => ({ v: n, t: `${n}${n === 5 ? '+' : ''}d · ${p}%` })), bola: sm.nivel ? Math.min(sm.nivel, 5) : null, rotBola: dias });
       el.innerHTML = `<h2>Movimento curto <small>MM200 → oportunidade → dias</small></h2>
-        <div class="card"><span class="rot">1. Média de 200 dias (ponto de partida)</span>
-          <div class="lista-v num" style="margin:6px 0 0">
-          <div>Média 200d<b>${tem(sm.mm200) ? din(sm.mm200) : 'Sem dado'}</b></div>
-          <div>Preço atual<b>${din(d.preco)}</b></div>
-          <div>Distância<b style="color:${tem(sm.distMM200) ? cor(sm.distMM200) : 'inherit'}">${tem(sm.distMM200) ? `${sinal(sm.distMM200, 1)} ${sm.distMM200 < 0 ? 'abaixo' : 'acima'}` : '—'}</b></div>
-          <div>Média 200d em 3 meses<b>${!tem(sm.mm200Incl) ? '—' : sm.mm200Incl > 1 ? 'subindo' : sm.mm200Incl < -1 ? 'caindo' : 'de lado'}${tem(sm.mm200Incl) ? ` (${sinal(sm.mm200Incl, 1)})` : ''}</b></div>
-        </div></div>
-        <div class="card" style="margin-top:8px"><span class="rot">2. Oportunidade / Neutro / Caro</span>
-          <div class="lista-v num" style="margin:6px 0 0">
-          <div>Faixa de 52 semanas<b>${sm.zona52 || '—'}</b></div>
-          <div>Oportunidade até<b>${din(sm.oportunidadeAte)}</b></div>
-          <div>Caro acima de<b>${din(sm.caraAcima)}</b></div>
-          <div>Classificação<b style="color:${corClasse}">${nomeClasse}${sm.conservador ? ' · conservador' : ''}</b></div>
-        </div>
-          <div class="nota" style="margin-top:8px">Oportunidade = zona de oportunidade da faixa de 52 semanas e preço até 5% acima da MM200. Caro = zona cara ou 15%+ acima da MM200.${sm.conservador ? ' Conservador: preço abaixo da MM200 com a média caindo (tendência de baixa).' : ''}</div></div>
+        <div class="card"><span class="rot">1-2. Média de 200 dias e classificação</span>
+          <div class="duas" style="margin:8px 0 2px"><span class="esq">Classificação</span><span class="dir" style="color:${corClasse}">${nomeClasse}${sm.conservador ? ' · conservador' : ''}</span></div>
+          ${cartao2}
+          <div class="nota" style="margin-top:${tem(sm.mm200) && temFaixa && Math.abs(sm.mm200 - d.preco) / (sm.max52 - sm.min52) < 0.25 ? 20 : 2}px">${tendTxt} Oportunidade = zona verde e preço até 5% acima da MM200. Caro = zona cara ou 15%+ acima da MM200.${sm.conservador ? ' Conservador: abaixo da MM200 com a média caindo.' : ''}</div></div>
         <div class="card" style="margin-top:8px"><span class="rot">3. Dias de queda (momento da entrada)</span>
-          <div class="nota num" style="margin:6px 0 8px">Janela: últimos ${sm.pregoes} dias - de ${sm.janelaDe} a ${sm.janelaAte}</div>
-          <div class="lista-v num" style="margin:0">
-          <div>Hoje<b>${dias} de queda desde o topo</b></div>
-          ${sm.dias ? `<div>Topo<b>${din(sm.topo)} em ${sm.topoData}</b></div><div>Altas no meio<b>${sm.altas}</b></div>` : ''}
-          <div>Queda desde o topo<b>${sm.dias ? sinal(sm.queda) : '—'}</b></div>
-          <div>Termômetro<b><span class="termo">${bolas}</span> ${sm.nivel} de ${mx}</b></div>
-          <div>Entrada<b><span class="termo">${[0, 1, 2].map(terco).join('')}</span> ${sm.entrada}</b></div>
-        </div>
-          <div class="destaque" style="margin-top:8px">${sm.entradaDetalhe}.</div>
-          <div class="nota" style="margin-top:8px">${sm.conservador ? 'Conservador: 4 a 6 dias = 1/3, 7 ou mais = 2/3; a última parte só quando o preço voltar acima da MM200 ou a média parar de cair.' : 'Escalonada: 2 a 3 dias = 1/3, 4 a 6 dias = 2/3, 7 ou mais = 3/3. O 5º dia sozinho nunca manda a compra toda.'}${sm.classe === 'OPORTUNIDADE' ? ' Fora da oportunidade, os dias são só alerta.' : ''}</div></div>
-        <div class="card" style="margin-top:8px"><span class="rot">Histórico da ação desde ${sm.histDesde}: subiu no dia seguinte</span>
-          <div class="lista-v num" style="margin-bottom:0">${(sm.historico || []).map(h => `<div style="${h.dias === sm.dias ? 'color:var(--texto);font-weight:700' : ''}">${h.dias}${h.dias === mx ? ' ou mais' : ''} ${h.dias === 1 ? 'dia' : 'dias'} de queda<b style="${h.dias === sm.dias ? '' : 'color:var(--suave);font-weight:500'}">${h.vezes ? `${f(h.pct, 0)}% · ${h.vezes} ${h.vezes === 1 ? 'vez' : 'vezes'}` : 'nenhum caso'}</b></div>`).join('')}</div></div>
-        <div class="card" style="margin-top:8px"><span class="rot">Régua fixa</span>
-          <div class="lista-v num" style="margin-bottom:0">${REGUA.map(([n, p, a]) => `<div style="${n === Math.min(sm.nivel, 5) ? 'color:var(--texto);font-weight:700' : ''}">${n}${n === 5 ? ' ou mais' : ''} ${n === 1 ? 'dia' : 'dias'}: ${p}%<b style="${n === Math.min(sm.nivel, 5) ? '' : 'color:var(--suave);font-weight:500'}">${a}</b></div>`).join('')}</div></div>
+          <div class="duas" style="margin:8px 0 2px"><span class="esq">Entrada</span><span class="dir">${sm.entrada}</span></div>
+          ${cartao3}
+          <div class="nota" style="margin-top:2px">${sm.dias ? `Topo ${din(sm.topo)} em ${sm.topoData}${sm.altas ? `, ${sm.altas} ${sm.altas === 1 ? 'alta' : 'altas'} no meio` : ''}. ` : ''}${sm.entradaDetalhe}. ${sm.classe === 'OPORTUNIDADE' ? (sm.conservador ? 'A última parte só com o preço acima da MM200 ou a média parando de cair.' : 'O 5º dia sozinho nunca manda a compra toda.') : ''}</div></div>
+        <div class="card" style="margin-top:8px"><span class="rot">Histórico desde ${sm.histDesde}: no dia seguinte</span>
+          <div class="leg" style="margin:8px 0 6px"><span style="--c:var(--verde)">subiu</span><span style="--c:var(--vermelho)">caiu</span><span style="--c:transparent">vezes: subiu / caiu</span></div>
+          <div class="hist">${linhasHist}</div>
+          <div class="nota" style="margin-top:6px">Cada linha conta quantas vezes a ação chegou a N dias de queda nos últimos 5 anos e o que fez no pregão seguinte. Linhas com poucos casos dizem pouco.</div></div>
+        <div class="card" style="margin-top:8px"><span class="rot">Régua fixa (igual para qualquer ação)</span>
+          ${cartaoRegua}</div>
         <div style="margin-top:10px"><span class="selo sem">${sm.selo}</span></div>
         <p class="nota" style="margin:10px 2px 0">Os dias contam desde o maior fechamento dos últimos ${sm.pregoes} pregões, desde que o último pregão tenha sido de queda. Uma alta no meio não quebra a contagem enquanto o preço não passar do topo. O histórico usa a mesma regra nos últimos 5 anos da ação; cada queda conta uma vez em cada linha (a de 10 ou mais só no dia em que chega a 10). Com menos de 20 casos, a porcentagem é pouco confiável. A régua fixa é igual para qualquer ação e ainda não foi testada.</p>`;
     }

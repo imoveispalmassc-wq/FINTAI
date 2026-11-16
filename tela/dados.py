@@ -239,7 +239,8 @@ def modo_simons(hist: pd.DataFrame, r: Resultado | None = None, faixa=None) -> d
         passo = {"mm200": _n(r.mm200, 4), "distMM200": _n(c["distMM200"], 2), "mm200Caindo": c["mm200Caindo"], "mm200Incl": _n(r.inclinacao_mm200, 2),
                  "classe": c["classe"], "zona52": c["zona52"], "conservador": c["conservador"],
                  "parte": t["parte"], "entrada": t["acao"], "entradaDetalhe": t["detalhe"],
-                 "oportunidadeAte": _n(faixa.oportunidade_ate, 4), "caraAcima": _n(faixa.cara_acima, 4)}
+                 "oportunidadeAte": _n(faixa.oportunidade_ate, 4), "caraAcima": _n(faixa.cara_acima, 4),
+                 "min52": _n(faixa.minimo, 4), "max52": _n(faixa.maximo, 4)}
     return {**passo, "dias": q["dias"], "queda": _n(q["queda"], 2), "altas": q["altas"],
             **leitura(q["dias"], JANELA), "maximo": JANELA, "selo": SELO_SIMONS,
             "topo": _n(janela.iloc[topo_pos], 4) if q["dias"] else None,
