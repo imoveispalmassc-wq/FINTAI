@@ -561,9 +561,12 @@ function montar(root, d) {
     const lpaAtual = proximo ? d.lpa : d.lpaAgora;   // mesmo LPA das outras seções sempre que possível
     const difLPA = tem(lpaAtual) && tem(d.lpa12Atras) && d.lpa12Atras !== 0 ? (lpaAtual - d.lpa12Atras) / Math.abs(d.lpa12Atras) * 100 : null;
     const [cL, tL] = tem(difLPA) ? selo(difLPA, false) : semDado;
-    const rotL = trimestral ? ['Atual', '12m atrás'] : ['Ano fiscal', 'Ano anterior'];
+    // série trimestral em outra base (ex.: lucro ajustado x contábil): mesma tolerância de 10% do P/L médio
+    const outraBase = trimestral && tem(d.lpa) && d.lpa > 0 && tem(d.lpaAgora) && Math.abs(d.lpaAgora / d.lpa - 1) > 0.10;
+    const rotL = trimestral ? [outraBase ? 'Atual (ajustado)' : 'Atual', '12m atrás'] : ['Ano fiscal', 'Ano anterior'];
+    const notaBase = outraBase ? ` Os dois valores são do lucro por ação trimestral do Yahoo (lucro ajustado), na mesma base, então a comparação vale. O LPA usado no P/L e no Graham é o contábil, ${din(d.lpa)}.` : '';
     const fraseL = !tem(difLPA) ? 'O Yahoo Finance não traz o histórico de lucros deste ativo.'
-      : `O lucro por ação ${difLPA >= 0 ? 'cresceu' : 'caiu'} de ${din(d.lpa12Atras)} para ${din(lpaAtual)} ${trimestral ? 'em relação a 12 meses atrás' : 'de um ano fiscal para o outro'}. Base: ${d.baseLpa}.`;
+      : `O lucro por ação ${difLPA >= 0 ? 'cresceu' : 'caiu'} de ${din(d.lpa12Atras)} para ${din(lpaAtual)} ${trimestral ? 'em relação a 12 meses atrás' : 'de um ano fiscal para o outro'}. Base: ${d.baseLpa}.${notaBase}`;
 
     const exemplo = tem(dy) ? `<div class="exemplo num">Se você investir ${d.moeda} 10.000 hoje, recebe ${din(10000 * d.dividendo / d.preco)} por ano de dividendo.</div>` : '';
     el.innerHTML = `<h2>Fundamentos</h2>
@@ -606,7 +609,7 @@ function montar(root, d) {
       <p>O dividendo anual é a soma dos proventos pagos nos últimos 12 meses. Com DY abaixo de 0,5% a empresa é tratada como não pagadora de dividendos, e o critério não conta contra ela.</p>
       <p>Só marcamos como desfavorável quando a empresa de fato pagou menos dividendo do que nos 12 meses anteriores.</p>${fonte}`];
     FOLHAS['f-lpa'] = () => ['Crescimento de Lucro (LPA)', `<p>LPA = Lucro líquido ÷ Número de ações.</p>
-      ${tem(difLPA) ? `<p>Crescimento:</p><code>(${f(lpaAtual)} − ${f(d.lpa12Atras)}) ÷ ${f(Math.abs(d.lpa12Atras))} = ${sinal(difLPA, 0)}</code><p>Base: ${d.baseLpa}.</p>` : `<p>${INDISP}.</p>`}${fonte}`];
+      ${tem(difLPA) ? `<p>Crescimento:</p><code>(${f(lpaAtual)} − ${f(d.lpa12Atras)}) ÷ ${f(Math.abs(d.lpa12Atras))} = ${sinal(difLPA, 0)}</code><p>Base: ${d.baseLpa}.</p>${outraBase ? `<p>${notaBase.trim()}</p>` : ''}` : `<p>${INDISP}.</p>`}${fonte}`];
   })($('fundamentos'));
 
   /* ---------------- preço justo */
