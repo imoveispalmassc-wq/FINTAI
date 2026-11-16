@@ -119,7 +119,7 @@ function montar(root, d) {
       rotulo = R[0]; classe = R[1];
       const mmTxt = tem(sm.mm200) ? `Média 200d ${din(sm.mm200)}: preço ${sinal(sm.distMM200, 1)} ${sm.distMM200 < 0 ? 'abaixo' : 'acima'}${sm.mm200Caindo ? ', média caindo' : ''}.` : 'Sem média de 200 dias (histórico curto).';
       const diasTxt = sm.dias ? `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda desde o topo${sm.altas ? ` (${sm.altas} ${sm.altas === 1 ? 'alta' : 'altas'} no meio)` : ''}, ${sinal(sm.queda)}` : 'sem queda no último pregão';
-      texto = `1. ${mmTxt} 2. ${sm.classe === 'OPORTUNIDADE' ? 'Oportunidade' : sm.classe === 'CARO' ? 'Caro' : 'Neutro'} (${sm.pelaMM200 ? 'oportunidade até +5% da MM200, caro a partir de +15%' : `faixa de 52 semanas: ${(sm.zona52 || '').toLowerCase()}`}). 3. ${diasTxt}: ${sm.entrada}. ${sm.entradaDetalhe}.`
+      texto = `1. ${mmTxt} 2. ${sm.classe === 'OPORTUNIDADE' ? 'Oportunidade' : sm.classe === 'CARO' ? 'Caro' : 'Neutro'} (${sm.pelaMM200 ? `${sm.subzona === 'Bem abaixo da MM200' ? 'bem abaixo da MM200, mais de 10% abaixo; ' : ''}oportunidade de −10% a +5% da MM200, caro a partir de +15%` : `faixa de 52 semanas: ${(sm.zona52 || '').toLowerCase()}`}). 3. ${diasTxt}: ${sm.entrada}. ${sm.entradaDetalhe}.`
         + (hA && hA.vezes && sm.classe === 'OPORTUNIDADE' ? ` Histórico da ação: subiu no dia seguinte em ${f(hA.pct, 0)}% de ${hA.vezes} ${hA.vezes === 1 ? 'vez' : 'vezes'}${hA.vezes < 20 ? ' (poucos casos)' : ''}.` : '')
         + ` Ponto de oportunidade em ${din(sm.oportunidadeAte)}.`;
       selo = ['sem', sm.selo];
@@ -177,7 +177,7 @@ function montar(root, d) {
       const eixoW = 58, x0 = 4, x1 = W - eixoW, yTop = 44, yBase = H - 22, volH = 30, yPlot = yBase - volH - 8;
       const hi = velas ? s.h.map((v, i) => (tem(v) ? v : s.c[i])) : s.c, lo = velas ? s.l.map((v, i) => (tem(v) ? v : s.c[i])) : s.c;
       // SIMONS: a escala inclui a MM200 e os limites da faixa, como no painel (preço aparece na zona em que está)
-      const refsS = modo === 'simons' ? [d.simons.mm200, d.simons.oportunidadeAte, d.simons.caraAcima].filter(tem) : [];
+      const refsS = modo === 'simons' ? [d.simons.mm200, d.simons.oportunidadeAte, d.simons.caraAcima, d.simons.bemAbaixoAte].filter(tem) : [];
       const vmin = Math.min(...lo, ...refsS), vmax0 = Math.max(...hi, ...refsS);
       // SIMONS 10D: espaço livre em cima para o % de cada dia de queda
       const vmax = modo === 'simons' && escala === '10d' ? vmax0 + (vmax0 - vmin) * 0.16 : vmax0, folga = (vmax - vmin) * 0.05 || 1;
@@ -281,14 +281,15 @@ function montar(root, d) {
       // modo Simons, passos 1 e 2: MM200 e limites da faixa, iguais ao painel; valores no eixo da direita
       if (modo === 'simons') {
         const S = d.simons;
-        const linhas = [[S.caraAcima, '#f06a6a', [5, 4]], [S.mm200, '#f2994a', [7, 4]], [S.oportunidadeAte, '#2fbf8a', [5, 4]]].filter(l => tem(l[0]));
+        const linhas = [[S.caraAcima, '#f06a6a', [5, 4]], [S.mm200, '#f2994a', [7, 4]], [S.oportunidadeAte, '#2fbf8a', [5, 4]], [S.bemAbaixoAte, '#7aa2f7', [3, 4]]].filter(l => tem(l[0]));
         ctx.save(); ctx.beginPath(); ctx.rect(x0, yTop - 6, x1 - x0, yPlot - yTop + 6); ctx.clip();
-        if (tem(S.oportunidadeAte)) { ctx.fillStyle = '#2fbf8a14'; ctx.fillRect(x0, Y(S.oportunidadeAte), x1 - x0, 4000); }
+        if (tem(S.oportunidadeAte)) { ctx.fillStyle = '#2fbf8a14'; ctx.fillRect(x0, Y(S.oportunidadeAte), x1 - x0, tem(S.bemAbaixoAte) ? Y(S.bemAbaixoAte) - Y(S.oportunidadeAte) : 4000); }
+        if (tem(S.bemAbaixoAte)) { ctx.fillStyle = '#5b8def14'; ctx.fillRect(x0, Y(S.bemAbaixoAte), x1 - x0, 4000); }
         if (tem(S.caraAcima)) { ctx.fillStyle = '#f06a6a12'; ctx.fillRect(x0, Y(S.caraAcima) - 4000, x1 - x0, 4000); }
         linhas.forEach(([v, c, dash]) => { ctx.setLineDash(dash); ctx.strokeStyle = c; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(x0, Y(v)); ctx.lineTo(x1, Y(v)); ctx.stroke(); });
         ctx.setLineDash([]); ctx.restore();
         // nome e valor escritos na própria linha, no canto esquerdo (afasta os que se encostam)
-        const nomes = { '#f06a6a': 'Caro acima de', '#f2994a': 'Média 200d', '#2fbf8a': 'Oportunidade até' };
+        const nomes = { '#f06a6a': 'Caro acima de', '#f2994a': 'Média 200d', '#2fbf8a': 'Oportunidade até', '#7aa2f7': 'Oportunidade desde' };
         const rots = linhas.map(([v, c]) => ({ y: Y(v) - 7, t: `${nomes[c]} ${f(v)}`, c })).sort((p, q) => q.y - p.y);
         rots.forEach((r, k) => { if (k && rots[k - 1].y - r.y < 15) r.y = rots[k - 1].y - 15; });
         ctx.font = '600 10.5px Inter, system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
@@ -1024,15 +1025,18 @@ function montar(root, d) {
       const corClasse = { OPORTUNIDADE: 'var(--verde)', CARO: 'var(--vermelho)' }[sm.classe] || 'var(--texto)';
       const tendTxt = !tem(sm.mm200Incl) ? '' : `Média 200d ${sm.mm200Incl > 1 ? 'subindo' : sm.mm200Incl < -1 ? 'caindo' : 'de lado'} (${sinal(sm.mm200Incl, 1)} em 3 meses); preço ${sinal(sm.distMM200, 1)} da média.`;
       // 2. classificação na faixa de 52 semanas, com a MM200 marcada
-      // barra da classificação: limites pela MM200 (oportunidade até +5%, caro a partir de +15%), pontas = mín./máx. de 52 semanas
+      // barra da classificação, só pela MM200: bem abaixo (< -10%), oportunidade (-10% a +5%), neutra (+5% a +15%), cara (+15%+)
       const temFaixa = [sm.min52, sm.max52, sm.oportunidadeAte, sm.caraAcima].every(tem) && sm.max52 > sm.min52;
-      const ini2 = temFaixa ? Math.min(sm.min52, sm.oportunidadeAte * 0.95, d.preco) : 0;
+      const bA = tem(sm.bemAbaixoAte) ? sm.bemAbaixoAte : null;
+      const ini2 = temFaixa ? Math.min(sm.min52, (bA || sm.oportunidadeAte) * 0.95, d.preco) : 0;
       const fim2 = temFaixa ? Math.max(sm.max52, sm.caraAcima * 1.05, d.preco) : 1, amp2 = fim2 - ini2;
-      const marcas2 = [{ v: ini2, t: f(ini2), ponta: 1 }, { v: sm.oportunidadeAte, t: f(sm.oportunidadeAte) }, { v: sm.caraAcima, t: f(sm.caraAcima) }, { v: fim2, t: f(fim2), ponta: 1 }]
-        .filter(m => !m.ponta || Math.min(Math.abs(m.v - sm.oportunidadeAte), Math.abs(m.v - sm.caraAcima)) / amp2 > 0.12);
+      const limites2 = [bA, sm.oportunidadeAte, sm.caraAcima].filter(tem);
+      const marcas2 = [{ v: ini2, t: f(ini2), ponta: 1 }, ...limites2.map(v => ({ v, t: f(v) })), { v: fim2, t: f(fim2), ponta: 1 }]
+        .filter(m => !m.ponta || Math.min(...limites2.map(l => Math.abs(m.v - l))) / amp2 > 0.12);
       const cartao2 = !temFaixa ? '<div class="nota">Sem faixa de 52 semanas.</div>' : barra({
         ini: ini2, fim: fim2, bola: d.preco, rotBola: `Hoje ${f(d.preco)}`,
-        segs: [{ ate: sm.oportunidadeAte, cor: 'var(--verde)', nome: 'Oportunidade' }, { ate: sm.caraAcima, cor: 'var(--ardosia)', corTxt: '#aab4c6', nome: 'Neutra' }, { ate: fim2, cor: 'var(--ambar)', nome: 'Cara' }],
+        segs: [...(bA ? [{ ate: bA, cor: '#3b6fd8', corTxt: '#7aa2f7', nome: 'Bem abaixo' }] : []),
+          { ate: sm.oportunidadeAte, cor: 'var(--verde)', nome: 'Oportunidade' }, { ate: sm.caraAcima, cor: 'var(--ardosia)', corTxt: '#aab4c6', nome: 'Neutra' }, { ate: fim2, cor: 'var(--ambar)', nome: 'Cara' }],
         marcas: marcas2,
         // rótulo da MM200 embaixo; se ficar perto do "Hoje", desce uma linha para não sobrepor
         extra: tem(sm.mm200) ? `<span class="traco mm" style="left:POS(${sm.mm200})%"></span><span class="mm-rot" style="left:POS(${sm.mm200})%;${Math.abs(sm.mm200 - d.preco) / amp2 < 0.25 ? 'top:38px' : ''}">MM200 ${f(sm.mm200)}</span>` : '' });
@@ -1062,9 +1066,9 @@ function montar(root, d) {
         marcas: RG.map(([n, p]) => ({ v: n, t: `${n}${n === 5 ? '+' : ''}d · ${p}%` })), bola: sm.nivel ? Math.min(sm.nivel, 5) : null, rotBola: dias });
       el.innerHTML = `<h2>Movimento curto <small>MM200 → oportunidade → dias</small></h2>
         <div class="card"><span class="rot">1-2. Média de 200 dias e classificação</span>
-          <div class="duas" style="margin:8px 0 2px"><span class="esq">Classificação</span><span class="dir" style="color:${corClasse}">${nomeClasse}${sm.conservador ? ' · conservador' : ''}</span></div>
+          <div class="duas" style="margin:8px 0 2px"><span class="esq">Classificação</span><span class="dir" style="color:${sm.subzona === 'Bem abaixo da MM200' ? '#7aa2f7' : corClasse}">${sm.subzona === 'Bem abaixo da MM200' ? 'Bem abaixo da MM200' : nomeClasse}${sm.conservador ? ' · conservador' : ''}</span></div>
           ${cartao2}
-          <div class="nota" style="margin-top:${mmPerto ? 20 : 2}px">${tendTxt} ${sm.pelaMM200 ? `Oportunidade = até +5% da MM200 (${din(sm.oportunidadeAte)}) e fora da zona cara da faixa de 52 semanas (acima de ${din(sm.caraAcima52)}). Neutro = +5% a +15%. Caro = +15% ou mais (${din(sm.caraAcima)}).` : 'Sem média de 200 dias: classificação pela faixa de 52 semanas (30/70).'}${sm.conservador ? ' Conservador: abaixo da MM200 com a média caindo.' : ''}</div></div>
+          <div class="nota" style="margin-top:${mmPerto ? 20 : 2}px">${tendTxt} ${sm.pelaMM200 ? `Só pela MM200: Oportunidade = ${din(sm.bemAbaixoAte)} a ${din(sm.oportunidadeAte)} (MM200 −10% a +5%). Neutro = até ${din(sm.caraAcima)} (+15%). Caro = acima disso. Abaixo de ${din(sm.bemAbaixoAte)}: bem abaixo da MM200 (conta como oportunidade, mostrado à parte).` : 'Sem média de 200 dias: classificação pela faixa de 52 semanas (30/70).'}${sm.conservador ? ' Conservador: abaixo da MM200 com a média caindo.' : ''}</div></div>
         <div class="card" style="margin-top:8px"><span class="rot">3. Dias de queda (momento da entrada)</span>
           <div class="duas" style="margin:8px 0 2px"><span class="esq">Entrada hoje</span><span class="dir">${sm.entrada}</span></div>
           <div class="nota" style="margin:0 0 4px">${foraOp ? `Régua apagada: a classificação é ${nomeClasse}, então os dias de queda não abrem compra. As partes mostram como seria numa oportunidade.` : `Quanto comprar conforme os dias de queda${sm.conservador ? ' (modo conservador)' : ''}.`}</div>
