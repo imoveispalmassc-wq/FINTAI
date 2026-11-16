@@ -92,6 +92,9 @@ def _retorno(serie: pd.Series, anos: int) -> float | None:
     return (serie.iloc[-1] / valor_base - 1) * 100
 
 
+TOLERANCIA_BASE_LPA = 0.10   # diferença máxima entre a série trimestral e o LPA de 12 meses
+
+
 def _pl_diario(fechamentos: pd.Series, lpa_trimestral: pd.Series | None,
                lpa_atual: float | None, desdobramentos: pd.Series | None) -> pd.Series | None:
     """P/L de cada pregão: preço ÷ LPA acumulado dos 4 trimestres já divulgados na data."""
@@ -105,7 +108,10 @@ def _pl_diario(fechamentos: pd.Series, lpa_trimestral: pd.Series | None,
     if ttm.empty:
         return None
     # o último LPA calculado tem de bater com o informado (moeda, ADR, desdobramento)
-    if lpa_atual and lpa_atual > 0 and not 0.6 <= ttm.iloc[-1] / lpa_atual <= 1.6:
+    # O LPA trimestral do Yahoo (earnings dates) pode vir em outra base que o LPA de 12 meses
+    # (ex.: lucro AJUSTADO do banco contra lucro CONTÁBIL). Se o último valor da série não bate com o
+    # LPA atual em até 10%, as bases são diferentes e comparar os dois P/L seria comparar coisas diferentes.
+    if lpa_atual and lpa_atual > 0 and not (1 - TOLERANCIA_BASE_LPA) <= ttm.iloc[-1] / lpa_atual <= (1 + TOLERANCIA_BASE_LPA):
         return None
     diario = ttm.reindex(fechamentos.index, method="ffill")
     pl = (fechamentos / diario)[diario > 0].dropna()

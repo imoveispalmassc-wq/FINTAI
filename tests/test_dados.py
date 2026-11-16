@@ -118,3 +118,32 @@ def test_graham_sem_media_usa_so_o_atual_e_sem_nada_nao_calcula():
 def test_aviso_no_limite_de_60_por_cento():
     assert not graham_duas_versoes(6.0, 10.0, 30.0)["aviso"]
     assert graham_duas_versoes(5.99, 10.0, 30.0)["aviso"]
+
+
+# ------------------------------------------------------------ P/L médio na mesma base do P/L atual
+from calculos import pl_medio_12m
+
+
+def _fech_ano(preco=15.10):
+    idx = pd.bdate_range("2025-11-17", "2026-11-13")
+    return pd.Series(np.linspace(24.0, preco, len(idx)), idx)
+
+
+def _lpa_trimestral(valores):
+    datas = pd.to_datetime(["2024-11-13", "2025-02-19", "2025-05-15", "2025-08-14", "2025-11-12",
+                            "2026-02-11", "2026-05-13", "2026-08-11", "2026-11-11"])
+    return pd.Series(valores, datas)
+
+
+def test_serie_ajustada_com_lpa_contabil_nao_mistura_bases():
+    # caso real BBAS3: LPA trimestral do Yahoo é o AJUSTADO (soma 2,56) e o LPA de 12 meses é o CONTÁBIL (1,93)
+    serie = _lpa_trimestral([1.66, 1.67, 1.29, 0.67, 0.66, 1.06, 0.60, 0.68, 0.22])
+    valor, metodo = pl_medio_12m(_fech_ano(), serie, 1.93)
+    assert metodo == "simplificado"                      # preço médio do ano ÷ LPA atual, mesma base
+    assert valor == pytest.approx(_fech_ano().mean() / 1.93)
+
+
+def test_serie_na_mesma_base_usa_o_lpa_de_cada_trimestre():
+    serie = _lpa_trimestral([1.66, 1.67, 1.29, 0.67, 0.66, 1.06, 0.60, 0.68, 0.22])
+    _, metodo = pl_medio_12m(_fech_ano(), serie, 2.56)
+    assert metodo == "trimestral"

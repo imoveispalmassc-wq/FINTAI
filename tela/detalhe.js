@@ -594,11 +594,12 @@ function montar(root, d) {
           <button class="link" data-folha="f-lpa">Ver como calculamos</button>
         </div>
       </div></details>`;
-    FOLHAS['f-pl'] = () => ['Preço vs Lucro (P/L)', `<p>P/L = Preço ÷ Lucro por ação.</p>
+    FOLHAS['f-pl'] = () => ['Preço vs Lucro (P/L)', `<p>P/L = Preço ÷ Lucro por ação dos últimos 12 meses (lucro contábil, Yahoo Finance).</p>
+      <p>Outros sites podem mostrar outro P/L: alguns usam o lucro ajustado da empresa, outros um período de 12 meses que ainda não inclui o último balanço.</p>
       ${tem(d.pl) ? `<code>${f(d.preco)} ÷ ${f(d.lpa)} = ${f(d.pl)}</code>` : `<p>${INDISP}.</p>`}
       ${tem(difPL) ? `<p>Diferença para a média de 12 meses:</p><code>(${f(d.pl)} − ${f(d.plMedio12)}) ÷ ${f(d.plMedio12)} = ${sinal(difPL)}</code>` : ''}
       ${tem(precoPLMedio) ? `<p>Preço que a ação teria hoje se valesse o P/L médio de 12 meses, com o lucro atual:</p><code>P/L médio ${f(d.plMedio12)} × LPA ${f(d.lpa)} = ${din(precoPLMedio)}</code><p>Os dois preços mudam todo dia: o de hoje com a cotação, o do P/L médio com o lucro e a média.</p>` : ''}
-      <p>${d.plMetodo === 'simplificado' ? 'Sem o lucro de cada trimestre no Yahoo, a média de 12 meses é estimada: preço médio do ano ÷ LPA atual.' : 'A média de 12 meses usa o P/L de cada pregão, com o lucro já divulgado em cada data.'}</p>${fonte}`];
+      <p>${d.plMetodo === 'simplificado' ? 'Sem o lucro de cada trimestre na mesma base do LPA atual (o Yahoo pode trazer o trimestral ajustado e o anual contábil), a média de 12 meses é estimada: preço médio do ano ÷ LPA atual. Assim os dois P/L usam o mesmo lucro.' : 'A média de 12 meses usa o P/L de cada pregão, com o lucro já divulgado em cada data.'}</p>${fonte}`];
     FOLHAS['f-dy'] = () => ['Dividendos (DY)', `<p>DY = Dividendo anual por ação ÷ Preço atual.</p>
       ${tem(dy) ? `<code>${f(d.dividendo)} ÷ ${f(d.preco)} = ${f(dy)}%</code>
       <p>Em ${d.moeda} 10.000 investidos:</p><code>10.000 × ${f(d.dividendo)} ÷ ${f(d.preco)} = ${din(10000 * d.dividendo / d.preco)} por ano</code>` : `<p>${INDISP}.</p>`}

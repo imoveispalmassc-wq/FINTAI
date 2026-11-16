@@ -46,6 +46,9 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Se LPA 12 meses < 60% da média de 3 anos: "Lucro atual 40%+ abaixo da média de 3 anos. Estamos usando
   o Graham mais conservador (lucro atual). Se usasse a média, o valor seria otimista." Com LPA 12 meses
   negativo (só resta a média), o aviso diz que a média pode estar otimista.
+- P/L médio de 12 meses só usa o LPA trimestral do Yahoo se a série bater com o LPA de 12 meses em até 10%
+  (senão as bases são diferentes, ex.: ajustado x contábil, e usa preço médio do ano ÷ LPA atual).
+- Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 
 ## Textos

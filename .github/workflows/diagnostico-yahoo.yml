@@ -1,4 +1,4 @@
-name: Diagnóstico Yahoo (temporário)
+name: Diagnóstico Yahoo (só leitura)
 on:
   workflow_dispatch:
     inputs:
