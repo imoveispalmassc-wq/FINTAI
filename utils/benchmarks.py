@@ -52,9 +52,15 @@ def buscar_sgs(codigo: int, inicio: pd.Timestamp, fim: pd.Timestamp) -> pd.Serie
     return pd.Series([float(str(x["valor"]).replace(",", ".")) for x in dados], index=datas)
 
 
+def _mes(t: pd.Timestamp) -> str:
+    return ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"][t.month - 1] + f"/{t.year}"
+
+
 def retornos_brasil(fim: pd.Timestamp, anos=(1, 3, 5)) -> dict[str, list[float | None]]:
-    """Retorno acumulado de cada comparador para cada período. Falha vira None."""
-    saida = {}
+    """Retorno acumulado de cada comparador para cada período. Falha vira None.
+
+    Em "periodos" vai o intervalo usado em cada conta, para conferir com outras fontes."""
+    saida, periodos = {}, {}
     inicio_busca = fim - pd.DateOffset(years=max(anos)) - pd.Timedelta(days=40)
     for nome, (codigo, tipo) in SGS.items():
         try:
@@ -66,6 +72,7 @@ def retornos_brasil(fim: pd.Timestamp, anos=(1, 3, 5)) -> dict[str, list[float |
                 # [início, fim), mesma janela do retorno da ação
                 um = pd.Timedelta(days=1)
                 saida[nome] = [acumular(serie, fim - pd.DateOffset(years=a) - um, fim - um) for a in anos]
+                periodos[nome] = [f"taxas diárias de {fim - pd.DateOffset(years=a):%d/%m/%Y} a {fim - um:%d/%m/%Y}" for a in anos]
                 continue
             if tipo == "mensal":
                 # IPCA sai com 1 mês de atraso e cada taxa tem a data do dia 1º do mês: contar os N meses
@@ -75,6 +82,9 @@ def retornos_brasil(fim: pd.Timestamp, anos=(1, 3, 5)) -> dict[str, list[float |
                 # poupança: taxa datada no início do período de aniversário; só períodos já completos
                 ref = serie.index[serie.index + pd.DateOffset(months=1) <= fim].max()
             saida[nome] = [acumular(serie, ref - pd.DateOffset(years=a), ref) for a in anos]
+            periodos[nome] = [f"{12 * a} meses, de {_mes(ref - pd.DateOffset(years=a) + pd.DateOffset(months=1))} a {_mes(ref)}" for a in anos]
         except Exception:
             saida[nome] = [None for _ in anos]
+            periodos[nome] = [None for _ in anos]
+    saida["periodos"] = periodos
     return saida

@@ -156,16 +156,30 @@ def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]
                 saida.append(None)
         return saida
 
+    def pontos_indice(simbolos):
+        """Valor do índice no início e no fim de cada período, para conferir com outras fontes."""
+        serie, _ = baixar_indice(simbolos)
+        if serie is None or serie.empty:
+            return [None, None, None]
+        serie = serie[serie.index.normalize() <= pd.Timestamp(fim).normalize()]
+        saida = []
+        for anos in (1, 3, 5):
+            base = serie[serie.index <= serie.index[-1] - pd.DateOffset(years=anos)]
+            saida.append(None if base.empty or serie.empty else
+                         f"{base.iloc[-1]:,.2f} em {base.index[-1]:%d/%m/%Y} → {serie.iloc[-1]:,.2f} em {serie.index[-1]:%d/%m/%Y}"
+                         .replace(",", "X").replace(".", ",").replace("X", "."))
+        return saida
+
     br = brasil(f"{fim:%Y-%m-%d}", VERSAO_CALCULO)
     arred = lambda lista: [None if v is None else round(v, 2) for v in lista]
     todos = {
-        "nasdaq": {"nome": "Nasdaq", "curto": "Nasdaq", "artigo": "do índice", "moeda": "US$", "v": do_indice(("^IXIC",))},
-        "sp500": {"nome": "S&P 500", "curto": "S&P", "artigo": "do índice", "moeda": "US$", "v": do_indice(("^SP500TR", "^GSPC"))},
-        "ibov": {"nome": "Ibovespa", "curto": "Ibovespa", "artigo": "do índice", "moeda": "R$", "v": do_indice(("^BVSP",))},
-        "cdi": {"nome": "CDI", "curto": "CDI", "artigo": "do CDI", "moeda": "R$", "v": arred(br["cdi"])},
-        "selic": {"nome": "Selic", "curto": "Selic", "artigo": "da Selic", "moeda": "R$", "v": arred(br["selic"])},
-        "ipca": {"nome": "IPCA", "curto": "IPCA", "artigo": "do IPCA", "moeda": "R$", "v": arred(br["ipca"])},
-        "poupanca": {"nome": "Poupança", "curto": "Poupança", "artigo": "da poupança", "moeda": "R$", "v": arred(br["poupanca"])},
+        "nasdaq": {"nome": "Nasdaq", "curto": "Nasdaq", "artigo": "do índice", "moeda": "US$", "v": do_indice(("^IXIC",)), "conta": pontos_indice(("^IXIC",))},
+        "sp500": {"nome": "S&P 500", "curto": "S&P", "artigo": "do índice", "moeda": "US$", "v": do_indice(("^SP500TR", "^GSPC")), "conta": pontos_indice(("^SP500TR", "^GSPC"))},
+        "ibov": {"nome": "Ibovespa", "curto": "Ibovespa", "artigo": "do índice", "moeda": "R$", "v": do_indice(("^BVSP",)), "conta": pontos_indice(("^BVSP",))},
+        "cdi": {"nome": "CDI", "curto": "CDI", "artigo": "do CDI", "moeda": "R$", "v": arred(br["cdi"]), "conta": br.get("periodos", {}).get("cdi", [None, None, None])},
+        "selic": {"nome": "Selic", "curto": "Selic", "artigo": "da Selic", "moeda": "R$", "v": arred(br["selic"]), "conta": br.get("periodos", {}).get("selic", [None, None, None])},
+        "ipca": {"nome": "IPCA", "curto": "IPCA", "artigo": "do IPCA", "moeda": "R$", "v": arred(br["ipca"]), "conta": br.get("periodos", {}).get("ipca", [None, None, None])},
+        "poupanca": {"nome": "Poupança", "curto": "Poupança", "artigo": "da poupança", "moeda": "R$", "v": arred(br["poupanca"]), "conta": br.get("periodos", {}).get("poupanca", [None, None, None])},
     }
     # sem o S&P 500 com dividendos (^SP500TR), o ^GSPC é só preço: o nome avisa
     if usados.get("^SP500TR") == "^GSPC":
