@@ -212,6 +212,17 @@ def pl_medio_contabil(fechamentos_1a: pd.Series, ttm: pd.Series | None, minimo: 
             "meses": len(pl) / len(f) * 12}
 
 
+def media_no_periodo(fechamentos_1a: pd.Series, ttm: pd.Series | None, minimo: float = 0.5) -> float | None:
+    """Média de uma série de 12 meses (ex.: receita) em vigor nos pregões do último ano, só nos dias cobertos."""
+    if ttm is None or fechamentos_1a is None or fechamentos_1a.empty:
+        return None
+    dias = _sem_fuso(fechamentos_1a.dropna()).index
+    v = ttm.reindex(ttm.index.union(dias)).ffill().reindex(dias).dropna()
+    if len(v) < minimo * len(dias):
+        return None
+    return float(v.mean())
+
+
 def pl_medio_longo(fechamentos: pd.Series, lpa_trimestral: pd.Series | None,
                    lpa_atual: float | None, desdobramentos: pd.Series | None = None,
                    anos: int = 5) -> tuple[float | None, float | None]:

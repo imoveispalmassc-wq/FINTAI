@@ -194,3 +194,16 @@ def test_pl_medio_contabil_usa_o_lucro_de_cada_epoca():
     # P/L entre 20/2,40 = 8,33 e 20/1,93 = 10,36, menor que o simplificado (10,36)
     assert 8.33 < r["pl"] < 10.36 and r["preco_medio"] == 20.0
     assert pl_medio_contabil(pd.Series(20.0, index=dias), s, minimo=0.9) is None
+
+
+def test_receita_media_no_ultimo_ano_com_cada_balanco():
+    import pandas as pd
+    from calculos import lpa_contabil_ttm, media_no_periodo
+    lucro, anual, acoes, datas = _bb_contabil()
+    receita_tri = lucro / acoes * 1e10          # mesma forma, em "receita"
+    receita_anual = anual * 1e10
+    s = lpa_contabil_ttm(receita_tri, receita_anual, 1.0, 1.93e10, datas)
+    dias = pd.bdate_range("2025-11-14", "2026-11-13")
+    m = media_no_periodo(pd.Series(1.0, index=dias), s)
+    assert 1.93e10 < m < 2.40e10
+    assert media_no_periodo(pd.Series(1.0, index=dias), None) is None

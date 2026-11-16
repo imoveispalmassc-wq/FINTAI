@@ -9,7 +9,7 @@ import math
 
 import pandas as pd
 
-from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, lpa_contabil_ttm, pl_medio_12m, pl_medio_contabil,
+from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, lpa_contabil_ttm, media_no_periodo, pl_medio_12m, pl_medio_contabil,
                       graham_duas_versoes, pl_medio_longo, preco_justo_graham, preco_teto_bazin)
 from utils.lynch import crescimento_anual, peg, regra_prejuizo, veredito
 from utils.override import guidance as guidance_oficial
@@ -127,6 +127,20 @@ def fundamentos(d: dict, r: Resultado) -> dict:
     vpa = info.get("bookValue")
 
     balanco = ultimo_balanco(lpa_tri)
+    # receita de 12 meses: hoje (Yahoo), previsão do ano (consenso) e média no último ano (cada balanço)
+    receita = info.get("totalRevenue")
+    receita_media = None
+    try:
+        rec_ttm = lpa_contabil_ttm(d.get("receita_tri"), d.get("receita_anual"), 1.0, receita,
+                                   lpa_tri.index if lpa_tri is not None else None)
+        receita_media = media_no_periodo(r.fechamentos_1a, rec_ttm)
+    except Exception:
+        pass
+    er = d.get("est_receita")
+    receita_prev, analistas_rec = None, None
+    if er is not None and not getattr(er, "empty", True) and "0y" in er.index:
+        receita_prev = _n(er.loc["0y", "avg"]) if "avg" in er.columns else None
+        analistas_rec = _n(er.loc["0y", "numberOfAnalysts"], 0) if "numberOfAnalysts" in er.columns else None
     divida, caixa, ebitda = info.get("totalDebt"), info.get("totalCash"), info.get("ebitda")
     dl_ebitda = (divida - (caixa or 0)) / ebitda if divida is not None and ebitda and ebitda > 0 else None
     return dict(
@@ -139,7 +153,8 @@ def fundamentos(d: dict, r: Resultado) -> dict:
         vpa=vpa, graham=preco_justo_graham(lpa, vpa), bazin=bazin, div_medio5=div_medio5,
         pl_hist=pl_hist, anos_hist=anos_hist,
         justo_pl=pl_hist * lpa if pl_hist and lpa and lpa > 0 else None,
-        dl_ebitda=dl_ebitda, balanco=balanco,
+        dl_ebitda=dl_ebitda, balanco=balanco, receita=receita, receita_media=receita_media,
+        receita_prev=receita_prev, analistas_rec=analistas_rec,
         lucros=d["lucro_tri"] if d["lucro_tri"] is not None else lpa_tri,
     )
 
@@ -350,6 +365,8 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "precoMedio12": _n(f["preco_medio"], 4), "mediaDesde": f["media_desde"], "mediaMeses": f["media_meses"], "plMetodo": f["metodo"],
         "lpa": _n(f["lpa"], 4), "lpaAgora": _n(f["lpa_agora"], 4), "lpa12Atras": _n(f["lpa_antes"], 4),
         "baseLpa": f["base_lpa"], "balanco": f["balanco"],
+        "receita": _n(f["receita"], 0), "receitaMedia": _n(f["receita_media"], 0),
+        "receitaPrev": _n(f["receita_prev"], 0), "analistasReceitaAno": f["analistas_rec"],
         "dividendo": _n(f["div"], 4), "dividendo12Atras": _n(f["div_antes"], 4),
         "dyMedio12": _n(f["dy_medio"], 4), "dividendos5Anos": _n(f["div5"], 4),
         "acoes": _n(f["acoes"], 0), "vpa": _n(f["vpa"], 4),

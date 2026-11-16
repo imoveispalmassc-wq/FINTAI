@@ -87,7 +87,7 @@ def baixar(ticker: str) -> dict:
     if hist is None or hist.empty:
         raise ValueError(f"Não encontrei dados para {ticker}. Confira o código.")
     d = {"hist": hist, "info": {}, "lpa_tri": None, "lucro_tri": None, "lpa_anual": None, "intraday": {},
-         "receita_anual": None, "est_lucro": None, "est_receita": None, "est_cresc": None}
+         "receita_anual": None, "receita_tri": None, "est_lucro": None, "est_receita": None, "est_cresc": None}
 
     def tentar(funcao):
         try:
@@ -100,6 +100,7 @@ def baixar(ticker: str) -> dict:
     d["lucro_tri"] = tentar(lambda: _linha(tk.quarterly_income_stmt, ["Net Income", "Net Income Common Stockholders"]))
     d["lpa_anual"] = tentar(lambda: _linha(tk.income_stmt, ["Basic EPS", "Diluted EPS"]))
     d["receita_anual"] = tentar(lambda: _linha(tk.income_stmt, ["Total Revenue", "Operating Revenue"]))
+    d["receita_tri"] = tentar(lambda: _linha(tk.quarterly_income_stmt, ["Total Revenue", "Operating Revenue"]))
     # estimativas dos analistas (modo Lynch)
     d["est_lucro"] = tentar(lambda: tk.earnings_estimate)
     d["est_receita"] = tentar(lambda: tk.revenue_estimate)

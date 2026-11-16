@@ -550,8 +550,8 @@ function montar(root, d) {
     const linhasPL = prejuizo ? ['A empresa teve prejuízo nos últimos 12 meses, então a relação preço/lucro não se aplica.']
       : !tem(d.pl) ? ['O Yahoo Finance não traz o lucro por ação deste ativo.']
       : [
-        `<b>Contábil</b> (${rotBal}): cotação de hoje ÷ lucro por ação dos últimos 12 meses.`,
-        tem(plPrev) ? `<b>Previsão ${anoPrev || ''}</b>: consenso${tem(Fp.analistas) ? ` de ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance${tem(Fp.baixa) && tem(Fp.alta) ? `, de ${din(Fp.baixa)} a ${din(Fp.alta)}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' (poucos analistas: pouco confiável)' : ''}.`
+        `<b>Contábil</b> (${rotBal}): cotação de hoje ÷ lucro por ação dos últimos 12 meses${tem(d.receita) ? '; receita também de 12 meses' : ''}.`,
+        tem(plPrev) ? `<b>Previsão ${anoPrev || ''}</b>: consenso${tem(Fp.analistas) ? ` de ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance${tem(Fp.baixa) && tem(Fp.alta) ? `, de ${din(Fp.baixa)} a ${din(Fp.alta)}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' (poucos analistas: pouco confiável)' : ''}.${tem(d.receitaPrev) && d.receitaPrev > 0 ? ` Receita: consenso${tem(d.analistasReceitaAno) ? ` de ${f(d.analistasReceitaAno, 0)} ${d.analistasReceitaAno === 1 ? 'analista' : 'analistas'}` : ''}${tem(d.analistasReceitaAno) && d.analistasReceitaAno < 3 ? ' (pouco confiável)' : ''}.` : ''}`
           : `<b>Previsão</b>: sem estimativa no Yahoo.`,
         !tem(difPL) ? '<b>Média 12m</b>: sem histórico para comparar.'
           : `<b>Média 12m</b>: ${d.plMetodo === 'contabil' ? `média do P/L de cada pregão desde ${d.mediaDesde}${tem(d.mediaMeses) && d.mediaMeses < 11.5 ? ` (${f(d.mediaMeses, 0)} meses com balanço no Yahoo)` : ''}, com o lucro contábil em vigor em cada data. O lucro/ação é a média equivalente`
@@ -599,6 +599,8 @@ function montar(root, d) {
           <div class="tab-pl num">
             <span></span><div class="cab"><div>Contábil</div><div class="i">12 meses</div></div><div class="cab"><div>Previsão</div><div class="i">${anoPrev || ''}</div></div><div class="cab"><div>Média 12m</div><div class="i">${d.plMetodo === 'contabil' ? 'cada balanço' : 'último ano'}</div></div>
             <span class="rot">P/L</span><b class="gr">${f(d.pl)}</b><b class="gr">${tem(plPrev) ? f(plPrev) : '—'}</b><b class="gr">${f(d.plMedio12)}</b>
+            ${[d.receita, d.receitaPrev].some(v => tem(v) && v > 0) ? (() => { const ref = Math.max(...[d.receita, d.receitaPrev, d.receitaMedia].filter(v => tem(v) && v > 0)); const [div, un] = ref >= 1e12 ? [1e12, 'tri'] : ref >= 1e9 ? [1e9, 'bi'] : [1e6, 'mi']; const r = v => tem(v) && v > 0 && v / div >= 0.05 ? f(v / div, 1) : '—';
+              return `<span class="rot">Receita<br>${d.moeda} <span class="un">${un}</span></span><b>${r(d.receita)}</b><b>${r(d.receitaPrev)}</b><b>${r(d.receitaMedia)}</b>`; })() : ''}
             <span class="rot">Lucro/ação<br>${d.moeda}</span><b>${f(d.lpa)}</b><b>${tem(lpaPrev) ? f(lpaPrev) : 'Sem dado'}</b><b>${tem(lpaMedioImpl) ? f(lpaMedioImpl) : '—'}</b>
             <span class="rot">Cotação<br>${d.moeda}</span><b>${f(d.preco)}</b><b>${tem(plPrev) ? f(d.preco) : '—'}</b><b>${tem(d.precoMedio12) ? f(d.precoMedio12) : '—'}</b>
           </div>
