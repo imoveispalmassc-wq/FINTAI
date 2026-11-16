@@ -258,6 +258,7 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .marca-cima.limites span { color: var(--texto); font-size: 12px; font-weight: 600; }
 .marca-cima.limites span.esq, .marca-cima.limites span.dir { color: var(--suave); font-weight: 500; }
 .regua .traco { background: var(--texto); }
+.vals small { display: block; color: var(--suave); font-size: 11px; font-weight: 500; margin-top: 3px; line-height: 1.3; }
 
 /* ---- página avulsa (fora do Streamlit) ---- */
 html { background: var(--bg); }
@@ -834,6 +835,8 @@ function montar(root, d) {
 
     // 1. P/L
     const difPL = tem(d.pl) && tem(d.plMedio12) && d.plMedio12 > 0 ? (d.pl / d.plMedio12 - 1) * 100 : null;
+    // preço que a ação teria hoje se o mercado pagasse o P/L médio dos últimos 12 meses pelo lucro atual
+    const precoPLMedio = tem(d.plMedio12) && tem(d.lpa) && d.lpa > 0 ? d.plMedio12 * d.lpa : null;
     const prejuizo = tem(d.lpa) && d.lpa <= 0;
     const [cPL, tPL] = prejuizo ? ['neutro', 'Sem lucro em 12 meses'] : tem(difPL) ? selo(difPL, true) : semDado;
     const frasePL = prejuizo ? 'A empresa teve prejuízo nos últimos 12 meses, então a relação preço/lucro não se aplica.'
@@ -874,7 +877,7 @@ function montar(root, d) {
       <details class="acord" open><summary>Fundamentos: os 3 critérios, um a um</summary><div class="dentro">
         <div class="card crit">
           <div class="topo-c"><span class="nome">Preço vs Lucro (P/L)</span><span class="st ${cPL}">${tPL}</span></div>
-          <div class="vals num"><div><span>Atual</span><b>${f(d.pl)}</b></div><div><span>Média 12m</span><b>${f(d.plMedio12)}</b></div><div><span>Diferença</span><b style="color:${tem(difPL) ? (difPL < 0 ? 'var(--verde)' : 'var(--vermelho)') : 'inherit'}">${sinal(difPL)}</b></div></div>
+          <div class="vals num"><div><span>Atual</span><b>${f(d.pl)}</b>${tem(d.pl) ? `<small>Preço ${din(d.preco)}</small>` : ''}</div><div><span>Média 12m</span><b>${f(d.plMedio12)}</b>${tem(precoPLMedio) ? `<small>Preço a P/L ${f(d.plMedio12)}: ${din(precoPLMedio)}</small>` : ''}</div><div><span>Diferença</span><b style="color:${tem(difPL) ? (difPL < 0 ? 'var(--verde)' : 'var(--vermelho)') : 'inherit'}">${sinal(difPL)}</b></div></div>
           <p>${frasePL}</p>
           <button class="link" data-folha="f-pl">Ver como calculamos</button>
         </div>
@@ -901,6 +904,7 @@ function montar(root, d) {
     FOLHAS['f-pl'] = () => ['Preço vs Lucro (P/L)', `<p>P/L = Preço ÷ Lucro por ação.</p>
       ${tem(d.pl) ? `<code>${f(d.preco)} ÷ ${f(d.lpa)} = ${f(d.pl)}</code>` : `<p>${INDISP}.</p>`}
       ${tem(difPL) ? `<p>Diferença para a média de 12 meses:</p><code>(${f(d.pl)} − ${f(d.plMedio12)}) ÷ ${f(d.plMedio12)} = ${sinal(difPL)}</code>` : ''}
+      ${tem(precoPLMedio) ? `<p>Preço que a ação teria hoje se valesse o P/L médio de 12 meses, com o lucro atual:</p><code>P/L médio ${f(d.plMedio12)} × LPA ${f(d.lpa)} = ${din(precoPLMedio)}</code><p>Os dois preços mudam todo dia: o de hoje com a cotação, o do P/L médio com o lucro e a média.</p>` : ''}
       <p>${d.plMetodo === 'simplificado' ? 'Sem o lucro de cada trimestre no Yahoo, a média de 12 meses é estimada: preço médio do ano ÷ LPA atual.' : 'A média de 12 meses usa o P/L de cada pregão, com o lucro já divulgado em cada data.'}</p>${fonte}`];
     FOLHAS['f-dy'] = () => ['Dividendos (DY)', `<p>DY = Dividendo anual por ação ÷ Preço atual.</p>
       ${tem(dy) ? `<code>${f(d.dividendo)} ÷ ${f(d.preco)} = ${f(dy)}%</code>
@@ -961,10 +965,15 @@ function montar(root, d) {
         <div class="card">
           <span class="rot">Faixa justa estimada</span>
           <div class="num" style="font-size:22px;font-weight:700;margin-top:4px">${d.moeda} ${t0(piso)} a ${d.moeda} ${t0(teto)}</div>
-          <div class="regua" style="background:var(--ardosia);margin-top:22px">
+          <div class="marca-cima num" style="margin-top:16px">
+            <span style="${ancora(pos(piso))};color:var(--suave)">${m[0][0]}<b>${t0(piso)}</b></span>
+            <span style="${ancora(pos(teto))};color:var(--suave)">${m[m.length - 1][0]}<b>${t0(teto)}</b></span>
+          </div>
+          <div class="regua" style="background:var(--ardosia);margin-top:6px">
             ${m.map(x => `<span class="traco" style="left:${pos(x[1])}%"></span>`).join('')}<span class="bola" style="left:${pos(d.preco)}%"></span>
           </div>
-          <div class="leg num">${m.map(x => `<span style="--c:var(--texto)">${x[0]} ${t0(x[1])}</span>`).join('')}<span style="--c:var(--azul)">Preço ${t0(d.preco)}</span></div>
+          <div class="marca-baixo num"><span style="${ancora(pos(d.preco))}">Hoje<b>${f(d.preco)}</b></span></div>
+          ${m.length > 2 ? `<div class="nota">Traços do meio: ${m.slice(1, -1).map(x => `${x[0]} ${t0(x[1])}`).join(', ')}.</div>` : ''}
           <p class="nota" style="margin:12px 0 10px">${m.map(x => `Pelo ${x[0]}, o justo seria ${d.moeda} ${t0(x[1])}.`).join(' ')} O preço atual de ${d.moeda} ${t0(d.preco)} ${onde}.</p>
           ${linhaGraham}
           <button class="link" data-folha="justo">Ver como calculamos</button>

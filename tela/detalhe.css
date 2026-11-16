@@ -246,3 +246,4 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .marca-cima.limites span { color: var(--texto); font-size: 12px; font-weight: 600; }
 .marca-cima.limites span.esq, .marca-cima.limites span.dir { color: var(--suave); font-weight: 500; }
 .regua .traco { background: var(--texto); }
+.vals small { display: block; color: var(--suave); font-size: 11px; font-weight: 500; margin-top: 3px; line-height: 1.3; }
