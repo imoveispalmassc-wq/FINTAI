@@ -780,16 +780,19 @@ function montar(root, d) {
     const bloco = (id, titulo, min, max, periodo) => {
       if (!tem(min) || !tem(max)) return `<div class="card"><strong>${titulo}</strong><div class="nota" style="margin-top:6px">${INDISP}</div></div>`;
       const meio = (min + max) / 2, dif = d.preco - meio, p = posicao(d.preco, min, max);
+      const difPct = meio ? dif / meio * 100 : 0;   // % sobre o ponto médio
       FOLHAS[id] = () => [`Ponto médio · ${titulo.toLowerCase()}`, `
         <p>O ponto médio é a metade do caminho entre a mínima e a máxima reais do período.</p>
         <code>(${f(min)} + ${f(max)}) ÷ 2 = ${f(meio)}</code>
-        <p>Preço agora: <b>${din(d.preco)}</b>, ou <b>${din(Math.abs(dif))} ${dif >= 0 ? 'acima' : 'abaixo'}</b> do ponto médio.</p>${fonte}`];
+        <p>Preço agora: <b>${din(d.preco)}</b>, ou <b>${din(Math.abs(dif))} ${dif >= 0 ? 'acima' : 'abaixo'}</b> do ponto médio.</p>
+        <p>Em porcentagem, sobre o ponto médio:</p>
+        <code>(${f(d.preco)} − ${f(meio)}) ÷ ${f(meio)} = ${sinal(difPct, 1)}</code>${fonte}`];
       return `<div class="card">
         <div class="cab"><strong>${titulo}</strong><button class="link" data-folha="${id}">Ver como calculamos</button></div>
         <div class="marca-cima num"><span class="esq">Mín.<b>${f(min)}</b></span><span style="left:50%">Ponto médio<b>${f(meio)}</b></span><span class="dir">Máx.<b>${f(max)}</b></span></div>
         <div class="regua" style="background:var(--ardosia);margin-top:6px"><span class="traco" style="left:50%"></span><span class="bola" style="left:${p}%"></span></div>
         <div class="marca-baixo num"><span style="${ancora(p)}">Agora<b>${f(d.preco)}</b></span></div>
-        <div class="destaque num">Você está ${din(Math.abs(dif))} ${dif >= 0 ? 'acima' : 'abaixo'} do ponto médio</div>
+        <div class="destaque num">Você está ${din(Math.abs(dif))} (${f(Math.abs(difPct), 1)}%) ${dif >= 0 ? 'acima' : 'abaixo'} do ponto médio</div>
         <div class="nota">Preço na metade mais ${dif >= 0 ? 'cara' : 'barata'} do range de ${periodo}</div>
       </div>`;
     };
