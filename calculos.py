@@ -238,6 +238,30 @@ def preco_teto_bazin(dividendos: pd.Series | None, inicio_hist: pd.Timestamp,
     return media / taxa, media
 
 
+def graham_duas_versoes(lpa_ttm: float | None, lpa_media_3a: float | None,
+                        vpa: float | None) -> dict:
+    """Graham com o lucro dos últimos 12 meses e com o lucro médio de 3 anos.
+
+    Graham_atual = √(22,5 × LPA_TTM × VPA)        (não existe se LPA_TTM <= 0)
+    Graham_media = √(22,5 × LPA_medio_3a × VPA)   (não existe sem média; regra de prejuízo)
+    Graham_usado = o MENOR dos dois; se só um existir, esse.
+    Aviso quando LPA_TTM < 60% da média de 3 anos: o valor pode estar otimista.
+    """
+    atual = preco_justo_graham(lpa_ttm, vpa)
+    media = preco_justo_graham(lpa_media_3a, vpa)
+    if atual is not None and media is not None:
+        usado, base = (atual, "atual") if atual <= media else (media, "media")
+    elif atual is not None:
+        usado, base = atual, "atual"
+    elif media is not None:
+        usado, base = media, "media"
+    else:
+        usado, base = None, None
+    aviso = (lpa_ttm is not None and lpa_media_3a is not None and lpa_media_3a > 0
+             and lpa_ttm < lpa_media_3a * 0.60)
+    return {"atual": atual, "media": media, "usado": usado, "base": base, "aviso": bool(aviso)}
+
+
 def preco_justo_graham(lpa: float | None, vpa: float | None) -> float | None:
     """Graham: raiz de (22,5 × LPA × VPA). Só vale com lucro e patrimônio positivos."""
     if lpa and vpa and lpa > 0 and vpa > 0:

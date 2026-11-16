@@ -84,3 +84,37 @@ def test_faixa_de_5_anos_com_historico_curto_diz_quanto_cobre():
     fx = faixas_por_periodo(h, float(h["Close"].iloc[-1]), compra_validada_52=False, quebrou=False,
                             motivo="", simbolo="R$", tendencia="Alta")
     assert fx["5a"]["rotulo"].startswith("Últimos 2,") and "histórico disponível" in fx["5a"]["rotulo"]
+
+
+# ------------------------------------------------------------ Graham em duas versões
+from calculos import graham_duas_versoes
+
+
+def test_graham_usa_o_menor_dos_dois():
+    g = graham_duas_versoes(74.33, 27.91, 122.35)          # lucro atual acima da média
+    assert g["atual"] == pytest.approx(452.35, abs=0.01)
+    assert g["media"] == pytest.approx(277.19, abs=0.01)
+    assert g["usado"] == g["media"] and g["base"] == "media" and not g["aviso"]
+
+
+def test_graham_com_lucro_caindo_usa_o_atual_e_avisa():
+    g = graham_duas_versoes(2.40, 4.08, 30.0)
+    assert g["base"] == "atual" and g["usado"] == g["atual"]
+    assert g["aviso"]                                        # 2,40 < 60% de 4,08 (2,448)
+
+
+def test_graham_sem_lucro_atual_usa_so_a_media():
+    g = graham_duas_versoes(-1.0, 4.08, 30.0)
+    assert g["atual"] is None and g["base"] == "media" and g["usado"] == g["media"]
+
+
+def test_graham_sem_media_usa_so_o_atual_e_sem_nada_nao_calcula():
+    g = graham_duas_versoes(2.40, None, 30.0)
+    assert g["media"] is None and g["base"] == "atual" and not g["aviso"]
+    vazio = graham_duas_versoes(None, None, 30.0)
+    assert vazio["usado"] is None and vazio["base"] is None
+
+
+def test_aviso_no_limite_de_60_por_cento():
+    assert not graham_duas_versoes(6.0, 10.0, 30.0)["aviso"]
+    assert graham_duas_versoes(5.99, 10.0, 30.0)["aviso"]

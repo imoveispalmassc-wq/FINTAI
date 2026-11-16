@@ -10,7 +10,7 @@ import math
 import pandas as pd
 
 from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, pl_medio_12m,
-                      pl_medio_longo, preco_justo_graham, preco_teto_bazin)
+                      graham_duas_versoes, pl_medio_longo, preco_justo_graham, preco_teto_bazin)
 from utils.lynch import crescimento_anual, peg, regra_prejuizo, veredito
 from utils.percentile import percentil_na_faixa, zonas
 from utils.signals import (backtest_percentil, decidir_estado, fundamento_quebrou,
@@ -264,6 +264,8 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
     direcao = "—" if r.mm200 is None else ("Alta" if r.preco_atual > r.mm200 else "Baixa")
     lpa_anos = _pontos_anuais(d.get("lpa_anual"))[-3:]
     regra = regra_prejuizo([v for _, v in lpa_anos])
+    lpa_media_3a = regra["media"] if regra["status"] in ("ok", "excluido") else None
+    graham = graham_duas_versoes(f["lpa"], lpa_media_3a, f["vpa"])
     estado = decidir_estado(
         r.percentil, r.minimo_1a, r.maximo_1a,
         compra_validada=bool(bt5 and bt5["compraValidada"]),
@@ -308,7 +310,10 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "dyMedio12": _n(f["dy_medio"], 4), "dividendos5Anos": _n(f["div5"], 4),
         "acoes": _n(f["acoes"], 0), "vpa": _n(f["vpa"], 4),
         "plHistorico": _n(f["pl_hist"], 4), "plHistAnos": _n(f["anos_hist"], 1),
-        "graham": _n(f["graham"], 4), "justoPL": _n(f["justo_pl"], 4),
+        "graham": _n(graham["usado"], 4), "grahamAtual": _n(graham["atual"], 4),
+        "grahamMedia": _n(graham["media"], 4), "grahamBase": graham["base"], "grahamAviso": graham["aviso"],
+        "lpaMedio3a": _n(lpa_media_3a, 4),
+        "justoPL": _n(f["justo_pl"], 4),
         "bazin": _n(f["bazin"], 4), "divMedio5": _n(f["div_medio5"], 4),
         "retorno": {"periodos": ROTULO_PERIODOS,
                     "total": [_n(x, 2) for x in (r.retorno_1a, r.retorno_3a, r.retorno_5a)],

@@ -607,8 +607,14 @@ function montar(root, d) {
   /* ---------------- preço justo */
   (function FairPrice(el) {
     const m = metodosJusto, t0 = v => f(Math.round(v), 0);
+    const linhaGraham = !tem(d.graham) ? '' : `<div class="nota num" style="margin:-4px 0 10px">Graham usa o menor de dois valores: ${tem(d.grahamAtual) ? `lucro de 12 meses ${din(d.grahamAtual)}` : 'lucro de 12 meses não se aplica'} · ${tem(d.grahamMedia) ? `média de 3 anos ${din(d.grahamMedia)}` : 'média de 3 anos não se aplica'}.</div>
+          ${d.grahamAviso ? '<div class="aviso" style="margin:0 0 10px">Lucro atual 40%+ abaixo da média de 3 anos: o valor de Graham pode estar otimista.</div>' : ''}`;
     const formulas = () => `
-      ${tem(d.graham) ? `<p><b>Graham</b></p><code>√(22,5 × LPA ${f(d.lpa)} × VPA ${f(d.vpa)}) = ${f(d.graham)}</code>` : '<p><b>Graham:</b> não se aplica (exige lucro e patrimônio positivos).</p>'}
+      <p><b>Graham</b>: calculado com dois lucros por ação; vale o <b>menor</b> valor.</p>
+      ${tem(d.grahamAtual) ? `<code>Atual: √(22,5 × LPA 12 meses ${f(d.lpa)} × VPA ${f(d.vpa)}) = ${f(d.grahamAtual)}</code>` : `<p>Atual: não se aplica (${tem(d.lpa) && d.lpa <= 0 ? 'lucro dos últimos 12 meses negativo' : 'sem lucro ou patrimônio no Yahoo'}).</p>`}
+      ${tem(d.grahamMedia) ? `<code>Média 3 anos: √(22,5 × LPA médio ${f(d.lpaMedio3a)} × VPA ${f(d.vpa)}) = ${f(d.grahamMedia)}</code>` : `<p>Média 3 anos: não se aplica (${d.regra && d.regra.status === 'recorrente' ? 'prejuízo em 2 ou mais dos últimos 3 anos' : 'sem lucro anual no Yahoo'}).</p>`}
+      ${tem(d.graham) ? `<p>Usado: <b>${din(d.graham)}</b> (${d.grahamBase === 'media' ? 'média de 3 anos' : 'lucro dos últimos 12 meses'}).</p>` : '<p>Graham não se aplica a este ativo.</p>'}
+      ${d.grahamAviso ? '<p>Lucro atual 40%+ abaixo da média de 3 anos: o valor de Graham pode estar otimista.</p>' : ''}
       ${tem(d.justoPL) ? `<p><b>P/L histórico</b></p><code>P/L médio de ${f(d.plHistAnos, 1)} anos ${f(d.plHistorico)} × LPA ${f(d.lpa)} = ${f(d.justoPL)}</code>` : '<p><b>P/L histórico:</b> sem histórico de lucros suficiente no Yahoo Finance.</p>'}
       ${tem(d.bazin) ? `<p><b>Preço-teto Bazin</b></p><code>Dividendo médio 5 anos ${f(d.divMedio5)} / 6% = ${f(d.bazin)}</code>
         <p>O ${din(d.divMedio5)} é a média de até 5 anos, não o dividendo anual (${din(d.dividendo)}).</p>` : ''}
@@ -648,6 +654,7 @@ function montar(root, d) {
           </div>
           <div class="leg num">${m.map(x => `<span style="--c:var(--texto)">${x[0]} ${t0(x[1])}</span>`).join('')}<span style="--c:var(--azul)">Preço ${t0(d.preco)}</span></div>
           <p class="nota" style="margin:12px 0 10px">${m.map(x => `Pelo ${x[0]}, o justo seria ${d.moeda} ${t0(x[1])}.`).join(' ')} O preço atual de ${d.moeda} ${t0(d.preco)} ${onde}.</p>
+          ${linhaGraham}
           <button class="link" data-folha="justo">Ver como calculamos</button>
         </div>
         <div class="card">

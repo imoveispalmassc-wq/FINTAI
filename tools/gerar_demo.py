@@ -18,6 +18,7 @@ RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ))
 
 from tela.dados import faixas_por_periodo, modo_simons, series_do_grafico  # noqa: E402
+from calculos import graham_duas_versoes  # noqa: E402
 from utils.lynch import crescimento_anual, peg, regra_prejuizo, veredito  # noqa: E402
 from utils.percentile import percentil_na_faixa, zonas  # noqa: E402
 from utils.signals import decidir_estado  # noqa: E402
@@ -120,6 +121,7 @@ def pacote() -> dict:
     lpa_anos: list[tuple[int, float]] = [(2024, 0.70), (2025, 7.65), (2026, 75.38)]   # do app real, 15/11/2026
     receitas: list[tuple[int, float]] = []
     regra = regra_prejuizo([v for _, v in lpa_anos])
+    graham = graham_duas_versoes(LPA, regra["media"] if regra["status"] in ("ok", "excluido") else None, 122.35)
     lucro_pass, anos_lucro = crescimento_anual(lpa_anos)
     rec_pass, anos_rec = crescimento_anual(receitas)
     # Estimativas do Yahoo: valores de EXEMPLO, marcados na tela, até entrarem os reais
@@ -159,7 +161,9 @@ def pacote() -> dict:
         "lpa": LPA, "lpaAgora": LPA, "lpa12Atras": 8.29, "baseLpa": "últimos 4 trimestres",
         "dividendo": DIVIDENDO, "dividendo12Atras": 0.46, "dyMedio12": 0.0949, "dividendos5Anos": 2.50,
         "acoes": 1.13e9, "vpa": 122.35, "plHistorico": 22.34, "plHistAnos": 5.0,
-        "graham": 452.35, "justoPL": 1660.53, "bazin": 8.33, "divMedio5": 0.50,
+        "graham": arred(graham["usado"], 4), "grahamAtual": arred(graham["atual"], 4),
+        "grahamMedia": arred(graham["media"], 4), "grahamBase": graham["base"], "grahamAviso": graham["aviso"],
+        "lpaMedio3a": arred(regra["media"], 4), "justoPL": 1660.53, "bazin": 8.33, "divMedio5": 0.50,
         "retorno": {"periodos": ["1 ano", "3 anos", "5 anos"], "total": [228.8, 951, 931],
                     "preco": [228.47, 950.7, 930.3]},
         "preco1AnoAtras": um_ano["c"][0], "data1AnoAtras": "13/11/2025",
