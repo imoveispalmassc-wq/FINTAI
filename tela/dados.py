@@ -9,7 +9,7 @@ import math
 
 import pandas as pd
 
-from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, pl_medio_12m,
+from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, lpa_contabil_ttm, pl_medio_12m, pl_medio_contabil,
                       graham_duas_versoes, pl_medio_longo, preco_justo_graham, preco_teto_bazin)
 from utils.lynch import crescimento_anual, peg, regra_prejuizo, veredito
 from utils.override import guidance as guidance_oficial
@@ -98,6 +98,22 @@ def fundamentos(d: dict, r: Resultado) -> dict:
     pl = preco / lpa if lpa and lpa > 0 else None       # sempre preço ÷ LPA, para as contas baterem
     splits = hist["Stock Splits"] if "Stock Splits" in hist else None
     pl_medio, metodo = pl_medio_12m(r.fechamentos_1a, lpa_tri, lpa, splits)
+    preco_medio = float(r.fechamentos_1a.mean()) if len(r.fechamentos_1a) else None
+    media_desde, media_meses = None, None
+    if metodo == "simplificado":
+        # série trimestral em outra base: tenta o lucro contábil de cada balanço (demonstrativos do Yahoo)
+        acoes_ = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding")
+        tem_split = splits is not None and (splits[splits.index > hist.index[-1] - pd.DateOffset(years=2)] != 0).any()
+        if not tem_split:
+            try:
+                ttm = lpa_contabil_ttm(d["lucro_tri"], d["lpa_anual"], acoes_, lpa,
+                                       lpa_tri.index if lpa_tri is not None else None)
+                pc = pl_medio_contabil(r.fechamentos_1a, ttm)
+            except Exception:
+                pc = None
+            if pc:
+                pl_medio, metodo, preco_medio = pc["pl"], "contabil", pc["preco_medio"]
+                media_desde, media_meses = f"{pc['desde']:%d/%m/%Y}", round(pc["meses"], 1)
     pl_hist, anos_hist = pl_medio_longo(hist["Close"], lpa_tri, lpa, splits)
     lpa_agora, lpa_antes, base_lpa = crescimento_lpa(lpa_tri, d["lpa_anual"])
 
@@ -114,7 +130,8 @@ def fundamentos(d: dict, r: Resultado) -> dict:
     divida, caixa, ebitda = info.get("totalDebt"), info.get("totalCash"), info.get("ebitda")
     dl_ebitda = (divida - (caixa or 0)) / ebitda if divida is not None and ebitda and ebitda > 0 else None
     return dict(
-        pl=pl, pl_medio=pl_medio, metodo=metodo, lpa=lpa,
+        pl=pl, pl_medio=pl_medio, metodo=metodo, lpa=lpa, preco_medio=preco_medio,
+        media_desde=media_desde, media_meses=media_meses,
         lpa_agora=lpa_agora, lpa_antes=lpa_antes, base_lpa=base_lpa,
         div=div12, div_antes=div12_antes, dy=dy, dy_medio=dy_medio,
         div5=soma(5, 0) if cobre_5 else None,
@@ -330,7 +347,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "lynch": lynch,
         "guidance": guia, "consensoAno": consenso_ano,
         "simons": modo_simons(hist),
-        "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "precoMedio12": _n(float(r.fechamentos_1a.mean()), 4) if len(r.fechamentos_1a) else None, "plMetodo": f["metodo"],
+        "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "precoMedio12": _n(f["preco_medio"], 4), "mediaDesde": f["media_desde"], "mediaMeses": f["media_meses"], "plMetodo": f["metodo"],
         "lpa": _n(f["lpa"], 4), "lpaAgora": _n(f["lpa_agora"], 4), "lpa12Atras": _n(f["lpa_antes"], 4),
         "baseLpa": f["base_lpa"], "balanco": f["balanco"],
         "dividendo": _n(f["div"], 4), "dividendo12Atras": _n(f["div_antes"], 4),

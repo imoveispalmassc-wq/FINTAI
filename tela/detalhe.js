@@ -554,7 +554,8 @@ function montar(root, d) {
         tem(plPrev) ? `<b>Previsão ${anoPrev || ''}</b>: consenso${tem(Fp.analistas) ? ` de ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance${tem(Fp.baixa) && tem(Fp.alta) ? `, de ${din(Fp.baixa)} a ${din(Fp.alta)}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' (poucos analistas: pouco confiável)' : ''}.`
           : `<b>Previsão</b>: sem estimativa no Yahoo.`,
         !tem(difPL) ? '<b>Média 12m</b>: sem histórico para comparar.'
-          : `<b>Média 12m</b>: ${d.plMetodo === 'simplificado' ? 'preço médio do último ano ÷ o mesmo lucro contábil' : 'média do P/L de cada pregão, com o lucro de cada balanço'}. O P/L contábil está ${sinal(difPL, 1)} contra a média: ${difPL < -5 ? 'mais barata que no último ano' : difPL > 5 ? 'mais cara que no último ano' : 'perto da média'}.`];
+          : `<b>Média 12m</b>: ${d.plMetodo === 'contabil' ? `média do P/L de cada pregão desde ${d.mediaDesde}${tem(d.mediaMeses) && d.mediaMeses < 11.5 ? ` (${f(d.mediaMeses, 0)} meses com balanço no Yahoo)` : ''}, com o lucro contábil em vigor em cada data. O lucro/ação é a média equivalente`
+            : d.plMetodo === 'simplificado' ? 'preço médio do último ano ÷ o mesmo lucro contábil (o Yahoo não traz o lucro de cada balanço)' : 'média do P/L de cada pregão, com o lucro de cada balanço'}. O P/L contábil está ${sinal(difPL, 1)} contra a média: ${difPL < -5 ? 'mais barata que no último ano' : difPL > 5 ? 'mais cara que no último ano' : 'perto da média'}.`];
     const frasePL = linhasPL.join('<br>');
     const lpaGuia = G0 && tem(G0.lpa) && G0.lpa > 0 ? G0.lpa : null;
     const notaAjustado = [
@@ -596,10 +597,10 @@ function montar(root, d) {
         <div class="card crit">
           <div class="topo-c"><span class="nome">Preço vs Lucro (P/L)</span><span class="st ${cPL}">${tPL}</span></div>
           <div class="tab-pl num">
-            <span></span><div class="cab"><div>Contábil</div><div class="i">12 meses</div></div><div class="cab"><div>Previsão</div><div class="i">${anoPrev || ''}</div></div><div class="cab"><div>Média 12m</div><div class="i">último ano</div></div>
-            <span class="rot">Cotação<br>${d.moeda}</span><b>${f(d.preco)}</b><b>${tem(plPrev) ? f(d.preco) : '—'}</b><b>${tem(d.precoMedio12) ? f(d.precoMedio12) : '—'}</b>
+            <span></span><div class="cab"><div>Contábil</div><div class="i">12 meses</div></div><div class="cab"><div>Previsão</div><div class="i">${anoPrev || ''}</div></div><div class="cab"><div>Média 12m</div><div class="i">${d.plMetodo === 'contabil' ? 'cada balanço' : 'último ano'}</div></div>
             <span class="rot">P/L</span><b class="gr">${f(d.pl)}</b><b class="gr">${tem(plPrev) ? f(plPrev) : '—'}</b><b class="gr">${f(d.plMedio12)}</b>
             <span class="rot">Lucro/ação<br>${d.moeda}</span><b>${f(d.lpa)}</b><b>${tem(lpaPrev) ? f(lpaPrev) : 'Sem dado'}</b><b>${tem(lpaMedioImpl) ? f(lpaMedioImpl) : '—'}</b>
+            <span class="rot">Cotação<br>${d.moeda}</span><b>${f(d.preco)}</b><b>${tem(plPrev) ? f(d.preco) : '—'}</b><b>${tem(d.precoMedio12) ? f(d.precoMedio12) : '—'}</b>
           </div>
           <p class="linhas-pl">${frasePL}</p>${notaAjustado ? `<div class="nota" style="margin:-4px 0 8px">${notaAjustado}</div>` : ''}
           <button class="link" data-folha="f-pl">Ver como calculamos</button>
@@ -632,7 +633,7 @@ function montar(root, d) {
       ${tem(plAjustado) ? `<p>P/L pelo lucro ajustado (soma dos 4 últimos trimestres do Yahoo):</p><code>${f(d.preco)} ÷ ${f(lpaAjustado)} = ${f(plAjustado)}</code><p>Fica só como referência: o selo e a diferença usam o contábil, na mesma base da média de 12 meses.</p>` : ''}
       ${tem(difPL) ? `<p>Diferença para a média de 12 meses:</p><code>(${f(d.pl)} − ${f(d.plMedio12)}) ÷ ${f(d.plMedio12)} = ${sinal(difPL)}</code>` : ''}
       ${tem(precoPLMedio) ? `<p>Preço que a ação teria hoje se valesse o P/L médio de 12 meses, com o lucro atual:</p><code>P/L médio ${f(d.plMedio12)} × LPA ${f(d.lpa)} = ${din(precoPLMedio)}</code><p>Os dois preços mudam todo dia: o de hoje com a cotação, o do P/L médio com o lucro e a média.</p>` : ''}
-      <p>${d.plMetodo === 'simplificado' ? 'Sem o lucro de cada trimestre na mesma base do LPA atual (o Yahoo pode trazer o trimestral ajustado e o anual contábil), a média de 12 meses é estimada: preço médio do ano ÷ LPA atual. Assim os dois P/L usam o mesmo lucro.' : 'A média de 12 meses usa o P/L de cada pregão, com o lucro já divulgado em cada data.'}</p>${fonte}`];
+      <p>${d.plMetodo === 'contabil' ? `A média de 12 meses usa o lucro contábil de 12 meses em vigor em cada pregão, montado com os balanços trimestrais e anuais do Yahoo (lucro líquido ÷ ações; o trimestre mais recente sai do LPA de 12 meses). Período coberto: desde ${d.mediaDesde}.` : d.plMetodo === 'simplificado' ? 'Sem o lucro de cada trimestre na mesma base do LPA atual (o Yahoo pode trazer o trimestral ajustado e o anual contábil), a média de 12 meses é estimada: preço médio do ano ÷ LPA atual. Assim os dois P/L usam o mesmo lucro.' : 'A média de 12 meses usa o P/L de cada pregão, com o lucro já divulgado em cada data.'}</p>${fonte}`];
     FOLHAS['f-dy'] = () => ['Dividendos (DY)', `<p>DY = Dividendo anual por ação ÷ Preço atual.</p>
       ${tem(dy) ? `<code>${f(d.dividendo)} ÷ ${f(d.preco)} = ${f(dy)}%</code>
       <p>Em ${d.moeda} 10.000 investidos:</p><code>10.000 × ${f(d.dividendo)} ÷ ${f(d.preco)} = ${din(10000 * d.dividendo / d.preco)} por ano</code>` : `<p>${INDISP}.</p>`}
@@ -719,11 +720,11 @@ function montar(root, d) {
   (function Indicators(el) {
     const difPL = tem(d.pl) && tem(d.plMedio12) && d.plMedio12 > 0 ? (d.pl / d.plMedio12 - 1) * 100 : null;
     const q = qtd(d.acoes), por10k = tem(dy) ? din(10000 * d.dividendo / d.preco) : null;
-    const medioSub = { trimestral: 'com o LPA de cada trimestre', simplificado: 'preço médio do ano ÷ LPA atual' }[d.plMetodo] || '';
+    const medioSub = { trimestral: 'com o LPA de cada trimestre', contabil: 'com o lucro contábil de cada balanço', simplificado: 'preço médio do ano ÷ LPA atual' }[d.plMetodo] || '';
     const c = (rot, v, sub, dica) => [rot, v, sub, dica];
     const cartoes = [
       c('P/L atual', tem(d.pl) ? f(d.pl) : null, tem(difPL) ? `${sinal(difPL)} vs. média de 12m` : '', `Você paga ${din(d.pl)} para cada ${d.moeda} 1 de lucro. Conta: ${f(d.preco)} / ${f(d.lpa)} = ${f(d.pl)}`),
-      c('P/L médio 12 meses', tem(d.plMedio12) ? f(d.plMedio12) : null, medioSub, d.plMetodo === 'simplificado' ? 'Estimativa: preço médio do ano dividido pelo LPA atual, porque o Yahoo não traz o lucro de cada trimestre.' : 'Média do P/L de cada pregão do último ano, com o lucro já divulgado em cada data.'),
+      c('P/L médio 12 meses', tem(d.plMedio12) ? f(d.plMedio12) : null, medioSub, d.plMetodo === 'simplificado' ? 'Estimativa: preço médio do ano dividido pelo LPA atual, porque o Yahoo não traz o lucro de cada trimestre.' : d.plMetodo === 'contabil' ? `Média do P/L de cada pregão desde ${d.mediaDesde}, com o lucro contábil em vigor em cada data.` : 'Média do P/L de cada pregão do último ano, com o lucro já divulgado em cada data.'),
       c('LPA básico', tem(d.lpa) ? din(d.lpa) : null, 'últimos 12 meses', `Lucro por ação. Cada ação ganhou ${din(d.lpa)} em 12 meses.${q ? ` Conta: Lucro / ${q} de ações` : ''}`),
       c('Dividendo anual', tem(d.dividendo) ? din(d.dividendo) : null, 'pago em 12 meses', `O que pingou na sua conta por ação em 12 meses.${por10k ? ` Se investir ${d.moeda} 10.000, recebe ${por10k} / ano.` : ''}`),
       c('Dividend yield', tem(dy) ? `${f(dy)}%` : null, tem(dy) ? `${f(d.dividendo)} / ${f(d.preco)}` : '', `Quanto o dividendo representa sobre o preço. ${f(d.dividendo)} / ${f(d.preco)} = ${f(dy)}%.${naoPagadora ? ` É baixo porque a ${d.ticker} reinveste o lucro, não porque está com problema.` : ''}`),
@@ -759,13 +760,15 @@ function montar(root, d) {
     function render() {
       const c = d.comparadores[comp], padrao = d.comparadores[d.comparadorPadrao] || c;
       const vals = reinveste ? d.retorno.total : d.retorno.preco;
-      const dif5 = tem(d.retorno.preco[ult]) ? d.retorno.total[ult] - d.retorno.preco[ult] : null;
+      const pSel = d.retorno.periodos[per];
+      const difP = tem(d.retorno.preco[per]) && tem(d.retorno.total[per]) ? d.retorno.total[per] - d.retorno.preco[per] : null;
+      const recebido = per === 0 ? d.dividendo : per === 2 ? d.dividendos5Anos : null;
       let texto;
-      if (reinveste) texto = !tem(dif5) ? 'Retorno com os dividendos reinvestidos em mais ações.'
-        : dif5 < 1 ? `Quase nenhuma diferença. A ${d.ticker} pagou ${din(d.dividendo)} por ação nos últimos 12 meses. Reinvestir ou não muda ${f(Math.max(dif5, 0), 1)} ponto no seu retorno em ${pUlt}.`
-        : `${dif5 >= 10 ? 'Grande diferença' : 'Faz diferença'}. Reinvestir os dividendos faz seu retorno subir de ${ret(d.retorno.preco[ult])} para ${ret(d.retorno.total[ult])} em ${pUlt}, porque você compra mais ações com o dividendo.`;
-      else texto = (tem(d.dividendos5Anos) ? `Você recebeu ${din(d.dividendos5Anos)} em 5 anos por ação em dividendos, em dinheiro, e não recomprou.` : 'Você recebeu o dividendo em dinheiro e não recomprou.')
-        + (tem(dif5) && dif5 >= 10 ? ' Perdeu o efeito bola de neve.' : '');
+      if (reinveste) texto = !tem(difP) ? 'Retorno com os dividendos reinvestidos em mais ações.'
+        : difP < 1 ? `Quase nenhuma diferença em ${pSel}. Reinvestir ou não muda ${f(Math.max(difP, 0), 1)} ponto no seu retorno.`
+        : `${difP >= 10 ? 'Grande diferença' : 'Faz diferença'}. Em ${pSel}, reinvestir os dividendos faz seu retorno ir de ${ret(d.retorno.preco[per])} para ${ret(d.retorno.total[per])}, porque você compra mais ações com o dividendo.`;
+      else texto = (tem(recebido) && recebido > 0 ? `Você recebeu ${din(recebido)} por ação em dividendos em ${pSel}, em dinheiro, e não recomprou.` : `Você recebeu os dividendos de ${pSel} em dinheiro e não recomprou.`)
+        + (tem(difP) && difP >= 10 ? ` Deixou de ganhar ${f(difP, 1)} pontos do efeito bola de neve.` : '');
       const outraMoeda = c.moeda !== d.moeda;
       // mesma conta das linhas do resumo: US$ 10.000 investidos, arredondado à dezena
       const em10k = v => Math.round(10000 * (1 + v / 100) / 10) * 10;

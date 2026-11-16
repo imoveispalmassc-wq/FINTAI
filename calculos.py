@@ -147,6 +147,71 @@ def pl_medio_12m(fechamentos_1a: pd.Series, lpa_trimestral: pd.Series | None,
     return None, None
 
 
+def lpa_contabil_ttm(lucro_tri: pd.Series | None, lpa_anual: pd.Series | None, acoes: float | None,
+                     lpa_atual: float | None, datas_resultado=None) -> pd.Series | None:
+    """LPA contábil de 12 meses em vigor a partir de cada balanço: série (data de divulgação -> LPA).
+
+    Monta o lucro por ação de cada trimestre com o lucro líquido trimestral do Yahoo ÷ ações.
+    Trimestre que falta sai do balanço anual (ano − os outros 3) ou, o mais recente, do LPA de 12
+    meses (LPA atual − os 3 anteriores). Só devolve a série se o último valor bater com o LPA atual."""
+    if lucro_tri is None or not acoes or acoes <= 0 or not lpa_atual or lpa_atual <= 0:
+        return None
+    q = _sem_fuso(lucro_tri.dropna().astype(float)) / acoes
+    if q.empty:
+        return None
+    q.index = q.index.to_period("Q")
+    q = q[~q.index.duplicated(keep="last")].to_dict()
+    if lpa_anual is not None:
+        for fim, valor in _sem_fuso(lpa_anual.dropna().astype(float)).items():
+            tri = [pd.Timestamp(fim).to_period("Q") - k for k in range(4)]
+            faltam = [t for t in tri if t not in q]
+            if len(faltam) == 1:
+                q[faltam[0]] = float(valor) - sum(q[t] for t in tri if t in q)
+    datas = sorted(_sem_fuso(pd.Series(1, index=pd.DatetimeIndex(datas_resultado))).index) if datas_resultado is not None and len(datas_resultado) else []
+    # balanço mais novo já divulgado e ainda fora do demonstrativo trimestral
+    if datas:
+        ult = max(q)
+        novo = ult + 1
+        if novo.end_time < datas[-1] <= novo.end_time + pd.Timedelta(days=120) and all(novo - k in q for k in (1, 2, 3)):
+            q[novo] = lpa_atual - sum(q[novo - k] for k in (1, 2, 3))
+
+    def divulgado(per):
+        fim = per.end_time.normalize()
+        prox = [t for t in datas if fim < t <= fim + pd.Timedelta(days=120)]
+        return prox[0].normalize() if prox else fim + pd.Timedelta(days=45)
+
+    pontos = {}
+    for per in sorted(q):
+        if all(per - k in q for k in range(4)):
+            pontos[divulgado(per)] = sum(q[per - k] for k in range(4))
+    if not pontos:
+        return None
+    serie = pd.Series(pontos).sort_index()
+    if not (1 - TOLERANCIA_BASE_LPA) <= serie.iloc[-1] / lpa_atual <= (1 + TOLERANCIA_BASE_LPA):
+        return None
+    return serie
+
+
+def pl_medio_contabil(fechamentos_1a: pd.Series, ttm: pd.Series | None, minimo: float = 0.5) -> dict | None:
+    """P/L médio do último ano com o LPA contábil em vigor em cada pregão.
+
+    Só usa os dias cobertos por algum balanço; exige `minimo` do ano coberto."""
+    if ttm is None or fechamentos_1a is None or fechamentos_1a.empty:
+        return None
+    f = _sem_fuso(fechamentos_1a.dropna())
+    lpa = ttm.reindex(ttm.index.union(f.index)).ffill().reindex(f.index)
+    ok = lpa.notna() & (lpa > 0)
+    if ok.sum() < minimo * len(f):
+        return None
+    pl = (f[ok] / lpa[ok])
+    pl = pl[pl <= 150]
+    if pl.empty:
+        return None
+    precos = f[pl.index]
+    return {"pl": float(pl.mean()), "preco_medio": float(precos.mean()), "desde": pl.index[0],
+            "meses": len(pl) / len(f) * 12}
+
+
 def pl_medio_longo(fechamentos: pd.Series, lpa_trimestral: pd.Series | None,
                    lpa_atual: float | None, desdobramentos: pd.Series | None = None,
                    anos: int = 5) -> tuple[float | None, float | None]:

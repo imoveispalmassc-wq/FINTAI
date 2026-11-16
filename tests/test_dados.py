@@ -155,3 +155,42 @@ def test_ultimo_balanco_data_de_divulgacao():
     datas = pd.to_datetime(["2026-08-12", "2026-11-11"]).tz_localize("America/Sao_Paulo")
     assert ultimo_balanco(pd.Series([0.4, 0.2], index=datas)) == {"data": "11/11/2026"}
     assert ultimo_balanco(None) is None
+
+
+def _bb_contabil():
+    import pandas as pd
+    acoes = 5.709e9
+    tri = {"2025-06-30": 0.49, "2025-09-30": 0.39, "2025-12-31": 0.92, "2026-03-31": 0.42, "2026-06-30": 0.42}
+    lucro = pd.Series({pd.Timestamp(k): v * acoes for k, v in tri.items()})
+    anual = pd.Series({pd.Timestamp("2025-12-31"): 2.40, pd.Timestamp("2024-12-31"): 2.9})
+    datas = pd.to_datetime(["2025-08-13", "2025-11-12", "2026-02-11", "2026-05-13", "2026-08-12", "2026-11-11"]).tz_localize("America/Sao_Paulo")
+    return lucro, anual, acoes, datas
+
+
+def test_lpa_contabil_de_cada_balanco_completa_trimestres_pelo_anual_e_pelo_ttm():
+    import pandas as pd
+    from calculos import lpa_contabil_ttm
+    lucro, anual, acoes, datas = _bb_contabil()
+    s = lpa_contabil_ttm(lucro, anual, acoes, 1.93, datas)
+    assert [f"{t:%d/%m/%Y}" for t in s.index] == ["11/02/2026", "13/05/2026", "12/08/2026", "11/11/2026"]
+    assert [round(v, 2) for v in s] == [2.40, 2.22, 2.15, 1.93]
+
+
+def test_lpa_contabil_recusa_base_diferente_do_lpa_atual():
+    from calculos import lpa_contabil_ttm
+    lucro, anual, acoes, datas = _bb_contabil()
+    # sem o 3T26 derivável (sem data de divulgação), o último TTM (2,15) não bate com 1,93 em 10%
+    assert lpa_contabil_ttm(lucro, anual, acoes, 1.93, datas[:-1]) is None
+
+
+def test_pl_medio_contabil_usa_o_lucro_de_cada_epoca():
+    import pandas as pd
+    from calculos import lpa_contabil_ttm, pl_medio_contabil
+    lucro, anual, acoes, datas = _bb_contabil()
+    s = lpa_contabil_ttm(lucro, anual, acoes, 1.93, datas)
+    dias = pd.bdate_range("2025-11-14", "2026-11-13")
+    r = pl_medio_contabil(pd.Series(20.0, index=dias), s)
+    assert r["desde"] == pd.Timestamp("2026-02-11") and 8.5 < r["meses"] < 9.5
+    # P/L entre 20/2,40 = 8,33 e 20/1,93 = 10,36, menor que o simplificado (10,36)
+    assert 8.33 < r["pl"] < 10.36 and r["preco_medio"] == 20.0
+    assert pl_medio_contabil(pd.Series(20.0, index=dias), s, minimo=0.9) is None
