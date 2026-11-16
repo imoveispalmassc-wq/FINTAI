@@ -83,18 +83,11 @@ def series_do_grafico(hist: pd.DataFrame, intraday: dict) -> dict:
     }
 
 
-def ultimo_balanco(lucro_tri, lpa_tri) -> dict | None:
-    """Último trimestre divulgado (ex.: 3T26) e a data de divulgação, quando o Yahoo informa."""
-    if lucro_tri is None or not len(lucro_tri):
+def ultimo_balanco(lpa_tri) -> dict | None:
+    """Data do último balanço divulgado (datas de resultado do Yahoo com lucro informado)."""
+    if lpa_tri is None or not len(lpa_tri.dropna()):
         return None
-    fim = pd.Timestamp(_sem_fuso(lucro_tri.dropna()).index.max())
-    rotulo = f"{(fim.month - 1) // 3 + 1}T{fim.year % 100:02d}"
-    data = None
-    if lpa_tri is not None and len(lpa_tri):
-        datas = [t for t in _sem_fuso(lpa_tri.dropna()).index if fim < t <= fim + pd.Timedelta(days=120)]
-        if datas:
-            data = f"{min(datas):%d/%m/%Y}"
-    return {"trimestre": rotulo, "data": data}
+    return {"data": f"{_sem_fuso(lpa_tri.dropna()).index.max():%d/%m/%Y}"}
 
 
 def fundamentos(d: dict, r: Resultado) -> dict:
@@ -117,7 +110,7 @@ def fundamentos(d: dict, r: Resultado) -> dict:
     bazin, div_medio5 = preco_teto_bazin(prov, hist.index[0], fim)
     vpa = info.get("bookValue")
 
-    balanco = ultimo_balanco(d["lucro_tri"], lpa_tri)
+    balanco = ultimo_balanco(lpa_tri)
     divida, caixa, ebitda = info.get("totalDebt"), info.get("totalCash"), info.get("ebitda")
     dl_ebitda = (divida - (caixa or 0)) / ebitda if divida is not None and ebitda and ebitda > 0 else None
     return dict(
