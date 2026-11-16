@@ -111,7 +111,7 @@ def baixar(ticker: str) -> dict:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def baixar_indice(simbolos: tuple[str, ...]):
-    """Fechamentos do índice de referência (tenta os símbolos na ordem)."""
+    """Fechamentos do índice de referência (tenta os símbolos na ordem). Devolve (série, símbolo usado)."""
     for s in simbolos:
         try:
             h = yf.Ticker(s).history(period="10y", interval="1d", auto_adjust=False)
@@ -119,10 +119,10 @@ def baixar_indice(simbolos: tuple[str, ...]):
                 c = h["Close"].dropna()
                 if c.index.tz is not None:
                     c.index = c.index.tz_localize(None)
-                return c
+                return c, s
         except Exception:
             continue
-    return None
+    return None, None
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -132,9 +132,15 @@ def brasil(dia: str) -> dict:
 
 
 def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]:
+    usados = {}
+
     def do_indice(simbolos):
-        serie = baixar_indice(simbolos)
+        serie, usados[simbolos[0]] = baixar_indice(simbolos)
         if serie is None or serie.empty:
+            return [None, None, None]
+        # mesma data final da ação (índice de outra bolsa pode ter pregão a mais ou a menos)
+        serie = serie[serie.index.normalize() <= pd.Timestamp(fim).normalize()]
+        if serie.empty:
             return [None, None, None]
         saida = []
         for anos in (1, 3, 5):
@@ -156,6 +162,9 @@ def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]
         "ipca": {"nome": "IPCA", "curto": "IPCA", "artigo": "do IPCA", "moeda": "R$", "v": arred(br["ipca"])},
         "poupanca": {"nome": "Poupança", "curto": "Poupança", "artigo": "da poupança", "moeda": "R$", "v": arred(br["poupanca"])},
     }
+    # sem o S&P 500 com dividendos (^SP500TR), o ^GSPC é só preço: o nome avisa
+    if usados.get("^SP500TR") == "^GSPC":
+        todos["sp500"]["nome"] = "S&P 500 (sem dividendos)"
     # Bolsa da ação decide o primeiro comparador: B3 = Ibovespa, Nasdaq = Nasdaq, demais = S&P 500
     bolsa = f"{info.get('exchange', '')} {info.get('fullExchangeName', '')}".lower()
     if ticker.endswith(".SA"):

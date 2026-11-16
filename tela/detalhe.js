@@ -788,7 +788,7 @@ function montar(root, d) {
         <div class="vcols">${linhasG.map(l => `<div class="vc${l.acao ? ' acao' : ''}">${tem(l.v)
           ? `<div class="vb${l.v < 0 ? ' neg' : ''}" style="bottom:${vpos(Math.min(0, l.v))}%;height:${Math.max(Math.abs(l.v) / vamp * 100, 0.8)}%"><i class="num">${ret(l.v)}</i></div>`
           : `<div class="vb vazio" style="bottom:${vpos(0)}%" title="Sem dado"><i>—</i></div>`}
-          <em>${({ 'S&P 500': 'S&P', 'Ibovespa': 'Ibov', 'Poupança': 'Poup.' })[l.nome] || l.nome}${l.fora ? `<small>${l.moeda}</small>` : ''}</em></div>`).join('')}</div>`;
+          <em>${({ 'S&P 500': 'S&P', 'S&P 500 (sem dividendos)': 'S&P s/div', 'Ibovespa': 'Ibov', 'Poupança': 'Poup.' })[l.nome] || l.nome}${l.fora ? `<small>${l.moeda}</small>` : ''}</em></div>`).join('')}</div>`;
       const temFora = linhasG.some(l => l.fora && tem(l.v));
 
       // resumo do período contra o comparador da bolsa
