@@ -550,7 +550,7 @@ function montar(root, d) {
     const linhasPL = prejuizo ? ['A empresa teve prejuízo nos últimos 12 meses, então a relação preço/lucro não se aplica.']
       : !tem(d.pl) ? ['O Yahoo Finance não traz o lucro por ação deste ativo.']
       : [
-        `<b>Contábil</b> (${rotBal}): cotação de hoje ÷ lucro por ação dos últimos 12 meses.`,
+        `<b>Contábil</b> (${rotBal}): cotação de hoje ÷ lucro por ação dos últimos 12 meses.${tem(d.acoes) && d.acoes > 0 ? ` Lucro = lucro por ação × ${f(d.acoes / 1e9, 2)} bi de ações (Yahoo).` : ''}`,
         tem(plPrev) ? `<b>Previsão ${anoPrev || ''}</b>: consenso${tem(Fp.analistas) ? ` de ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance${tem(Fp.baixa) && tem(Fp.alta) ? `, de ${din(Fp.baixa)} a ${din(Fp.alta)}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' (poucos analistas: pouco confiável)' : ''}.`
           : `<b>Previsão</b>: sem estimativa no Yahoo.`,
         !tem(difPL) ? '<b>Média 12m</b>: sem histórico para comparar.'
@@ -599,7 +599,8 @@ function montar(root, d) {
           <div class="tab-pl num">
             <span></span><div class="cab"><div>Contábil</div><div class="i">12 meses</div></div><div class="cab"><div>Previsão</div><div class="i">${anoPrev || ''}</div></div><div class="cab"><div>Média 12m</div><div class="i">${d.plMetodo === 'contabil' ? 'cada balanço' : 'último ano'}</div></div>
             <span class="rot">P/L</span><b class="gr">${f(d.pl)}</b><b class="gr">${tem(plPrev) ? f(plPrev) : '—'}</b><b class="gr">${f(d.plMedio12)}</b>
-            <span class="rot">Conta</span><span class="conta-pl">${tem(d.pl) ? `${f(d.preco)} ÷ ${f(d.lpa)}` : '—'}</span><span class="conta-pl">${tem(plPrev) ? `${f(d.preco)} ÷ ${f(lpaPrev)}` : '—'}</span><span class="conta-pl">${tem(lpaMedioImpl) ? `${f(d.precoMedio12)} ÷ ${f(lpaMedioImpl)}` : '—'}</span>
+            ${tem(d.acoes) && d.acoes > 0 ? (() => { const tot = l => tem(l) ? l * d.acoes : null; const vals = [tot(d.lpa), tot(lpaPrev), tot(lpaMedioImpl)]; const ref = Math.max(...vals.filter(tem).map(Math.abs), 0); const [div, un] = ref >= 1e12 ? [1e12, 'tri'] : ref >= 1e9 ? [1e9, 'bi'] : [1e6, 'mi'];
+              return `<span class="rot">Lucro<br>${d.moeda} <span class="un">${un}</span></span>${vals.map(v => `<b>${tem(v) ? f(v / div, 1) : '—'}</b>`).join('')}`; })() : ''}
             <span class="rot">Lucro/ação<br>${d.moeda}</span><b>${f(d.lpa)}</b><b>${tem(lpaPrev) ? f(lpaPrev) : 'Sem dado'}</b><b>${tem(lpaMedioImpl) ? f(lpaMedioImpl) : '—'}</b>
             <span class="rot">Cotação<br>${d.moeda}</span><b>${f(d.preco)}</b><b>${tem(plPrev) ? f(d.preco) : '—'}</b><b>${tem(d.precoMedio12) ? f(d.precoMedio12) : '—'}</b>
           </div>
