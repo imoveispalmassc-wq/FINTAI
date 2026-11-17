@@ -362,9 +362,7 @@ def documentos_cvm(cnpj: str, hoje: dt.date) -> list[dict]:
     return sorted(docs, key=lambda d: d["data"], reverse=True)
 
 
-def texto_do_pdf(link: str) -> tuple[bytes, str]:
-    from pypdf import PdfReader
-
+def _baixar_pdf(link: str) -> bytes:
     pdf = _get(link).content
     if not pdf.lstrip().startswith(b"%PDF"):
         # o RAD da CVM às vezes devolve uma página HTML com o arquivo dentro
@@ -377,8 +375,55 @@ def texto_do_pdf(link: str) -> tuple[bytes, str]:
         else:
             titulo = re.search(rb"<title>(.*?)</title>", pdf, re.I | re.S)
             raise ValueError(f"não é PDF ({(titulo.group(1).strip()[:80] if titulo else pdf[:60])!r})")
-    leitor = PdfReader(io.BytesIO(pdf))
-    return pdf, "\n".join((p.extract_text() or "") for p in leitor.pages)
+    return pdf
+
+
+def _texto_pdf(pdf: bytes) -> str:
+    """pypdf; se falhar ou vier vazio, pdfplumber; depois PyMuPDF (os que estiverem instalados)."""
+    erros = []
+    try:
+        from pypdf import PdfReader
+        t = "\n".join((p.extract_text() or "") for p in PdfReader(io.BytesIO(pdf)).pages)
+        if t.strip():
+            return t
+        erros.append("pypdf: texto vazio")
+    except Exception as e:  # noqa: BLE001
+        erros.append(f"pypdf: {e.__class__.__name__}")
+    try:
+        import pdfplumber
+        with pdfplumber.open(io.BytesIO(pdf)) as doc:
+            t = "\n".join((p.extract_text() or "") for p in doc.pages)
+        if t.strip():
+            return t
+        erros.append("pdfplumber: texto vazio")
+    except Exception as e:  # noqa: BLE001
+        erros.append(f"pdfplumber: {e.__class__.__name__}")
+    try:
+        import fitz
+        with fitz.open(stream=pdf, filetype="pdf") as doc:
+            t = "\n".join(p.get_text() for p in doc)
+        if t.strip():
+            return t
+        erros.append("PyMuPDF: texto vazio")
+    except Exception as e:  # noqa: BLE001
+        erros.append(f"PyMuPDF: {e.__class__.__name__}")
+    raise ValueError("nenhum leitor de PDF conseguiu: " + "; ".join(erros))
+
+
+def texto_do_pdf(link: str, tentativas: int = 3, espera: float = 4.0) -> tuple[bytes, str]:
+    """Baixa e lê o PDF, com novas tentativas: o RAD da CVM às vezes devolve uma página no lugar do arquivo."""
+    import time
+
+    ultimo = None
+    for n in range(tentativas):
+        try:
+            pdf = _baixar_pdf(link)
+            return pdf, _texto_pdf(pdf)
+        except Exception as e:  # noqa: BLE001
+            ultimo = e
+            if n < tentativas - 1:
+                time.sleep(espera * (n + 1))
+    raise ultimo
 
 
 def acoes_yahoo(ticker: str) -> float | None:
@@ -894,7 +939,11 @@ RE_ACUMULADO = re.compile(r"acumulad|no\s+ano\b|do\s+ano\b|em\s+20\d{2}\b|exerc[
 LUCRO_MINIMO = 1e6         # lucro trimestral abaixo de R$ 1 milhão (ex.: 0,00) = leitura inválida
 
 
-def ler_lucro_trimestre(texto: str, tri: str, linha: str = "Lucro Líquido Ajustado") -> dict:
+RE_RELATORIO = re.compile(r"an[áa]lise\s+gerencial|an[áa]lise\s+do\s+desempenho|relat[óo]rio|release|press|"
+                          r"divulga[çc][ãa]o\s+de\s+resultados|resultado", re.I)
+
+
+def ler_lucro_trimestre(texto: str, tri: str, linha: str = "Lucro Líquido Ajustado", tabela_vence: bool = False) -> dict:
     """Lucro da `linha` no trimestre `tri` (ex.: "3T26"), em reais, no release de resultados.
 
     Leituras: (1) frase do texto ("lucro líquido ajustado de R$ 1,27 bilhão no 3T26", "No 3T26, o lucro líquido
@@ -952,6 +1001,11 @@ def ler_lucro_trimestre(texto: str, tri: str, linha: str = "Lucro Líquido Ajust
     f, tb = out["frase"], out["tabela"]
     if f is None and tb is None:
         out["motivo"] = f"linha '{linha}' do {tri} não encontrada (nem frase nem tabela)"
+    elif tabela_vence and tb is not None:
+        # release/relatório de resultados: a tabela trimestral vence sempre; a frase só ajudou na unidade
+        out["valor"] = tb
+        out["motivo"] = "tabela do relatório" + (f" (frase {f / 1e9:.2f} bi descartada: diverge {abs(f / tb - 1):.1%})"
+                                                 if f is not None and abs(f / tb - 1) > 0.10 else "")
     elif f is not None and tb is not None and abs(f / tb - 1) > 0.03:
         out["motivo"] = f"frase ({f / 1e9:.2f} bi) e tabela ({tb / 1e9:.2f} bi) divergem {abs(f / tb - 1):.1%}"
     else:
@@ -995,7 +1049,7 @@ def contabil_br(ticker: str, hoje: dt.date, cfg: dict, *, buscar_cnpj=cnpj_do_ti
     # na mesma data, o release de resultados vem antes de fato relevante, ITR etc.
     prioridade = re.compile(r"resultado|desempenho|release|press", re.I)
     docs = sorted(docs, key=lambda d: (d["data"], bool(prioridade.search(f"{d.get('categoria','')} {d.get('tipo','')} {d.get('assunto','')}"))), reverse=True)
-    lidos = {}
+    lidos, textos_lidos = {}, []
     for doc in docs:                                           # do mais novo para o mais antigo
         d = _data(doc["data"])
         if not d:
@@ -1009,7 +1063,10 @@ def contabil_br(ticker: str, hoje: dt.date, cfg: dict, *, buscar_cnpj=cnpj_do_ti
         except Exception as e:  # noqa: BLE001
             registrar(f"{ticker} {tri}: doc={nome_doc} link={doc['link']} gravou=não motivo=não abriu ({e.__class__.__name__})")
             continue
-        r = ler_lucro_trimestre(texto, tri, linha)
+        relatorio = bool(RE_RELATORIO.search(f"{doc.get('categoria', '')} {doc.get('tipo', '')} {doc.get('assunto', '')}"))
+        if relatorio:
+            textos_lidos.append((tri, nome_doc, doc, texto))
+        r = ler_lucro_trimestre(texto, tri, linha, tabela_vence=relatorio)
         bi = lambda v: "—" if v is None else f"{v / 1e9:.2f} bi"
         div = "—" if r["frase"] is None or r["tabela"] is None else f"{abs(r['frase'] / r['tabela'] - 1):.1%}"
         registrar(f"{ticker} {tri}: frase={bi(r['frase'])} tabela={bi(r['tabela'])} divergência={div} "
@@ -1026,7 +1083,20 @@ def contabil_br(ticker: str, hoje: dt.date, cfg: dict, *, buscar_cnpj=cnpj_do_ti
         while len(alvo) < 4:
             alvo.append(tri_anterior(alvo[-1]))
         for tri_falta in [x for x in alvo if x not in lidos]:
-            registrar(f"{ticker} {tri_falta}: gravou=não motivo=nenhum documento com o lucro do trimestre lido")
+            # último recurso: a coluna desse trimestre na tabela de um release posterior (ex.: 2T26 traz "1T26 2T26")
+            for tri_doc, nome_doc, doc, texto in textos_lidos:
+                if fim_do_trimestre(tri_doc) <= fim_do_trimestre(tri_falta):
+                    continue
+                r = ler_lucro_trimestre(texto, tri_falta, linha, tabela_vence=True)
+                if r["tabela"] is not None and r["valor"] is not None:
+                    lidos[tri_falta] = {"tri": tri_falta, "fim": f"{fim_do_trimestre(tri_falta):%d/%m/%Y}", "lucro": r["valor"],
+                                        "fonte": fonte, "data": _data_br(doc["data"]), "url": doc["link"],
+                                        "leitura": f"tabela do release do {tri_doc}"}
+                    registrar(f"{ticker} {tri_falta}: tabela={r['valor'] / 1e9:.2f} bi gravou=sim motivo=coluna {tri_falta} "
+                              f"na tabela do release do {tri_doc} doc={nome_doc}")
+                    break
+            else:
+                registrar(f"{ticker} {tri_falta}: gravou=não motivo=nenhum documento com o lucro do trimestre lido")
     resultado = contabil_br_de_trimestres(list(lidos.values()), buscar_acoes(ticker), fonte, hoje)
     resultado["lidos"] = {k: round(v["lucro"] / 1e9, 4) for k, v in sorted(lidos.items(), key=lambda x: fim_do_trimestre(x[0]))}
     registrar(f"{ticker}: contábil {resultado['status']}"

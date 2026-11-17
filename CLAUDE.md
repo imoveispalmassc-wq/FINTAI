@@ -70,7 +70,9 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   resultados de cada trimestre na CVM (trimestre = o último encerrado antes da entrega), extrai o lucro do trimestre
   (frase e tabela; divergência > 3% = sem confiança; frase com acumulado/ano/semestre/9M/12M é descartada; tabela só
   pela coluna trimestral; sem unidade escrita, decide pela frase, e "3,9" sem frase é ambíguo; lucro < R$ 1 mi, ex. 0,00,
-  é leitura inválida e tenta o próximo documento; log "BBAS3 3T26: frase=... tabela=... divergência=... gravou=..."), soma 4 trimestres consecutivos e grava em utils/contabil_br.json:
+  é leitura inválida e tenta o próximo documento; em release/Relatório de Análise Gerencial a tabela vence sempre e a
+  frase só ajuda na unidade; PDF com 3 tentativas e leitores pypdf → pdfplumber → PyMuPDF; trimestre que não abre usa a
+  coluna dele na tabela de um release posterior; log "BBAS3 3T26: frase=... tabela=... divergência=... gravou=..."), soma 4 trimestres consecutivos e grava em utils/contabil_br.json:
   LPA = soma ÷ ações (Yahoo). Sem conseguir ler: "Yahoo - pendente", nunca número inventado; pendente não apaga valor
   bom já gravado. Demais tickers da B3: Yahoo.
 - Projeção do início do ano: utils/guidance_inicial.json (ticker -> ano -> faixa, fonte, data, travado). O robô busca o

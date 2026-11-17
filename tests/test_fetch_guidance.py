@@ -496,3 +496,54 @@ def test_valor_errado_ja_gravado_e_substituido_quando_acha_o_certo(tmp_path, mon
     novo = {"status": "ok", "lpa_12m": 2.51, "lidos": {"2T26": 3.9}}
     fg.aplicar_contabil_br([{"ticker": "BBAS3", "contabil_br": novo}])
     assert json.loads(arq.read_text(encoding="utf-8"))["BBAS3"]["lpa_12m"] == 2.51
+
+
+# ------------------------------------------------------------ casos do log da execução #10 (BBAS3)
+REL = {"categoria": "Dados Econômico-Financeiros", "tipo": "Press-release"}
+
+
+def test_relatorio_tabela_vence_frase_do_ano_que_escapou_do_filtro():
+    # frase sem palavra de acumulado (escapa do filtro) com o valor do ano: no relatório, a tabela vence
+    t = ("O lucro líquido ajustado foi de R$ 20,7 bilhões no período, com RSPL de 12,5%. "
+         "R$ milhões 4T24 3T25 4T25 Lucro Líquido Ajustado 9.578 3.785 5.737 RSPL")
+    r = fg.ler_lucro_trimestre(t, "4T25", tabela_vence=True)
+    assert r["valor"] == pytest.approx(5.737e9) and "frase 20.70 bi descartada" in r["motivo"]
+    assert fg.ler_lucro_trimestre(t, "4T25")["valor"] is None          # fora de relatório, continua sem confiança
+
+
+def test_pdf_tenta_de_novo_quando_a_cvm_devolve_pagina(monkeypatch):
+    chamadas = {"n": 0}
+
+    def baixar(link):
+        chamadas["n"] += 1
+        if chamadas["n"] == 1:
+            raise ValueError("não é PDF (b'Erro')")
+        return b"%PDF-1.4"
+    monkeypatch.setattr(fg, "_baixar_pdf", baixar)
+    monkeypatch.setattr(fg, "_texto_pdf", lambda pdf: "texto do release")
+    assert fg.texto_do_pdf("https://cvm/x", espera=0)[1] == "texto do release" and chamadas["n"] == 2
+
+
+def test_trimestre_sem_abrir_usa_a_coluna_da_tabela_do_release_seguinte():
+    textos = {
+        "3T26": "R$ milhões 3T25 2T26 3T26 Var. % 9M25 9M26 Lucro Líquido Ajustado 3.785 3.906 1.270 (66,5) 14.969 8.624",
+        "2T26": "R$ milhões 1T26 2T26 Lucro Líquido Ajustado 3.430 3.906 RSPL",
+        "4T25": ("O lucro líquido ajustado foi de R$ 20,7 bilhões no período. "
+                 "R$ milhões 4T24 3T25 4T25 Lucro Líquido Ajustado 9.578 3.785 5.737 RSPL"),
+    }
+
+    def ler(link):
+        tri = link.split("/")[-1][:4]
+        if tri == "1T26":
+            raise ValueError("não é PDF (b'<html>')")                    # o relatório do 1T26 não abre
+        return b"", textos[tri]
+    docs = [{**REL, "data": BB_DATAS[t], "assunto": f"Análise do Desempenho {t}", "link": f"https://cvm/{t}.pdf"}
+            for t in ("3T26", "2T26", "1T26", "4T25")]
+    linhas = []
+    c = fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {"fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado"},
+                       buscar_cnpj=lambda t, h: ("1", "BB"), buscar_docs=lambda c, h: docs, ler_pdf=ler,
+                       buscar_acoes=lambda t: 5.709e9, registrar=linhas.append)
+    assert c["status"] == "ok" and c["lidos"] == {"4T25": 5.737, "1T26": 3.43, "2T26": 3.906, "3T26": 1.27}
+    assert round(c["lucro_12m"] / 1e9, 2) == 14.34 and round(c["lpa_12m"], 2) == 2.51
+    assert any("1T26: tabela=3.43 bi gravou=sim motivo=coluna 1T26 na tabela do release do 2T26" in l for l in linhas)
+    assert next(t for t in c["trimestres"] if t["tri"] == "1T26")["leitura"] == "tabela do release do 2T26"
