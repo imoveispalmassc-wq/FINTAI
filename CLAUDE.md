@@ -31,6 +31,8 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   salvo (descarta). Documento com mais de 120 dias vai para PR. Cadastro manual em override.py ganha
   do automático. EUA: User-Agent "fintai/1.0 (contato: ...)" com o e-mail só do Secret SEC_CONTACT_EMAIL
   (nunca no código); sem o Secret, os tickers dos EUA ficam de fora com aviso. EUA sem Claude: sem confiança, não grava.
+  Duas faixas de LPA no mesmo comunicado: ignora a perto de previously/prior/previous/earlier e fica com a perto de
+  updated/revised/now expects/raising/lowering; se ainda sobrarem duas, não grava (aviso amarelo).
 - A página de exemplo (`docs/index.html`, gerada por `tools/gerar_demo.py`) não busca dados.
   Qualquer valor nela sem fonte real fica vazio ou marcado como EXEMPLO.
 

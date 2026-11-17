@@ -569,6 +569,19 @@ RE_EPS_FAIXA = re.compile(
 RE_ANO_EUA = re.compile(r"\b(fiscal(?:\s+year)?\s+|fy\s?|full[- ]year\s+|year\s+)?(20\d{2})\b", re.I)
 RE_DIV_TRI = re.compile(r"quarterly (?:cash )?dividend[^.$]{0,120}?\$\s?(\d{1,2}\.\d{2,4})\s*per (?:common )?share", re.I)
 RE_CONTEXTO_GUIDANCE = re.compile(r"guidance|outlook|expects?|forecast|range", re.I)
+# faixa nova x faixa antiga quando o comunicado traz as duas (ex.: ADM 03/11/2026)
+RE_FAIXA_NOVA = re.compile(r"\bupdated\b|\brevised\b|\bnow (?:expects?|anticipates?|sees|projects?)\b|"
+                           r"outlook (?:is )?updated|\braising\b|\braised\b|\blowering\b|\blowered\b", re.I)
+RE_FAIXA_ANTIGA = re.compile(r"\bpreviously\b|\bprevious\b|\bprior (?:outlook|guidance|range|expectation)s?\b|"
+                             r"\bprior\b|\bearlier\b", re.I)
+
+
+def _contexto_da_faixa(texto: str, inicio: int) -> str:
+    """Trecho da mesma frase antes da faixa (até 160 caracteres), para ver se ela é a nova ou a antiga."""
+    antes = texto[max(0, inicio - 160): inicio]
+    # corta no fim da frase anterior (". " seguido de maiúscula), em "; " ou na abertura de parêntese
+    cortes = [m.end() for m in re.finditer(r"\.\s+(?=[A-Z])|;\s|\(", antes)]
+    return antes[cortes[-1]:] if cortes else antes
 
 
 def extrair_eps_eua(texto: str, ano_minimo: int) -> dict | None:
@@ -584,13 +597,28 @@ def extrair_eps_eua(texto: str, ano_minimo: int) -> dict | None:
         anos = [(bool(x.group(1)), int(x.group(2))) for x in RE_ANO_EUA.finditer(janela)]
         anos_ok = [(f, y) for f, y in anos if ano_minimo <= y <= ano_minimo + 2]
         fiscal, ano = max(anos_ok, key=lambda x: x[1]) if anos_ok else (False, None)
+        frase = _contexto_da_faixa(texto, m.start()) + m.group(1)
         achados.append({"lpa_min": a, "lpa_max": b, "ano": ano, "fiscal": fiscal,
                         "contexto": bool(RE_CONTEXTO_GUIDANCE.search(janela)),
+                        "nova": bool(RE_FAIXA_NOVA.search(frase)), "antiga": bool(RE_FAIXA_ANTIGA.search(frase)),
                         "trecho": texto[max(0, m.start() - 120): m.end() + 40].strip()})
     if not achados:
         return None
     distintos = {(x["lpa_min"], x["lpa_max"]) for x in achados if x["ano"]}
     melhor = next((x for x in achados if x["ano"] and x["contexto"]), achados[0])
+    escolha = ""
+    if len(distintos) > 1:
+        # duas ou mais faixas: ignora as marcadas como antigas (previously, prior...) e, se ainda
+        # sobrar mais de uma, fica com as marcadas como novas (updated, now expects, raising...)
+        restantes = [x for x in achados if x["ano"] and not x["antiga"]]
+        if len({(x["lpa_min"], x["lpa_max"]) for x in restantes}) > 1:
+            restantes = [x for x in restantes if x["nova"]]
+        faixas_restantes = {(x["lpa_min"], x["lpa_max"]) for x in restantes}
+        if len(faixas_restantes) == 1:
+            melhor = next(x for x in restantes)
+            ignoradas = sorted(distintos - faixas_restantes)
+            escolha = "faixa nova escolhida; ignorada(s): " + ", ".join(f"{a:.2f} a {b:.2f}" for a, b in ignoradas)
+            distintos = faixas_restantes
     motivos = []
     if not melhor["ano"]:
         motivos.append(f"faixa de LPA sem ano {ano_minimo} ou seguinte por perto")
@@ -601,7 +629,7 @@ def extrair_eps_eua(texto: str, ano_minimo: int) -> dict | None:
         motivos.append(f"{len(distintos)} faixas de LPA diferentes no documento")
     div = {round(float(x), 4) for x in RE_DIV_TRI.findall(texto)}
     periodo = (f"FY{melhor['ano']}" if melhor["fiscal"] and "fiscal" in melhor["trecho"].lower() else str(melhor["ano"] or ""))
-    return {**melhor, "periodo": periodo, "confianca": "baixa" if motivos else "alta", "motivos": motivos,
+    return {**melhor, "periodo": periodo, "confianca": "baixa" if motivos else "alta", "motivos": motivos, "escolha": escolha,
             "dividendo": round(div.pop() * 4, 4) if len(div) == 1 else None, "faixas": sorted(distintos)}
 
 
@@ -660,7 +688,10 @@ def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
             motivos.append(f"documento de {_data_br(doc['data'])}, com mais de {IDADE_MAXIMA_DIAS} dias")
         if mudou_muito:
             motivos.append(f"LPA projetado mudou {abs(lpa_novo / lpa_ant - 1):.0%} (revisão a partir de {LIMITE_MUDANCA:.0%})")
-        item.update(acao="pr" if motivos else "commit", novo=novo, motivo="; ".join(motivos) or "padrões de texto, confiança alta")
+        if ex.get("escolha"):
+            novo["escolha"] = ex["escolha"]
+        item.update(acao="pr" if motivos else "commit", novo=novo,
+                    motivo="; ".join(motivos + ([ex["escolha"]] if ex.get("escolha") else [])) or "padrões de texto, confiança alta")
         return item
     item["motivo"] = "nenhum 8-K/6-K recente com faixa de LPA projetado"
     return item

@@ -196,8 +196,31 @@ def test_extrai_lpa_de_comunicados_dos_eua(texto, faixa, periodo, div):
     assert ex["confianca"] == "alta" and ex["dividendo"] == div
 
 
-def test_tabela_com_duas_faixas_fica_sem_confianca():
-    txt = "2026 guidance: adjusted EPS of $5.50 to $5.80 (previous adjusted EPS of $5.15 to $5.60) for 2026."
+ADM_DUAS = ("ADM Reports Third Quarter 2026 Results. The Company now expects 2026 adjusted EPS of approximately "
+            "$5.50 to $5.80. In the second quarter, the Company had previously expected 2026 adjusted EPS of "
+            "$5.15 to $5.60.")
+
+
+def test_adm_com_faixa_antiga_e_nova_escolhe_a_nova():
+    ex = fg.extrair_eps_eua(ADM_DUAS, 2026)
+    assert (ex["lpa_min"], ex["lpa_max"]) == (5.50, 5.80) and ex["confianca"] == "alta"
+    assert "5.15 a 5.60" in ex["escolha"]
+    # mesma coisa com a faixa antiga primeiro no texto e entre parênteses
+    txt = ("Outlook updated: 2026 adjusted EPS of $5.50 to $5.80 (prior guidance: adjusted EPS of $5.15 to $5.60) for 2026.")
+    ex2 = fg.extrair_eps_eua(txt, 2026)
+    assert (ex2["lpa_min"], ex2["lpa_max"]) == (5.50, 5.80) and ex2["confianca"] == "alta"
+
+
+def test_duas_faixas_sem_marca_de_nova_ou_antiga_continua_sem_confianca():
+    txt = ("The Company expects 2026 adjusted EPS of $5.50 to $5.80. Segment guidance: adjusted EPS of "
+           "$4.10 to $4.30 for 2026 in Nutrition.")
+    ex = fg.extrair_eps_eua(txt, 2026)
+    assert ex["confianca"] == "baixa" and any("2 faixas" in m for m in ex["motivos"])
+
+
+def test_duas_faixas_novas_diferentes_continua_sem_confianca():
+    txt = ("The Company now expects 2026 adjusted EPS of $5.50 to $5.80. The Company raised 2026 adjusted EPS "
+           "for the segment to $4.10 to $4.30.")
     assert fg.extrair_eps_eua(txt, 2026)["confianca"] == "baixa"
 
 
