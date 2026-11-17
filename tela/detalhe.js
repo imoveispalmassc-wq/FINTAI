@@ -605,7 +605,7 @@ function montar(root, d) {
     const frasePL = linhasPL.join('<br>');
     const lpaGuia = G0 && tem(G0.lpa) && G0.lpa > 0 ? G0.lpa : null;
     const notaAjustado = [
-      lpaGuia ? `GUIDANCE OFICIAL · ${G0.data}: ${G0.porLpa ? `${G0.lucroTipo}${G0.periodo ? ` ${G0.periodo}` : ''} de ${din(G0.lpaMin)} a ${din(G0.lpaMax)}, médio ${din(lpaGuia)}` : `lucro de ${din(G0.lucroMin / 1e9, 0)} a ${din(G0.lucroMax / 1e9, 0)} bi, LPA ${din(lpaGuia)}`}, P/L ${f(d.preco / lpaGuia)}.` : '',
+      lpaGuia ? `GUIDANCE OFICIAL · ${G0.data}: ${G0.porLpa ? `${G0.lucroTipo}${G0.periodo ? ` ${G0.periodo}` : ''} de ${din(G0.lpaMin)} a ${din(G0.lpaMax)}, médio ${din(lpaGuia)}` : `lucro de ${din(G0.lucroMin / 1e9, 0)} a ${din(G0.lucroMax / 1e9, 0)} bi, LPA ${din(lpaGuia)}`}, P/L ${f(d.preco / lpaGuia)}.${G0.bases && G0.bases.length ? ` Base ${G0.bases[0].ano} recalculada pela empresa: ${din(G0.bases[0].valor)}${tem(G0.bases[0].antes) ? ` (antes ${din(G0.bases[0].antes)})` : ''}, ${sinal((lpaGuia / G0.bases[0].valor - 1) * 100, 1)} no guidance.` : ''}` : '',
       tem(plAjustado) ? `Lucro ajustado (Yahoo): LPA ${din(lpaAjustado)}, P/L ${f(plAjustado)}. É a base de alguns sites.` : ''].filter(Boolean).join('<br>');
 
     // 2. Dividendos
@@ -959,7 +959,8 @@ function montar(root, d) {
         : rg.status === 'ok' ? 'Nenhum ano de prejuízo nos últimos 3 anos.' : 'O Yahoo Finance não traz o lucro anual deste ativo.';
       // projeção: LPA estimado pelos analistas para o ano fiscal em curso (o seguinte ao último divulgado)
       const proj = d.lynch && d.lynch.futuro ? d.lynch.futuro.lpaEsteAno : null;
-      const anoProj = anos.length ? anos[anos.length - 1].ano + 1 : null;
+      // com guidance cadastrado, o período vem da empresa (ex.: FY2027); senão, o ano seguinte ao último divulgado
+      const anoProj = d.guidance && d.guidance.periodo ? d.guidance.periodo : anos.length ? anos[anos.length - 1].ano + 1 : null;
       const ultimo = anos.length ? anos[anos.length - 1].lpa : null;
       const varProj = tem(proj) && tem(ultimo) && ultimo > 0 ? (proj / ultimo - 1) * 100 : null;
       const Fu = d.lynch && d.lynch.futuro ? d.lynch.futuro : {};
@@ -968,6 +969,7 @@ function montar(root, d) {
         : `Guidance oficial da empresa (${G.fonte}, ${G.data}): ${G.lucroTipo || 'lucro líquido'} de ${din(G.lucroMin / 1e9, 1)} a ${din(G.lucroMax / 1e9, 1)} bi ÷ ${f(G.acoes / 1e9, 2)} bi de ações${G.acoesFonte === 'Yahoo Finance' ? ' (Yahoo Finance)' : ''} = LPA de ${din(G.lpaMin)} a ${din(G.lpaMax)}, ponto médio ${din(G.lpa)}`) : `Consenso${tem(Fu.analistas) ? ` de ${f(Fu.analistas, 0)} ${Fu.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance`
         + (tem(Fu.lpaBaixa) && tem(Fu.lpaAlta) ? `, de ${din(Fu.lpaBaixa)} a ${din(Fu.lpaAlta)}` : '')
         + (tem(Fu.analistas) && Fu.analistas < 3 ? '. Poucos analistas: estimativa pouco confiável' : '');
+      const baseG = G && G.bases && G.bases.length ? ` Base recalculada pela empresa: ${G.bases.map(b => `${b.ano} = ${din(b.valor)}${tem(b.antes) ? ` (antes ${din(b.antes)})` : ''}`).join(', ')}; o guidance ${G.periodo || ''} (${din(G.lpa)}) fica ${sinal((G.lpa / G.bases[0].valor - 1) * 100, 1)} acima da base ${G.bases[0].ano}. Os LPAs anuais acima são do Yahoo (contábil) e não usam essa base.` : '';
       const divG = G && tem(G.dividendo) ? (G.dividendoFonte === 'empresa' ? ` Dividendo anual divulgado pela empresa: ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`
         : ` Dividendo projetado: ${din(G.lpa)} × payout ${f(G.payout * 100, 0)}% = ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`) : '';
       const linhaProj = anoProj ? `<div class="proj"><span>${anoProj} <span class="tag-proj">${G ? 'guidance' : 'projeção'}</span>${ex('lpaEsteAno')}</span><b>${tem(proj) ? din(proj) : 'Sem estimativa'}</b></div>` : '';
@@ -977,7 +979,7 @@ function montar(root, d) {
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
           <div class="nota" id="g-nota"></div></div>`;
       if (G) { const fz = el.querySelector('#g-fonte'); if (fz) fz.textContent = G.fonte; }
-      el.querySelector('#g-nota').textContent = `${nota}${anoProj ? ` ${tem(proj) ? `Projeção ${anoProj}: ${consenso}${tem(varProj) ? `; ${sinal(varProj, 0)} sobre ${anos[anos.length - 1].ano}` : ''}.${divG} Não entra na média.${G ? ' O guidance oficial substitui o consenso dos analistas do Yahoo.' : ''}` : `Sem estimativa no Yahoo para ${anoProj}.`}` : ''}`;
+      el.querySelector('#g-nota').textContent = `${nota}${anoProj ? ` ${tem(proj) ? `Projeção ${anoProj}: ${consenso}${tem(varProj) ? `; ${sinal(varProj, 0)} sobre ${anos[anos.length - 1].ano}${G && G.porLpa ? ' (o guidance é LPA ajustado; o ano anterior é o LPA contábil do Yahoo, bases diferentes)' : ''}` : ''}.${divG}${baseG} Não entra na média.${G ? ' O guidance oficial substitui o consenso dos analistas do Yahoo.' : ''}` : `Sem estimativa no Yahoo para ${anoProj}.`}` : ''}`;
     } else if (modo === 'lynch') {
       const L = d.lynch, v = L.veredito, F = L.futuro, pc = x => tem(x) ? `${sinal(x, 1)} ao ano` : 'Sem dado';
       // crescimento acima de 100% ao ano vem de base quase zero: mostra quantas vezes multiplicou

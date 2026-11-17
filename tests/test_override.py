@@ -82,8 +82,12 @@ def test_guidance_em_lucro_por_acao_com_dividendo_da_empresa():
     assert validar("X", {"lpa_min": 6, "lpa_max": 7, "data": "d"}) == ["falta o campo 'fonte'"]
 
 
-def test_cadastros_adm_e_acm_e_xp_sem_guidance():
+def test_cadastros_adm_hsic_acm_e_xp_sem_guidance():
     from utils.override import OVERRIDE, guidance
-    assert guidance("ADM")["lpa"] == pytest.approx(5.65)
-    assert guidance("ACM")["lpa"] == pytest.approx(6.25) and guidance("ACM")["dividendo"] == 1.36
-    assert "XP" not in OVERRIDE and "HSIC" not in OVERRIDE
+    adm, hsic, acm = guidance("ADM"), guidance("HSIC"), guidance("ACM")
+    assert adm["lpa"] == pytest.approx(5.65) and adm["data"] == "03/11/2026"
+    assert hsic["lpa"] == pytest.approx(5.45) and hsic["data"] == "16/11/2026"
+    assert hsic["bases"] == [{"ano": 2025, "valor": 4.65, "antes": 4.97}, {"ano": 2024, "valor": 4.58, "antes": 4.74}]
+    assert acm["lpa"] == pytest.approx(6.25) and acm["dividendo"] == 1.36 and acm["periodo"] == "FY2027"
+    assert all(g["fonte"] and g["data"] for g in (adm, hsic, acm))
+    assert "XP" not in OVERRIDE

@@ -163,9 +163,51 @@ def test_mesmo_documento_ja_aplicado_nao_muda_nada():
     assert _planejar([(NOV, FATO_BB_NOV)], anterior=anterior)["acao"] == "nada"
 
 
-def test_acao_dos_eua_fica_desligada():
+# ------------------------------------------------------------ EUA (SEC)
+ADM_TXT = ("ADM Reports Third Quarter 2026 Results. ... The Company now expects 2026 adjusted EPS of approximately "
+           "$5.50 to $5.80, compared to prior guidance.")
+ACM_TXT = ("Fiscal 2027 guidance: adjusted EPS of between $6.15 and $6.35 and adjusted EBITDA of $1,350 to $1,390 million. "
+           "The Board increased the quarterly dividend by 10% to $0.34 per share.")
+HSIC_TXT = ("Henry Schein is updating its 2026 financial guidance: non-GAAP diluted EPS for full year 2026 is now expected "
+            "to be $5.42 to $5.48, compared with previously announced guidance.")
+
+
+def test_sem_email_da_sec_os_eua_ficam_de_fora(monkeypatch):
+    monkeypatch.delenv("SEC_CONTACT_EMAIL", raising=False)
     item = planejar_ticker("AAPL", HOJE, None, set())
-    assert item["acao"] == "nada" and "desligad" in item["motivo"]
+    assert item["acao"] == "erro" and "SEC_CONTACT_EMAIL" in item["motivo"]
+
+
+def test_user_agent_da_sec_vem_do_secret(monkeypatch):
+    monkeypatch.setenv("SEC_CONTACT_EMAIL", "contato@exemplo.com")
+    assert fg.cabecalho_sec()["User-Agent"] == "fintai/1.0 (contato: contato@exemplo.com)"
+    import pathlib, re
+    codigo = pathlib.Path(fg.__file__).read_text(encoding="utf-8")
+    # nenhum e-mail escrito no código do robô
+    assert not re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", codigo.replace("41898282+github-actions[bot]@users.noreply.github.com", ""))
+
+
+@pytest.mark.parametrize("texto,faixa,periodo,div", [(ADM_TXT, (5.50, 5.80), "2026", None),
+                                                     (ACM_TXT, (6.15, 6.35), "FY2027", 1.36),
+                                                     (HSIC_TXT, (5.42, 5.48), "2026", None)])
+def test_extrai_lpa_de_comunicados_dos_eua(texto, faixa, periodo, div):
+    ex = fg.extrair_eps_eua(texto, 2026)
+    assert (ex["lpa_min"], ex["lpa_max"]) == faixa and ex["periodo"] == periodo
+    assert ex["confianca"] == "alta" and ex["dividendo"] == div
+
+
+def test_tabela_com_duas_faixas_fica_sem_confianca():
+    txt = "2026 guidance: adjusted EPS of $5.50 to $5.80 (previous adjusted EPS of $5.15 to $5.60) for 2026."
+    assert fg.extrair_eps_eua(txt, 2026)["confianca"] == "baixa"
+
+
+def test_planejar_eua_primeira_gravacao_vai_para_pr():
+    doc = {"form": "8-K", "data": "2026-11-03", "acc": "0000007084-26-000054", "cik": "0000007084"}
+    item = fg.planejar_ticker_eua("ADM", HOJE, None, cabecalho=lambda: {"User-Agent": "x"},
+                                  buscar_cik=lambda t, c: ("0000007084", "ARCHER-DANIELS-MIDLAND CO"),
+                                  buscar_docs=lambda cik, c: [doc], ler_anexo=lambda d, c: ("https://sec/ex991.htm", ADM_TXT))
+    assert item["acao"] == "pr" and item["novo"]["lpa_min"] == 5.50 and item["novo"]["data"] == "03/11/2026"
+    assert "SEC" in item["novo"]["fonte"]
 
 
 def test_aplicar_grava_so_o_tipo_pedido(tmp_path, monkeypatch):

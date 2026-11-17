@@ -1,4 +1,4 @@
-"""Busca automática de guidance oficial (projeção de lucro) das empresas da B3.
+"""Busca automática de guidance oficial (projeção de lucro) das empresas da B3 e dos EUA.
 
 Roda todo dia pelo GitHub Actions (.github/workflows/update-guidance.yml):
 
@@ -25,7 +25,11 @@ Fluxo por ticker (lista em utils/guidance_tickers.json):
 O resultado vai para utils/guidance_auto.json, que utils/override.py lê. Um cadastro manual em
 override.py sempre ganha do automático.
 
-Ações dos EUA ficam desligadas por enquanto (a SEC exige e-mail de contato no robô).
+Ações dos EUA (ticker sem número, ex.: ADM, HSIC): SEC EDGAR. O robô lista os 8-K (e 6-K de empresas
+estrangeiras) com o comunicado de resultados anexo (Exhibit 99.1, o mesmo press release da empresa) e
+procura a faixa de LPA projetado ("adjusted EPS of $5.50 to $5.80") e o dividendo trimestral.
+A SEC exige e-mail de contato no User-Agent: vem só da variável SEC_CONTACT_EMAIL (Secret do GitHub),
+nunca do código. Sem ela, os tickers dos EUA ficam de fora com aviso no log.
 """
 from __future__ import annotations
 
@@ -406,6 +410,8 @@ def _data(texto: str | None) -> dt.date | None:
 
 def _lpa(o: dict) -> float | None:
     try:
+        if "lpa_min" in o:
+            return (float(o["lpa_min"]) + float(o["lpa_max"])) / 2
         return (float(o["lucro_min"]) + float(o["lucro_max"])) / 2 / float(o["acoes"])
     except (KeyError, TypeError, ValueError, ZeroDivisionError):
         return None
@@ -417,8 +423,7 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
     """Decide o que fazer com um ticker. Não grava nada."""
     item = {"ticker": ticker, "acao": "nada", "motivo": "", "novo": None, "anterior": anterior}
     if not re.fullmatch(r"[A-Z]{4}\d{1,2}", ticker):
-        item["motivo"] = "ações fora da B3 desligadas por enquanto"
-        return item
+        return planejar_ticker_eua(ticker, hoje, anterior)
     empresa = buscar_cnpj(ticker, hoje)
     if not empresa:
         item.update(acao="erro", motivo="CNPJ não encontrado no cadastro da CVM")
@@ -486,6 +491,181 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
     return item
 
 
+# ------------------------------------------------------------ EUA: SEC EDGAR (8-K / 6-K + press release)
+SEC_ARQUIVOS = "https://www.sec.gov"
+SEC_DADOS = "https://data.sec.gov"
+FORMS_SEC = ("8-K", "6-K")
+
+
+def cabecalho_sec() -> dict | None:
+    """User-Agent exigido pela SEC, com o e-mail do Secret SEC_CONTACT_EMAIL. None se não houver."""
+    email = (os.environ.get("SEC_CONTACT_EMAIL") or "").strip()
+    if not email or "@" not in email:
+        return None
+    return {"User-Agent": f"fintai/1.0 (contato: {email})", "Accept-Encoding": "gzip, deflate"}
+
+
+def _get_sec(url: str, cab: dict):
+    import requests
+
+    r = requests.get(url, headers=cab, timeout=60)
+    r.raise_for_status()
+    return r
+
+
+def cik_do_ticker(ticker: str, cab: dict) -> tuple[str, str] | None:
+    """CIK (10 dígitos) e nome da empresa pelo ticker (lista oficial da SEC)."""
+    dados = _get_sec(f"{SEC_ARQUIVOS}/files/company_tickers.json", cab).json()
+    for linha in dados.values():
+        if str(linha.get("ticker", "")).upper() == ticker.upper():
+            return f"{int(linha['cik_str']):010d}", str(linha.get("title", ticker))
+    return None
+
+
+def documentos_sec(cik: str, cab: dict) -> list[dict]:
+    """8-K/6-K mais recentes com o anexo de comunicado (Exhibit 99.x), do mais novo para o mais antigo."""
+    sub = _get_sec(f"{SEC_DADOS}/submissions/CIK{cik}.json", cab).json()
+    rec = sub.get("filings", {}).get("recent", {})
+    docs = []
+    for form, data, acc, itens in zip(rec.get("form", []), rec.get("filingDate", []),
+                                      rec.get("accessionNumber", []), rec.get("items", [""] * len(rec.get("form", [])))):
+        if form not in FORMS_SEC:
+            continue
+        # 8-K: só resultados (2.02) ou comunicados (7.01/8.01); 6-K não tem itens
+        if form == "8-K" and itens and not any(x in itens for x in ("2.02", "7.01", "8.01")):
+            continue
+        docs.append({"form": form, "data": data, "acc": acc, "cik": cik})
+        if len(docs) >= MAX_DOCUMENTOS:
+            break
+    return docs
+
+
+def anexo_sec(doc: dict, cab: dict) -> tuple[str, str] | None:
+    """Link e texto do Exhibit 99.1 (press release) de um 8-K/6-K."""
+    pasta = f"{SEC_ARQUIVOS}/Archives/edgar/data/{int(doc['cik'])}/{doc['acc'].replace('-', '')}"
+    itens = _get_sec(f"{pasta}/index.json", cab).json().get("directory", {}).get("item", [])
+    nomes = [i["name"] for i in itens if i.get("name", "").lower().endswith((".htm", ".html", ".txt"))]
+    alvo = next((n for n in nomes if re.search(r"ex[-_]?99[-_.]?0?1|ex991|exhibit991|dex991", n, re.I)), None) \
+        or next((n for n in nomes if re.search(r"ex[-_]?99|exhibit99", n, re.I)), None)
+    if not alvo:
+        return None
+    html = _get_sec(f"{pasta}/{alvo}", cab).text
+    return f"{pasta}/{alvo}", texto_de_html(html)
+
+
+def texto_de_html(html: str) -> str:
+    import html as h
+
+    t = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", html)
+    t = re.sub(r"(?s)<[^>]+>", " ", t)
+    return re.sub(r"\s+", " ", h.unescape(t)).strip()
+
+
+# "adjusted EPS of approximately $5.50 to $5.80", "non-GAAP diluted EPS ... $5.42 to $5.48",
+# "adjusted EPS of between $6.15 and $6.35"
+RE_EPS_FAIXA = re.compile(
+    r"((?:adjusted|non-gaap)[^.$]{0,60}?\b(?:eps|earnings per (?:diluted )?share)\b[^.$]{0,80}?)"
+    r"\$\s?(\d{1,3}\.\d{2})\s*(?:to|and|-|–)\s*\$\s?(\d{1,3}\.\d{2})", re.I)
+RE_ANO_EUA = re.compile(r"\b(fiscal(?:\s+year)?\s+|fy\s?|full[- ]year\s+|year\s+)?(20\d{2})\b", re.I)
+RE_DIV_TRI = re.compile(r"quarterly (?:cash )?dividend[^.$]{0,120}?\$\s?(\d{1,2}\.\d{2,4})\s*per (?:common )?share", re.I)
+RE_CONTEXTO_GUIDANCE = re.compile(r"guidance|outlook|expects?|forecast|range", re.I)
+
+
+def extrair_eps_eua(texto: str, ano_minimo: int) -> dict | None:
+    """Faixa de LPA projetado num comunicado dos EUA. None se não houver nenhuma faixa.
+
+    Confiança alta: uma única faixa distinta, com palavra de projeção por perto e ano >= ano_minimo."""
+    achados = []
+    for m in RE_EPS_FAIXA.finditer(texto):
+        a, b = float(m.group(2)), float(m.group(3))
+        if not 0 < a <= b < 1000:
+            continue
+        janela = texto[max(0, m.start() - 250): m.end() + 120]
+        anos = [(bool(x.group(1)), int(x.group(2))) for x in RE_ANO_EUA.finditer(janela)]
+        anos_ok = [(f, y) for f, y in anos if ano_minimo <= y <= ano_minimo + 2]
+        fiscal, ano = max(anos_ok, key=lambda x: x[1]) if anos_ok else (False, None)
+        achados.append({"lpa_min": a, "lpa_max": b, "ano": ano, "fiscal": fiscal,
+                        "contexto": bool(RE_CONTEXTO_GUIDANCE.search(janela)),
+                        "trecho": texto[max(0, m.start() - 120): m.end() + 40].strip()})
+    if not achados:
+        return None
+    distintos = {(x["lpa_min"], x["lpa_max"]) for x in achados if x["ano"]}
+    melhor = next((x for x in achados if x["ano"] and x["contexto"]), achados[0])
+    motivos = []
+    if not melhor["ano"]:
+        motivos.append(f"faixa de LPA sem ano {ano_minimo} ou seguinte por perto")
+    if not melhor["contexto"]:
+        motivos.append("faixa sem palavra de projeção (guidance/outlook/expects) por perto")
+    if len(distintos) > 1:
+        # tabela "anterior x atual" ou várias métricas: pode ser o guidance velho
+        motivos.append(f"{len(distintos)} faixas de LPA diferentes no documento")
+    div = {round(float(x), 4) for x in RE_DIV_TRI.findall(texto)}
+    periodo = (f"FY{melhor['ano']}" if melhor["fiscal"] and "fiscal" in melhor["trecho"].lower() else str(melhor["ano"] or ""))
+    return {**melhor, "periodo": periodo, "confianca": "baixa" if motivos else "alta", "motivos": motivos,
+            "dividendo": round(div.pop() * 4, 4) if len(div) == 1 else None, "faixas": sorted(distintos)}
+
+
+def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
+                        cabecalho=cabecalho_sec, buscar_cik=cik_do_ticker, buscar_docs=documentos_sec,
+                        ler_anexo=anexo_sec) -> dict:
+    """Mesmo critério do Brasil, com documentos da SEC. Não grava nada."""
+    item = {"ticker": ticker, "acao": "nada", "motivo": "", "novo": None, "anterior": anterior}
+    cab = cabecalho()
+    if not cab:
+        item.update(acao="erro", motivo="sem SEC_CONTACT_EMAIL (Secret do GitHub): a SEC exige e-mail de contato")
+        return item
+    empresa = buscar_cik(ticker, cab)
+    if not empresa:
+        item.update(acao="erro", motivo="ticker não encontrado na lista da SEC")
+        return item
+    cik, nome = empresa
+    for doc in buscar_docs(cik, cab):
+        data_doc, data_ant = _data(doc["data"]), _data((anterior or {}).get("data"))
+        if data_doc and data_ant and data_doc < data_ant:
+            item["motivo"] = f"documento de {_data_br(doc['data'])} é mais antigo que o guidance atual ({anterior['data']}): descartado"
+            return item
+        try:
+            anexo = ler_anexo(doc, cab)
+        except Exception as e:  # noqa: BLE001
+            log.info("  não abriu %s de %s (%s)", doc["form"], _data_br(doc["data"]), e.__class__.__name__)
+            continue
+        if not anexo:
+            continue
+        link, texto = anexo
+        if anterior and anterior.get("documento") == link:
+            item["motivo"] = "guidance já atualizado com o documento mais recente"
+            return item
+        ex = extrair_eps_eua(texto, hoje.year)
+        if ex is None:
+            continue                                   # comunicado sem faixa de LPA: tenta o anterior
+        if ex["confianca"] != "alta":
+            item.update(acao="erro", motivo="faixa de LPA encontrada sem confiança: " + "; ".join(ex["motivos"]))
+            return item
+        novo = {"lpa_min": ex["lpa_min"], "lpa_max": ex["lpa_max"], "periodo": ex["periodo"],
+                "lucro_tipo": "LPA ajustado", "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {_data_br(doc['data'])} (SEC)",
+                "data": _data_br(doc["data"]), "url": link, "documento": link, "ano": ex["ano"],
+                "metodo": "padrões de texto (SEC)", "trecho": ex["trecho"][:400]}
+        if ex["dividendo"]:
+            novo["dividendo"] = ex["dividendo"]
+        if anterior and all(anterior.get(k) == novo.get(k) for k in ("lpa_min", "lpa_max", "dividendo", "ano")):
+            item["motivo"] = "mesma faixa do guidance atual"
+            return item
+        lpa_novo, lpa_ant = _lpa(novo), _lpa(anterior or {})
+        mudou_muito = bool(lpa_ant and lpa_novo and round(abs(lpa_novo / lpa_ant - 1), 6) >= LIMITE_MUDANCA)
+        motivos = []
+        if not anterior:
+            motivos.append("primeira gravação deste ticker: precisa da sua aprovação")
+        idade = (hoje - data_doc).days if data_doc else None
+        if idade is None or idade > IDADE_MAXIMA_DIAS:
+            motivos.append(f"documento de {_data_br(doc['data'])}, com mais de {IDADE_MAXIMA_DIAS} dias")
+        if mudou_muito:
+            motivos.append(f"LPA projetado mudou {abs(lpa_novo / lpa_ant - 1):.0%} (revisão a partir de {LIMITE_MUDANCA:.0%})")
+        item.update(acao="pr" if motivos else "commit", novo=novo, motivo="; ".join(motivos) or "padrões de texto, confiança alta")
+        return item
+    item["motivo"] = "nenhum 8-K/6-K recente com faixa de LPA projetado"
+    return item
+
+
 def _ler_json(caminho: Path, padrao):
     try:
         return json.loads(caminho.read_text(encoding="utf-8"))
@@ -537,10 +717,12 @@ def resumo_pr(itens: list[dict]) -> str:
     for i in itens:
         n, a = i["novo"], i.get("anterior") or {}
         payout = "—" if n.get("payout") is None else f"{n['payout']:.0%}"
+        novo_txt = (f"LPA de {n['lpa_min']:.2f} a {n['lpa_max']:.2f} ({n.get('periodo') or n.get('ano')})"
+                    + (f", dividendo anual {n['dividendo']:.2f}" if n.get("dividendo") else "")) if "lpa_min" in n \
+            else f"lucro de {bi(n['lucro_min'])} a {bi(n['lucro_max'])} ({n.get('ano')}), payout {payout}"
         linhas += [f"## {i['ticker']}", "",
-                   f"- **Novo:** lucro de {bi(n['lucro_min'])} a {bi(n['lucro_max'])} ({n.get('ano')}), "
-                   f"payout {payout}, LPA projetado {_lpa(n):.2f}",
-                   f"- **Anterior:** " + (f"lucro de {bi(a['lucro_min'])} a {bi(a['lucro_max'])}, LPA {_lpa(a):.2f}" if _lpa(a) else "nenhum"),
+                   f"- **Novo:** {novo_txt}, LPA projetado {_lpa(n):.2f}",
+                   f"- **Anterior:** " + (f"LPA {_lpa(a):.2f}" if _lpa(a) else "nenhum"),
                    f"- **Por que revisar:** {i['motivo']}",
                    f"- **Método:** {n['metodo']}",
                    f"- **Fonte:** [{n['fonte']}]({n['url']})",
