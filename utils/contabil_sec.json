@@ -1,4 +1,47 @@
 {
+  "AAPL": {
+    "status": "ok",
+    "base": "GAAP",
+    "lpa_12m": 8.97,
+    "trimestres": [
+      {
+        "fim": "27/12/2025",
+        "lpa": 2.84,
+        "tipo": "GAAP",
+        "fonte": "SEC 10-Q (GAAP)",
+        "data": "03/11/2026",
+        "url": ""
+      },
+      {
+        "fim": "28/03/2026",
+        "lpa": 2.01,
+        "tipo": "GAAP",
+        "fonte": "SEC 10-Q (GAAP)",
+        "data": "03/11/2026",
+        "url": ""
+      },
+      {
+        "fim": "27/06/2026",
+        "lpa": 2.02,
+        "tipo": "GAAP",
+        "fonte": "SEC 10-Q (GAAP)",
+        "data": "03/11/2026",
+        "url": ""
+      },
+      {
+        "fim": "26/09/2026",
+        "lpa": 2.1,
+        "tipo": "GAAP",
+        "fonte": "SEC 10-K (GAAP)",
+        "data": "03/11/2026",
+        "url": ""
+      }
+    ],
+    "trimestres_gaap": 4,
+    "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
+    "data": "03/11/2026",
+    "atualizado": "17/11/2026"
+  },
   "ACM": {
     "status": "ok",
     "base": "GAAP",

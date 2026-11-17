@@ -1,4 +1,9 @@
 {
+  "AAPL": {
+    "2026": {
+      "status": "sem projeção inicial encontrada"
+    }
+  },
   "ACM": {
     "FY2027": {
       "lpa_min": 6.15,
@@ -48,6 +53,11 @@
       "metodo": "robô (primeiro documento do ano)",
       "trecho": "EPS of $0.85, compared to $0.74 GAAP diluted EPS in Q4 2024 ● Q4 2025 non-GAAP diluted EPS of $1.34, compared to $1.19 non-GAAP diluted EPS in Q4 2024 ● 2026 non-GAAP diluted EPS expected to be in the range of $5.23 to $5.37, with total sales growth expected to be",
       "travado": true
+    }
+  },
+  "PETR4": {
+    "2026": {
+      "status": "sem projeção inicial encontrada"
     }
   },
   "XP": {
