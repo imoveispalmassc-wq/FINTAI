@@ -229,7 +229,7 @@ def test_contabil_volta_para_o_yahoo_se_a_sec_estiver_incompleta():
     inc = {"ADM": {"status": "incompleto", "motivo": "só 3 trimestre(s) na SEC"}}
     assert contabil_12m("ADM", 5.10, inc)[:2] == (5.10, "Yahoo - SEC incompleto")
     assert contabil_12m("ADM", 5.10, {})[:2] == (5.10, "Yahoo - SEC ainda não lida pelo robô")
-    assert contabil_12m("BBAS3.SA", 1.93, ok)[:2] == (1.93, "Yahoo Finance")
+    assert contabil_12m("PETR4.SA", 6.1, ok)[:2] == (6.1, "Yahoo Finance")          # B3 fora da lista: Yahoo
 
 
 def test_card_pl_na_ordem_inicio_contabil_previsao():
@@ -242,3 +242,15 @@ def test_card_pl_na_ordem_inicio_contabil_previsao():
     assert linha_pl.index("plIni") < linha_pl.index("d.pl)") < linha_pl.index("plPrev")
     textos = js[js.index("const linhasPL"):js.index("const frasePL")]
     assert textos.index("Início do ano") < textos.index("Contábil 12 meses") < textos.index("Previsão atual") < textos.index("Média 12m")
+
+
+
+# ------------------------------------------------------------ contábil da B3 pelo release (BBAS3)
+def test_bbas3_contabil_do_release_e_pendente_sem_documento():
+    from tela.dados import contabil_12m
+    br = {"BBAS3": {"status": "ok", "lpa_12m": 2.5015, "lucro_12m": 14.28e9, "acoes": 5.7089e9,
+                    "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado"}}
+    assert contabil_12m("BBAS3.SA", 1.93, {}, br)[:2] == (2.5015, "BB, Divulgação de Resultados, Lucro Líquido Ajustado")
+    pend = {"BBAS3": {"status": "pendente", "motivo": "só 2 trimestre(s) lidos dos releases"}}
+    lpa, fonte, _ = contabil_12m("BBAS3.SA", 1.93, {}, pend)
+    assert lpa == 1.93 and fonte.startswith("Yahoo - pendente")              # não inventa número

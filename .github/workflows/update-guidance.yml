@@ -44,10 +44,10 @@ jobs:
       - name: Publicar o que tem confiança alta
         run: |
           python -m utils.fetch_guidance aplicar plano.json --tipo commit
-          if ! git diff --quiet -- utils/guidance_auto.json utils/guidance_inicial.json utils/contabil_sec.json; then
+          if ! git diff --quiet -- utils/guidance_auto.json utils/guidance_inicial.json utils/contabil_sec.json utils/contabil_br.json; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add utils/guidance_auto.json utils/guidance_inicial.json utils/contabil_sec.json
+            git add utils/guidance_auto.json utils/guidance_inicial.json utils/contabil_sec.json utils/contabil_br.json
             git commit -m "Guidance oficial atualizado automaticamente (CVM/SEC)"
             git push origin HEAD:main
           else

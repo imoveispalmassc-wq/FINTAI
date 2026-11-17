@@ -64,7 +64,13 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   do press release (8-K Exhibit 99.1 de cada trimestre); fonte "SEC 8-K Exhibit 99.1, LPA Ajustado". Os trimestres saem
   do GAAP dos 10-Q/10-K (4º tri = ano − 9 meses). Trimestre sem ajustado usa o GAAP dele e o card marca "Contábil
   Ajustado (N trimestre GAAP por falta de Ajustado)". Sem nem GAAP completo (menos de 4 trimestres, fora de sequência
-  ou último com mais de 200 dias): Yahoo, "fonte: Yahoo - SEC incompleto". B3: Yahoo.
+  ou último com mais de 200 dias): Yahoo, "fonte: Yahoo - SEC incompleto".
+- Contábil 12 meses (B3): tickers de utils/contabil_br_config.json (linha do lucro e nome da fonte; hoje só BBAS3, linha
+  "Lucro Líquido Ajustado", fonte "BB, Divulgação de Resultados, Lucro Líquido Ajustado"). O robô lê o release de
+  resultados de cada trimestre na CVM (trimestre = o último encerrado antes da entrega), extrai o lucro do trimestre
+  (frase e tabela; divergência > 3% = sem confiança), soma 4 trimestres consecutivos e grava em utils/contabil_br.json:
+  LPA = soma ÷ ações (Yahoo). Sem conseguir ler: "Yahoo - pendente", nunca número inventado; pendente não apaga valor
+  bom já gravado. Demais tickers da B3: Yahoo.
 - Projeção do início do ano: utils/guidance_inicial.json (ticker -> ano -> faixa, fonte, data, travado). O robô busca o
   primeiro documento do ano com projeção (release do 4T anterior, jan-abr; depois o 10-K) e grava uma única vez:
   nunca sobrescreve. Sem achar: {"status": "sem projeção inicial encontrada"}.

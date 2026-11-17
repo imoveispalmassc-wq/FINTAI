@@ -97,7 +97,30 @@ def ultimo_balanco(lpa_tri) -> dict | None:
 ARQ_CONTABIL_SEC = Path(__file__).resolve().parent.parent / "utils" / "contabil_sec.json"
 
 
-def contabil_12m(ticker: str | None, lpa_yahoo: float | None, tabela: dict | None = None) -> tuple[float | None, str, dict | None]:
+ARQ_CONTABIL_BR = Path(__file__).resolve().parent.parent / "utils" / "contabil_br.json"
+ARQ_CONTABIL_BR_CFG = Path(__file__).resolve().parent.parent / "utils" / "contabil_br_config.json"
+
+
+def _ler(arq: Path) -> dict:
+    try:
+        d = json.loads(arq.read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _contabil_b3(curto: str, lpa_yahoo: float | None, tabela_br: dict | None) -> tuple[float | None, str, dict | None]:
+    """B3: release de resultados da empresa (robô, CVM) para os tickers configurados; senão Yahoo."""
+    if curto not in _ler(ARQ_CONTABIL_BR_CFG):
+        return lpa_yahoo, "Yahoo Finance", None
+    c = (tabela_br if tabela_br is not None else _ler(ARQ_CONTABIL_BR)).get(curto)
+    if not c or c.get("status") != "ok" or c.get("lpa_12m") is None:
+        return lpa_yahoo, "Yahoo - pendente (release de resultados ainda não lido)", c
+    return float(c["lpa_12m"]), c.get("fonte") or "Divulgação de Resultados", c
+
+
+def contabil_12m(ticker: str | None, lpa_yahoo: float | None, tabela: dict | None = None,
+                 tabela_br: dict | None = None) -> tuple[float | None, str, dict | None]:
     """LPA contábil de 12 meses: SEC (robô, soma dos 4 últimos trimestres de LPA diluído) se estiver completa;
     senão o Yahoo, com o motivo. Devolve (lpa, fonte, detalhe da SEC)."""
     if tabela is None:
@@ -105,8 +128,10 @@ def contabil_12m(ticker: str | None, lpa_yahoo: float | None, tabela: dict | Non
             tabela = json.loads(ARQ_CONTABIL_SEC.read_text(encoding="utf-8"))
         except (FileNotFoundError, json.JSONDecodeError):
             tabela = {}
-    if not ticker or ticker.endswith(".SA"):
+    if not ticker:
         return lpa_yahoo, "Yahoo Finance", None
+    if ticker.upper().endswith(".SA"):
+        return _contabil_b3(ticker.upper()[:-3], lpa_yahoo, tabela_br)
     c = tabela.get(ticker.upper())
     if not c:
         return lpa_yahoo, "Yahoo - SEC ainda não lida pelo robô", None

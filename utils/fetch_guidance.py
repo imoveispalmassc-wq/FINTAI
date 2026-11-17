@@ -831,6 +831,23 @@ def contabil_eua(ticker: str, hoje: dt.date, *, cabecalho=cabecalho_sec, buscar_
     return contabil_ajustado(gaap, ajustados_sec(empresa[0], cab, [t["fim"] for t in gaap["trimestres"]]))
 
 
+def aplicar_contabil_br(plano: list[dict]) -> int:
+    """Grava o contábil da B3. Pendente não apaga um valor bom já gravado: só registra o motivo."""
+    tab, n = _ler_json(ARQ_CONTABIL_BR, {}), 0
+    for i in plano:
+        c = i.get("contabil_br")
+        if not c:
+            continue
+        atual = tab.get(i["ticker"]) or {}
+        novo = c if c.get("status") == "ok" or atual.get("status") != "ok" else {**atual, "ultima_tentativa": c.get("motivo")}
+        if novo != atual:
+            tab[i["ticker"]] = novo
+            n += 1
+    if n:
+        ARQ_CONTABIL_BR.write_text(json.dumps(dict(sorted(tab.items())), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return n
+
+
 def aplicar_contabil(plano: list[dict]) -> int:
     """Grava o contábil da SEC (sempre o mais novo; não é congelado)."""
     tab, n = _ler_json(ARQ_CONTABIL, {}), 0
@@ -842,6 +859,112 @@ def aplicar_contabil(plano: list[dict]) -> int:
     if n:
         ARQ_CONTABIL.write_text(json.dumps(dict(sorted(tab.items())), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return n
+
+
+# ------------------------------------------------------------ contábil 12 meses da B3 (release de resultados, CVM)
+ARQ_CONTABIL_BR = RAIZ / "utils" / "contabil_br.json"
+ARQ_CONTABIL_BR_CFG = RAIZ / "utils" / "contabil_br_config.json"   # ticker -> linha do lucro e nome da fonte
+RE_TRI = re.compile(r"\b([1-4])T(\d{2})\b")
+
+
+def trimestre_do_documento(data: dt.date) -> str:
+    """Trimestre divulgado num documento entregue nesta data: o último trimestre já encerrado (ex.: 11/11/2026 -> 3T26)."""
+    t = (data.month - 1) // 3          # trimestres encerrados no ano
+    return f"4T{(data.year - 1) % 100:02d}" if t == 0 else f"{t}T{data.year % 100:02d}"
+
+
+def fim_do_trimestre(tri: str) -> dt.date:
+    q, a = int(tri[0]), 2000 + int(tri[2:])
+    return dt.date(a, 12, 31) if q == 4 else dt.date(a, q * 3 + 1, 1) - dt.timedelta(days=1)
+
+
+def tri_anterior(tri: str) -> str:
+    q, a = int(tri[0]), int(tri[2:])
+    return f"4T{a - 1:02d}" if q == 1 else f"{q - 1}T{a:02d}"
+
+
+def _valor_reais(numero: str, unidade: str) -> float:
+    return numero_br(numero) * (1e9 if unidade.lower().startswith("bilh") else 1e6)
+
+
+def extrair_lucro_trimestre(texto: str, tri: str, linha: str = "Lucro Líquido Ajustado") -> tuple[float | None, str]:
+    """Lucro da `linha` no trimestre `tri` (ex.: "3T26"), em reais, no release de resultados.
+
+    Duas leituras: a frase do texto ("lucro líquido ajustado de R$ 1,27 bilhão no 3T26") e a linha da tabela
+    (cabeçalho com os trimestres + linha com os valores). Divergência de mais de 3% entre as duas: sem confiança."""
+    t = normalizar(texto)
+    nome = re.escape(linha).replace(r"\ ", r"\s+").replace("í", "[ií]").replace("Í", "[IÍ]")
+    achados = {}
+    # frase: "... lucro líquido ajustado ... R$ 1,27 bilhão ... 3T26" ou "No 3T26, o lucro líquido ajustado foi de R$ 1,27 bilhão"
+    # NUM e UNID já são grupos: 1-2 na primeira forma da frase, 3-4 na segunda
+    for m in re.finditer(rf"{nome}[^.]{{0,80}}?R\$\s*{NUM}\s*{UNID}[^.]{{0,40}}?\b{tri}\b|\b{tri}\b[^.]{{0,60}}?{nome}[^.]{{0,40}}?R\$\s*{NUM}\s*{UNID}", t, re.I):
+        num, uni = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+        if multiplicador(uni):
+            achados.setdefault("frase", _valor_reais(num, uni))
+    # tabela: cabeçalho com os trimestres antes da linha; valores na mesma ordem
+    for m in re.finditer(rf"{nome}\s+((?:\(?-?\d{{1,3}}(?:\.\d{{3}})*(?:,\d+)?\)?%?\s+){{1,10}})", t, re.I):
+        antes = t[max(0, m.start() - 2500): m.start()]
+        cabs = list(re.finditer(r"((?:\b(?:[1-4]T\d{2}|\d{1,2}M\d{2})\b[\s/]*){1,10})", antes))
+        if not cabs:
+            continue
+        colunas = re.findall(r"\b(?:[1-4]T\d{2}|\d{1,2}M\d{2})\b", cabs[-1].group(1))
+        valores = [v for v in m.group(1).split() if not v.endswith("%")]
+        if tri not in colunas or len(valores) < len(colunas):
+            continue
+        # unidade da tabela: a indicação mais próxima antes da linha ("R$ milhões", "R$ bilhões", "em milhões de reais")
+        unids = re.findall(r"R\$\s*(milh|bilh)|(milh|bilh)[õo]es\s+de\s+reais", antes, re.I)
+        uni = "bilh" if unids and "bilh" in "".join(unids[-1]).lower() else "milh"
+        v = valores[colunas.index(tri)].strip("()")
+        achados.setdefault("tabela", _valor_reais(v, uni) * (-1 if valores[colunas.index(tri)].startswith("(") else 1))
+    if not achados:
+        return None, f"linha '{linha}' do {tri} não encontrada"
+    vals = list(achados.values())
+    if len(vals) == 2 and abs(vals[0] / vals[1] - 1) > 0.03:
+        return None, f"frase ({vals[0] / 1e9:.2f} bi) e tabela ({vals[1] / 1e9:.2f} bi) divergem"
+    return achados.get("tabela", achados.get("frase")), "tabela" if "tabela" in achados else "frase"
+
+
+def contabil_br_de_trimestres(trimestres: list[dict], acoes: float | None, fonte: str, hoje: dt.date) -> dict:
+    """4 trimestres consecutivos -> lucro de 12 meses, LPA = soma ÷ ações. Senão: pendente."""
+    if len(trimestres) < 4:
+        return {"status": "pendente", "motivo": f"só {len(trimestres)} trimestre(s) lidos dos releases"}
+    ult = sorted(trimestres, key=lambda x: fim_do_trimestre(x["tri"]))[-4:]
+    if any(tri_anterior(b["tri"]) != a["tri"] for a, b in zip(ult, ult[1:])):
+        return {"status": "pendente", "motivo": "trimestres lidos não são consecutivos"}
+    if not acoes:
+        return {"status": "pendente", "motivo": "número de ações indisponível"}
+    soma = sum(x["lucro"] for x in ult)
+    return {"status": "ok", "base": "ajustado", "lucro_12m": soma, "acoes": acoes, "lpa_12m": round(soma / acoes, 4),
+            "trimestres": ult, "fonte": fonte, "data": ult[-1]["data"], "atualizado": f"{hoje:%d/%m/%Y}"}
+
+
+def contabil_br(ticker: str, hoje: dt.date, cfg: dict, *, buscar_cnpj=cnpj_do_ticker, buscar_docs=documentos_cvm,
+                ler_pdf=texto_do_pdf, buscar_acoes=acoes_yahoo) -> dict:
+    """Lê o lucro do trimestre no release de cada um dos 4 últimos trimestres (documentos da CVM)."""
+    empresa = buscar_cnpj(ticker, hoje)
+    if not empresa:
+        return {"status": "pendente", "motivo": "CNPJ não encontrado na CVM"}
+    linha, fonte = cfg.get("linha", "Lucro Líquido Ajustado"), cfg.get("fonte", f"{ticker}, Divulgação de Resultados")
+    lidos = {}
+    for doc in buscar_docs(empresa[0], hoje):                 # do mais novo para o mais antigo
+        d = _data(doc["data"])
+        if not d or not PALAVRAS_RESULTADO.search(f"{doc.get('categoria', '')} {doc.get('assunto', '')}"):
+            continue
+        tri = trimestre_do_documento(d)
+        if tri in lidos:
+            continue
+        try:
+            _, texto = ler_pdf(doc["link"])
+        except Exception:  # noqa: BLE001
+            continue
+        v, como = extrair_lucro_trimestre(texto, tri, linha)
+        if v is None:
+            continue
+        lidos[tri] = {"tri": tri, "fim": f"{fim_do_trimestre(tri):%d/%m/%Y}", "lucro": v, "fonte": fonte,
+                      "data": _data_br(doc["data"]), "url": doc["link"], "leitura": como}
+        if len(lidos) >= 4 and all(tri_anterior(t) in lidos for t in sorted(lidos, key=fim_do_trimestre)[1:][-3:]):
+            break
+    return contabil_br_de_trimestres(list(lidos.values()), buscar_acoes(ticker), fonte, hoje)
 
 
 # ------------------------------------------------------------ projeção do início do ano (congelada)
@@ -987,6 +1110,13 @@ def planejar(hoje: dt.date | None = None) -> list[dict]:
             ini = planejar_inicial(t, hoje, iniciais)
         except Exception as e:  # noqa: BLE001
             ini = {"ano": ano_alvo(t, hoje), "novo": None, "motivo": f"{e.__class__.__name__}: {e}"}
+        cfg_br = _ler_json(ARQ_CONTABIL_BR_CFG, {})
+        if t in cfg_br:
+            try:
+                item["contabil_br"] = contabil_br(t, hoje, cfg_br[t])
+            except Exception as e:  # noqa: BLE001
+                item["contabil_br"] = {"status": "pendente", "motivo": f"{e.__class__.__name__}: {e}"}
+            log.info("  contábil B3: %s", item["contabil_br"].get("lpa_12m") or item["contabil_br"].get("motivo"))
         if not re.fullmatch(r"[A-Z]{4}\d{1,2}", t):
             try:
                 item["contabil"] = contabil_eua(t, hoje)
@@ -1019,6 +1149,7 @@ def aplicar(plano: list[dict], tipo: str) -> list[dict]:
     if tipo == "commit":
         aplicar_iniciais(plano)
         aplicar_contabil(plano)
+        aplicar_contabil_br(plano)
     return aplicados
 
 

@@ -365,3 +365,54 @@ def test_falta_ajustado_em_um_trimestre_usa_gaap_so_nele_e_marca_no_card():
     assert lpa == pytest.approx(5.55) and "1 trimestre GAAP por falta de Ajustado" in fonte
     js = pathlib.Path(fg.__file__).resolve().parent.parent.joinpath("tela", "detalhe.js").read_text(encoding="utf-8")
     assert "GAAP por falta de Ajustado" in js and "Contábil Ajustado 12 meses" in js
+
+
+
+# ------------------------------------------------------------ contábil BBAS3 pelo release do BB (CVM)
+BB_LUCRO = {"4T25": 5.70, "1T26": 3.40, "2T26": 3.91, "3T26": 1.27}     # R$ bi, exemplo do pedido
+BB_DATAS = {"4T25": "2026-02-11", "1T26": "2026-05-13", "2T26": "2026-08-12", "3T26": "2026-11-11"}
+
+
+def _release_bb(tri):
+    """Release no formato do BB: frase de destaque e a tabela com os trimestres em R$ milhões."""
+    v = BB_LUCRO[tri]
+    milhoes = f"{v * 1000:,.0f}".replace(",", ".")
+    return (f"Divulgação de Resultados {tri}. O lucro líquido ajustado alcançou R$ {str(v).replace('.', ',')} bilhões no {tri}. "
+            f"Principais indicadores R$ milhões {tri} Lucro Líquido Ajustado {milhoes} RSPL 12,0%")
+
+
+def test_bbas3_soma_4_trimestres_do_release_e_lpa_2_50():
+    for tri in BB_LUCRO:
+        v, como = fg.extrair_lucro_trimestre(_release_bb(tri), tri)
+        assert v == pytest.approx(BB_LUCRO[tri] * 1e9) and como == "tabela"
+    docs = [{"data": BB_DATAS[t], "categoria": "Dados Econômico-Financeiros", "assunto": "Divulgação de Resultados",
+             "link": f"https://cvm/{t}.pdf"} for t in ("3T26", "2T26", "1T26", "4T25")]
+    c = fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {"fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado"},
+                       buscar_cnpj=lambda t, h: ("00000000000191", "BCO BRASIL S.A."), buscar_docs=lambda c, h: docs,
+                       ler_pdf=lambda link: (b"", _release_bb(link.split("/")[-1][:4])), buscar_acoes=lambda t: 5.71e9)
+    assert c["status"] == "ok" and [t["tri"] for t in c["trimestres"]] == ["4T25", "1T26", "2T26", "3T26"]
+    assert round(c["lucro_12m"] / 1e9, 1) == 14.3 and round(c["lpa_12m"], 2) == 2.50
+    assert c["fonte"] == "BB, Divulgação de Resultados, Lucro Líquido Ajustado" and c["data"] == "11/11/2026"
+    assert c["trimestres"][-1]["data"] == "11/11/2026" and c["trimestres"][0]["data"] == "11/02/2026"
+
+
+def test_bbas3_sem_ler_todos_os_releases_fica_pendente_sem_inventar():
+    docs = [{"data": BB_DATAS["3T26"], "categoria": "Resultado", "assunto": "Divulgação de Resultados", "link": "x"}]
+    c = fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {}, buscar_cnpj=lambda t, h: ("1", "BB"),
+                       buscar_docs=lambda c, h: docs, ler_pdf=lambda link: (b"", _release_bb("3T26")),
+                       buscar_acoes=lambda t: 5.71e9)
+    assert c["status"] == "pendente" and "lpa_12m" not in c
+    # frase e tabela diferentes: sem confiança
+    txt = "O lucro líquido ajustado foi de R$ 1,27 bilhão no 3T26. R$ milhões 3T26 Lucro Líquido Ajustado 2.100 RSPL"
+    assert fg.extrair_lucro_trimestre(txt, "3T26")[0] is None
+    assert fg.trimestre_do_documento(dt.date(2026, 2, 11)) == "4T25" and fg.trimestre_do_documento(dt.date(2026, 11, 11)) == "3T26"
+
+
+def test_pendente_nao_apaga_valor_bom_ja_gravado(tmp_path, monkeypatch):
+    import json
+    arq = tmp_path / "br.json"
+    arq.write_text(json.dumps({"BBAS3": {"status": "ok", "lpa_12m": 2.5}}), encoding="utf-8")
+    monkeypatch.setattr(fg, "ARQ_CONTABIL_BR", arq)
+    fg.aplicar_contabil_br([{"ticker": "BBAS3", "contabil_br": {"status": "pendente", "motivo": "PDF não abriu"}}])
+    dado = json.loads(arq.read_text(encoding="utf-8"))["BBAS3"]
+    assert dado["lpa_12m"] == 2.5 and dado["ultima_tentativa"] == "PDF não abriu"
