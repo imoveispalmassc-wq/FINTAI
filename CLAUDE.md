@@ -60,9 +60,11 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   cronológica: Início do ano (primeiro guidance do ano, congelado, com data e fonte) -> Contábil 12 meses (real, muda a
   cada balanço) -> Previsão atual (guidance oficial se houver, senão consenso do Yahoo). Textos na mesma ordem, depois
   Média 12m e lucro ajustado.
-- Contábil 12 meses (EUA): utils/contabil_sec.json, gravado pelo robô = soma dos 4 últimos trimestres de LPA diluído
-  (GAAP) dos 10-Q/10-K (4º tri = ano − 9 meses). SEC incompleta (menos de 4 trimestres, fora de sequência ou último
-  trimestre com mais de 200 dias): usa o Yahoo e mostra "fonte: Yahoo - SEC incompleto". B3: Yahoo.
+- Contábil 12 meses (EUA): utils/contabil_sec.json, gravado pelo robô = soma dos 4 últimos trimestres de LPA AJUSTADO
+  do press release (8-K Exhibit 99.1 de cada trimestre); fonte "SEC 8-K Exhibit 99.1, LPA Ajustado". Os trimestres saem
+  do GAAP dos 10-Q/10-K (4º tri = ano − 9 meses). Trimestre sem ajustado usa o GAAP dele e o card marca "Contábil
+  Ajustado (N trimestre GAAP por falta de Ajustado)". Sem nem GAAP completo (menos de 4 trimestres, fora de sequência
+  ou último com mais de 200 dias): Yahoo, "fonte: Yahoo - SEC incompleto". B3: Yahoo.
 - Projeção do início do ano: utils/guidance_inicial.json (ticker -> ano -> faixa, fonte, data, travado). O robô busca o
   primeiro documento do ano com projeção (release do 4T anterior, jan-abr; depois o 10-K) e grava uma única vez:
   nunca sobrescreve. Sem achar: {"status": "sem projeção inicial encontrada"}.

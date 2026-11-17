@@ -750,6 +750,73 @@ def lpa_ttm_sec(fatos: dict, hoje: dt.date) -> dict:
             "data": _data_br(max(tri[f][1] for f in ultimos)), "atualizado": f"{hoje:%d/%m/%Y}"}
 
 
+# LPA ajustado do trimestre no press release (8-K Exhibit 99.1): "Third quarter adjusted EPS of $1.77"
+RE_EPS_AJUSTADO_TRI = re.compile(
+    r"adjusted\s+(?:net\s+)?(?:diluted\s+)?(?:earnings\s+per\s+(?:diluted\s+)?share|eps)\b[^$.]{0,60}?\$\s?(-?\d{1,3}\.\d{2})", re.I)
+RE_NAO_TRIMESTRE = re.compile(r"full[- ]year|year[- ]to[- ]date|\bytd\b|nine months|six months|annual|outlook|guidance|"
+                              r"expects?|forecast|\b20\d{2}\s+adjusted", re.I)
+
+
+def extrair_eps_ajustado_trimestre(texto: str) -> float | None:
+    """Primeiro LPA ajustado do comunicado que é do trimestre (não do ano, do acumulado nem da projeção)."""
+    for m in RE_EPS_AJUSTADO_TRI.finditer(texto):
+        antes = texto[max(0, m.start() - 90): m.start()] + m.group(0)
+        if RE_NAO_TRIMESTRE.search(antes):
+            continue
+        return float(m.group(1))
+    return None
+
+
+def contabil_ajustado(gaap: dict, ajustados: dict) -> dict:
+    """Soma dos 4 últimos trimestres de LPA AJUSTADO (8-K Exhibit 99.1).
+
+    gaap: resultado de lpa_ttm_sec (dá os 4 trimestres e o GAAP de cada um).
+    ajustados: {"DD/MM/AAAA" (fim do trimestre): {"lpa", "fonte", "data", "url"}}.
+    Trimestre sem ajustado usa o GAAP daquele trimestre e conta em "trimestres_gaap"."""
+    if gaap.get("status") != "ok":
+        return gaap
+    tri, n_gaap = [], 0
+    for t in gaap["trimestres"]:
+        a = ajustados.get(t["fim"])
+        if a and a.get("lpa") is not None:
+            tri.append({"fim": t["fim"], "lpa": round(float(a["lpa"]), 4), "tipo": "ajustado",
+                        "fonte": a.get("fonte", "SEC 8-K Exhibit 99.1"), "data": a.get("data", ""), "url": a.get("url", "")})
+        else:
+            n_gaap += 1
+            tri.append({"fim": t["fim"], "lpa": t["lpa"], "tipo": "GAAP", "fonte": f"SEC {t.get('form') or '10-Q/10-K'} (GAAP)",
+                        "data": gaap.get("data", ""), "url": ""})
+    fonte = "SEC 8-K Exhibit 99.1, LPA Ajustado"
+    if n_gaap:
+        fonte += f" ({n_gaap} trimestre{'s' if n_gaap > 1 else ''} GAAP por falta de Ajustado)"
+    return {"status": "ok", "base": "ajustado" if n_gaap < 4 else "GAAP", "lpa_12m": round(sum(t["lpa"] for t in tri), 4),
+            "trimestres": tri, "trimestres_gaap": n_gaap, "fonte": fonte if n_gaap < 4 else "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
+            "data": max((t["data"] for t in tri if t["data"]), default=gaap.get("data", "")), "atualizado": gaap.get("atualizado", "")}
+
+
+def ajustados_sec(cik: str, cab: dict, fins: list[str], *, buscar_docs=None, ler=None) -> dict:
+    """Para cada fim de trimestre, o 8-K de resultado (2.02) dos 100 dias seguintes e o LPA ajustado do release."""
+    buscar_docs = buscar_docs or documentos_sec_periodo
+    ler = ler or anexo_sec
+    saida = {}
+    for fim in fins:
+        d = _data(fim)
+        for doc in buscar_docs(cik, cab, d + dt.timedelta(days=1), d + dt.timedelta(days=100)):
+            if doc["form"] not in ("8-K", "6-K"):
+                continue
+            try:
+                lido = ler(doc, cab)
+            except Exception:  # noqa: BLE001
+                continue
+            if not lido:
+                continue
+            v = extrair_eps_ajustado_trimestre(lido[1])
+            if v is not None:
+                saida[fim] = {"lpa": v, "fonte": f"SEC Form {doc['form']} Exhibit 99.1 de {_data_br(doc['data'])}, LPA Ajustado",
+                              "data": _data_br(doc["data"]), "url": lido[0]}
+                break
+    return saida
+
+
 def contabil_eua(ticker: str, hoje: dt.date, *, cabecalho=cabecalho_sec, buscar_cik=cik_do_ticker) -> dict:
     cab = cabecalho()
     if not cab:
@@ -758,7 +825,10 @@ def contabil_eua(ticker: str, hoje: dt.date, *, cabecalho=cabecalho_sec, buscar_
     if not empresa:
         return {"status": "incompleto", "motivo": "ticker não encontrado na SEC"}
     fatos = _get_sec(f"{SEC_DADOS}/api/xbrl/companyfacts/CIK{empresa[0]}.json", cab).json()
-    return lpa_ttm_sec(fatos, hoje)
+    gaap = lpa_ttm_sec(fatos, hoje)
+    if gaap.get("status") != "ok":
+        return gaap
+    return contabil_ajustado(gaap, ajustados_sec(empresa[0], cab, [t["fim"] for t in gaap["trimestres"]]))
 
 
 def aplicar_contabil(plano: list[dict]) -> int:

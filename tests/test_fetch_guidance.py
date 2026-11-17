@@ -325,3 +325,42 @@ def test_contabil_sec_incompleto():
     assert fg.lpa_ttm_sec(fatos, dt.date(2026, 11, 17))["status"] == "incompleto"
     assert fg.lpa_ttm_sec(_fatos_adm(), dt.date(2027, 8, 1))["status"] == "incompleto"   # SEC atrasada
     assert fg.lpa_ttm_sec({}, dt.date(2026, 11, 17))["status"] == "incompleto"
+
+
+# ------------------------------------------------------------ contábil AJUSTADO (8-K Exhibit 99.1)
+# 4T25 ajustado 0,87 e 3T26 ajustado 1,77 são os divulgados pela ADM; 1T26 e 2T26 (1,11 e 1,45) são de teste,
+# escolhidos para que 2026 até o 3T some 4,33, como no release do 3T26.
+ADM_AJ = {"31/12/2025": 0.87, "31/03/2026": 1.11, "30/06/2026": 1.45, "30/09/2026": 1.77}
+
+
+def _aj(valores):
+    return {fim: {"lpa": v, "fonte": "SEC Form 8-K Exhibit 99.1, LPA Ajustado", "data": "x", "url": ""} for fim, v in valores.items()}
+
+
+def test_contabil_ajustado_da_adm_soma_5_20_e_nao_5_12():
+    gaap = fg.lpa_ttm_sec(_fatos_adm(), dt.date(2026, 11, 17))
+    assert gaap["lpa_12m"] == pytest.approx(5.12)                          # GAAP
+    c = fg.contabil_ajustado(gaap, _aj(ADM_AJ))
+    assert c["lpa_12m"] == pytest.approx(5.20) and c["base"] == "ajustado" and c["trimestres_gaap"] == 0
+    assert c["fonte"] == "SEC 8-K Exhibit 99.1, LPA Ajustado"
+    assert [t["tipo"] for t in c["trimestres"]] == ["ajustado"] * 4
+    # o LPA ajustado do trimestre sai do press release, sem confundir com o acumulado, o ano ou a projeção
+    q3 = ("ADM Reports Third Quarter 2026 Results. Third quarter adjusted EPS of $1.77; year-to-date adjusted EPS "
+          "of $4.33. The Company now expects 2026 adjusted EPS of approximately $5.50 to $5.80.")
+    q4 = "Fourth quarter adjusted EPS of $0.87, down 24%. Full year adjusted EPS of $3.43. 2026 adjusted EPS guidance $3.60 to $4.25."
+    assert fg.extrair_eps_ajustado_trimestre(q3) == 1.77 and fg.extrair_eps_ajustado_trimestre(q4) == 0.87
+
+
+def test_falta_ajustado_em_um_trimestre_usa_gaap_so_nele_e_marca_no_card():
+    import pathlib
+    from tela.dados import contabil_12m
+    gaap = fg.lpa_ttm_sec(_fatos_adm(), dt.date(2026, 11, 17))
+    sem_1t = {k: v for k, v in ADM_AJ.items() if k != "31/03/2026"}
+    c = fg.contabil_ajustado(gaap, _aj(sem_1t))
+    assert [t["tipo"] for t in c["trimestres"]] == ["ajustado", "GAAP", "ajustado", "ajustado"]
+    assert c["lpa_12m"] == pytest.approx(0.87 + 1.07 + 1.45 + 1.77)        # 1T26 pelo GAAP (1,07)
+    assert c["fonte"] == "SEC 8-K Exhibit 99.1, LPA Ajustado (1 trimestre GAAP por falta de Ajustado)"
+    lpa, fonte, _ = contabil_12m("ADM", 5.12, {"ADM": c})
+    assert lpa == pytest.approx(5.16) and "1 trimestre GAAP por falta de Ajustado" in fonte
+    js = pathlib.Path(fg.__file__).resolve().parent.parent.joinpath("tela", "detalhe.js").read_text(encoding="utf-8")
+    assert "GAAP por falta de Ajustado" in js and "Contábil Ajustado 12 meses" in js

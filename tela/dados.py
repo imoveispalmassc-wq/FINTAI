@@ -112,7 +112,7 @@ def contabil_12m(ticker: str | None, lpa_yahoo: float | None, tabela: dict | Non
         return lpa_yahoo, "Yahoo - SEC ainda não lida pelo robô", None
     if c.get("status") != "ok" or c.get("lpa_12m") is None:
         return lpa_yahoo, "Yahoo - SEC incompleto", c
-    return float(c["lpa_12m"]), c.get("fonte") or "SEC 10-Q/10-K", c
+    return float(c["lpa_12m"]), c.get("fonte") or "SEC 8-K Exhibit 99.1, LPA Ajustado", c
 
 
 def fundamentos(d: dict, r: Resultado, ticker: str | None = None) -> dict:
