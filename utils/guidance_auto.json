@@ -1,1 +1,43 @@
-{}
+{
+  "ACM": {
+    "lpa_min": 6.15,
+    "lpa_max": 6.35,
+    "periodo": "2027",
+    "lucro_tipo": "LPA ajustado",
+    "fonte": "AECOM, Form 8-K Exhibit 99.1 de 16/11/2026 (SEC)",
+    "data": "16/11/2026",
+    "url": "https://www.sec.gov/Archives/edgar/data/868857/000110465926128300/tm2629784d1_ex99-1.htm",
+    "documento": "https://www.sec.gov/Archives/edgar/data/868857/000110465926128300/tm2629784d1_ex99-1.htm",
+    "ano": 2027,
+    "metodo": "padrões de texto (SEC)",
+    "trecho": "inancing fees $0.05 Restructuring and acquisition costs $0.23 to $0.15 Tax effect of the above items ($0.13) to ($0.11) Adjusted EPS guidance $6.15 to $6.35 FY2027 GAAP Net Income from Continuing",
+    "dividendo": 1.36
+  },
+  "ADM": {
+    "lpa_min": 5.5,
+    "lpa_max": 5.8,
+    "periodo": "2026",
+    "lucro_tipo": "LPA ajustado",
+    "fonte": "Archer-Daniels-Midland Co, Form 8-K Exhibit 99.1 de 03/11/2026 (SEC)",
+    "data": "03/11/2026",
+    "url": "https://www.sec.gov/Archives/edgar/data/7084/000000708426000054/adm-ex991_20260930xq3.htm",
+    "documento": "https://www.sec.gov/Archives/edgar/data/7084/000000708426000054/adm-ex991_20260930xq3.htm",
+    "ano": 2026,
+    "metodo": "padrões de texto (SEC)",
+    "trecho": "net earnings 1 of $858 million • EPS 2 of $1.70, with adjusted EPS 1,2 of $1.77 2026 Outlook 3 : • ADM now expects 2026 adjusted EPS 1,2 of approximately $5.50 to $5.80, up from the prior adjusted EPS guidanc",
+    "escolha": "faixa nova escolhida; ignorada(s): 5.15 a 5.60"
+  },
+  "HSIC": {
+    "lpa_min": 5.42,
+    "lpa_max": 5.48,
+    "periodo": "2026",
+    "lucro_tipo": "LPA ajustado",
+    "fonte": "HENRY SCHEIN INC, Form 8-K Exhibit 99.1 de 16/11/2026 (SEC)",
+    "data": "16/11/2026",
+    "url": "https://www.sec.gov/Archives/edgar/data/1000228/000100022826000067/exhibit991.htm",
+    "documento": "https://www.sec.gov/Archives/edgar/data/1000228/000100022826000067/exhibit991.htm",
+    "ano": 2026,
+    "metodo": "padrões de texto (SEC)",
+    "trecho": "is change better reflects underlying operating performance and improves comparability across reporting periods ● FY2026 non-GAAP diluted EPS guidance updated to $5.42 to $5.48 solely to reflect the change MELVILLE,"
+  }
+}
