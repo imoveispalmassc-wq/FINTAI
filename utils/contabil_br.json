@@ -1,12 +1,54 @@
 {
   "BBAS3": {
-    "status": "pendente",
-    "motivo": "trimestres lidos não são consecutivos",
+    "status": "ok",
+    "base": "ajustado",
+    "lucro_12m": 14351000000.0,
+    "acoes": 5708922664.0,
+    "lpa_12m": 2.5138,
+    "trimestres": [
+      {
+        "tri": "4T25",
+        "fim": "31/12/2025",
+        "lucro": 5742000000.0,
+        "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado",
+        "data": "24/02/2026",
+        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1481390&numSequencia=1006096&numVersao=3",
+        "leitura": "tabela do relatório (frase 20.70 bi descartada: diverge 260.5%)"
+      },
+      {
+        "tri": "1T26",
+        "fim": "31/03/2026",
+        "lucro": 3431000000.0,
+        "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado",
+        "data": "13/05/2026",
+        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1521600&numSequencia=1046306&numVersao=1",
+        "leitura": "tabela do relatório"
+      },
+      {
+        "tri": "2T26",
+        "fim": "30/06/2026",
+        "lucro": 3908000000.0,
+        "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado",
+        "data": "17/08/2026",
+        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1558772&numSequencia=1083478&numVersao=2",
+        "leitura": "tabela do relatório"
+      },
+      {
+        "tri": "3T26",
+        "fim": "30/09/2026",
+        "lucro": 1270000000.0,
+        "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado",
+        "data": "13/11/2026",
+        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1589018&numSequencia=1113724&numVersao=2",
+        "leitura": "tabela do relatório"
+      }
+    ],
+    "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado",
+    "data": "13/11/2026",
+    "atualizado": "17/11/2026",
     "lidos": {
-      "4T24": 9.58,
-      "1T25": 7.4,
-      "2T25": 3.784,
-      "3T25": 3.785,
+      "4T25": 5.742,
+      "1T26": 3.431,
       "2T26": 3.908,
       "3T26": 1.27
     }
