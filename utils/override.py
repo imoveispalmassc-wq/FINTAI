@@ -209,13 +209,15 @@ def guidance_inicial(ticker: str, ano: str, tabela: dict | None = None, acoes_pa
         return {"status": o.get("status") or SEM_INICIAL, "ano": str(ano)}
     if validar(chave, o):
         return {"status": "projeção inicial inválida no cadastro", "ano": str(ano)}
+    lucros = {}
     if "lpa_min" in o:
         lmin, lmax = float(o["lpa_min"]), float(o["lpa_max"])
     else:
+        lucros = {"lucroMin": float(o["lucro_min"]), "lucroMax": float(o["lucro_max"])}
         acoes = float(o["acoes"]) if o.get("acoes") not in (None, "") else acoes_padrao
         if not acoes:
             return {"status": "sem número de ações para a projeção inicial", "ano": str(ano)}
         lmin, lmax = float(o["lucro_min"]) / acoes, float(o["lucro_max"]) / acoes
     return {"ano": str(ano), "lpa": (lmin + lmax) / 2, "lpaMin": lmin, "lpaMax": lmax, "fonte": str(o["fonte"]),
-            "data": str(o["data"]), "url": str(o.get("url") or ""), "tipo": str(o.get("lucro_tipo") or "LPA"),
-            "travado": True}
+            "data": str(o["data"]), "url": str(o.get("url") or ""), "tipo": str(o.get("lucro_tipo") or ("LPA" if not lucros else "lucro líquido")),
+            "travado": True, **lucros}

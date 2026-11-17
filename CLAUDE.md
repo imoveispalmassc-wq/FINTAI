@@ -58,8 +58,10 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   e cobrir 6+ meses, só os dias cobertos). Sem isso: preço médio do ano ÷ LPA atual.
 - Card de P/L: linhas P/L, Lucro líquido (lucro/ação × ações do Yahoo), Lucro/ação, Cotação; colunas em ordem
   cronológica: Início do ano (primeiro guidance do ano, congelado, com data e fonte) -> Contábil 12 meses (real, muda a
-  cada balanço) -> Previsão atual (guidance oficial se houver, senão consenso do Yahoo). Textos na mesma ordem, depois
-  Média 12m e lucro ajustado.
+  cada balanço) -> Previsão atual (guidance oficial se houver, senão consenso do Yahoo). Embaixo, só 4 linhas curtas
+  (Início do ano: guidance; Contábil: cotação ÷ LPA = P/L; Previsão atual: guidance/consenso e variação desde o início;
+  Média 12m: P/L e diferença). Soma dos trimestres, fontes completas, faixas de LPA, lucro ajustado e a definição de P/L
+  ficam em "Ver como calculamos".
 - Contábil 12 meses (EUA): utils/contabil_sec.json, gravado pelo robô = soma dos 4 últimos trimestres de LPA AJUSTADO
   do press release (8-K Exhibit 99.1 de cada trimestre); fonte "SEC 8-K Exhibit 99.1, LPA Ajustado". Os trimestres saem
   do GAAP dos 10-Q/10-K (4º tri = ano − 9 meses). Trimestre sem ajustado usa o GAAP dele e o card marca "Contábil
