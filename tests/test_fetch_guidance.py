@@ -61,79 +61,119 @@ def test_valor_em_milhoes():
     assert (ex.lucro_min, ex.lucro_max) == (800e6, 950e6) and ex.confianca == "alta"
 
 
-# ------------------------------------------------------------ decisão (sem rede)
-def _planejar(docs_datados, anterior=None, claude=None, vistos=None):
+# ------------------------------------------------------------ decisão: AUTOMÁTICO COM PROTEÇÃO (sem rede)
+# release oficial completo: a faixa aparece no texto e na tabela (trava 2)
+FATO_BB_NOV_TABELA = FATO_BB_NOV + "\nTabela: Projeções 2026 (R$ bilhões) Lucro Líquido Ajustado 9 a 11"
+MERCADO_BB = {"preco": 14.86, "pl": 5.9}      # cotação e P/L de 12 meses do Yahoo (falsos, só para o teste)
+
+
+def _planejar(docs_datados, anterior=None, claude=None, vistos=None, mercado=MERCADO_BB, referencia=None):
     """docs_datados: [(data ISO, texto)], do mais novo para o mais antigo."""
     docs = [{"data": data, "categoria": "Fato Relevante", "assunto": "Projeções",
-             "link": f"https://cvm.example/doc{i}.pdf"} for i, (data, _) in enumerate(docs_datados)]
+             "link": f"https://www.rad.cvm.gov.br/doc{i}.pdf"} for i, (data, _) in enumerate(docs_datados)]
     paginas = {d["link"]: texto for d, (_, texto) in zip(docs, docs_datados)}
     return planejar_ticker(
         "BBAS3", HOJE, anterior, set() if vistos is None else vistos,
         buscar_cnpj=lambda t, h: ("00.000.000/0001-91", "BANCO DO BRASIL S.A."),
         buscar_docs=lambda c, h: docs, ler_pdf=lambda link: (b"%PDF", paginas[link]),
-        buscar_acoes=lambda t: 5.73e9, ler_com_claude=claude or (lambda *args: None))
+        buscar_acoes=lambda t: 5.73e9, ler_com_claude=claude or (lambda *args: None),
+        buscar_mercado=lambda t: mercado, referencia=referencia)
+
+
+def _travou(item, nome):
+    return any(tr["nome"] == nome and not tr["ok"] for tr in item["travas"])
 
 
 NOV, MAI, FEV = "2026-11-11", "2026-05-13", "2026-02-12"
 GUIDANCE_NOV = {"lucro_min": 9e9, "lucro_max": 11e9, "acoes": 5.73e9, "payout": 0.25, "ano": 2026,
-                "data": "11/11/2026", "documento": "https://cvm.example/release-3t26.pdf"}
+                "data": "11/11/2026", "documento": "https://www.rad.cvm.gov.br/release-3t26.pdf"}
+GUIDANCE_APROVADO = {"lucro_min": 9.5e9, "lucro_max": 11.5e9, "acoes": 5.73e9, "payout": 0.25, "ano": 2026,
+                     "data": "15/08/2026", "documento": "https://www.rad.cvm.gov.br/antigo.pdf"}
 
 
-def test_primeira_gravacao_do_ticker_sempre_abre_pr_mesmo_com_confianca_alta():
-    item = _planejar([(NOV, FATO_BB_NOV)])          # documento recente, faixa única, sem guidance salvo
-    assert item["acao"] == "pr" and "primeira gravação" in item["motivo"]
+def test_passa_nas_4_travas_e_publica_sozinho():
+    item = _planejar([(NOV, FATO_BB_NOV_TABELA)], anterior=GUIDANCE_APROVADO)     # lucro de 10,5 para 10 bi: -4,8%
+    assert item["acao"] == "commit" and item["motivo"].startswith("passou nas 4 travas")
+    assert [t["nome"] for t in item["travas"]] == ["Fonte oficial", "Número em 2 lugares", "Variação até 20%", "P/L plausível"]
+    assert all(t["ok"] for t in item["travas"])
     n = item["novo"]
     assert (n["lucro_min"], n["lucro_max"], n["payout"], n["acoes"]) == (9e9, 11e9, 0.25, 5.73e9)
-    assert n["data"] == "11/11/2026"
-    assert n["fonte"] == "BANCO DO BRASIL S.A., Fato Relevante de 11/11/2026 (CVM)" and n["url"].startswith("https://")
+    assert n["fonte"] == "BANCO DO BRASIL S.A., Fato Relevante de 11/11/2026 (CVM)"
 
 
-GUIDANCE_APROVADO = {"lucro_min": 9.5e9, "lucro_max": 11.5e9, "acoes": 5.73e9, "payout": 0.25, "ano": 2026,
-                     "data": "15/08/2026", "documento": "https://cvm.example/antigo.pdf"}
+def test_numero_so_uma_vez_no_documento_trava():
+    item = _planejar([(NOV, FATO_BB_NOV)], anterior=GUIDANCE_APROVADO)
+    assert item["acao"] == "pr" and _travou(item, "Número em 2 lugares") and "1 vez" in item["motivo"]
 
 
-def test_depois_de_aprovado_confianca_alta_e_variacao_pequena_vai_direto():
-    item = _planejar([(NOV, FATO_BB_NOV)], anterior=GUIDANCE_APROVADO)     # LPA de 10,5 para 10: -5%
-    assert item["acao"] == "commit" and "primeira" not in item["motivo"]
+def test_primeira_gravacao_sem_guidance_no_app_trava():
+    item = _planejar([(NOV, FATO_BB_NOV_TABELA)])
+    assert item["acao"] == "pr" and _travou(item, "Variação até 20%") and "sem guidance anterior" in item["motivo"]
+    assert item["novo"]["lucro_min"] == 9e9            # vai para o PR, você decide
+
+
+def test_cadastro_manual_serve_de_referencia_para_a_trava_de_20():
+    manual = {"lucro_min": 9e9, "lucro_max": 11e9, "payout": 0.25, "data": "11/11/2026"}
+    item = _planejar([(NOV, FATO_BB_NOV_TABELA)], referencia=manual)
+    assert item["acao"] == "commit" and "+0.0%" in item["travas"][2]["detalhe"]
+
+
+def test_documento_fora_da_cvm_ou_sec_trava():
+    item = planejar_ticker(
+        "BBAS3", HOJE, GUIDANCE_APROVADO, set(), buscar_cnpj=lambda t, h: ("x", "BANCO DO BRASIL S.A."),
+        buscar_docs=lambda c, h: [{"data": NOV, "categoria": "Fato Relevante", "assunto": "Projeções",
+                                   "link": "https://blog.exemplo.com/bb.pdf"}],
+        ler_pdf=lambda link: (b"%PDF", FATO_BB_NOV_TABELA), buscar_acoes=lambda t: 5.73e9,
+        buscar_mercado=lambda t: MERCADO_BB)
+    assert item["acao"] == "pr" and _travou(item, "Fonte oficial")
+
+
+@pytest.mark.parametrize("mercado,trecho", [(None, "sem cotação"), ({"preco": 14.86, "pl": 40.0}, "fora de 1/3"),
+                                             ({"preco": 14.86, "pl": None}, "sem P/L de referência")])
+def test_p_l_sem_dado_ou_absurdo_trava(mercado, trecho):
+    ref = {**GUIDANCE_APROVADO}
+    if mercado and mercado["pl"] is None:
+        ref = {"lucro_min": 9.5e9, "lucro_max": 11.5e9, "data": "x"}       # sem ações: não dá o P/L do anterior
+    item = _planejar([(NOV, FATO_BB_NOV_TABELA)], anterior=GUIDANCE_APROVADO, mercado=mercado, referencia=ref)
+    assert item["acao"] == "pr" and _travou(item, "P/L plausível") and trecho in item["motivo"]
 
 
 def test_documento_mais_novo_sem_guidance_e_pulado():
-    item = _planejar([("2026-11-14", RELEASE_SEM_GUIDANCE), (NOV, FATO_BB_NOV)], anterior=GUIDANCE_APROVADO)
+    item = _planejar([("2026-11-14", RELEASE_SEM_GUIDANCE), (NOV, FATO_BB_NOV_TABELA)], anterior=GUIDANCE_APROVADO)
     assert item["acao"] == "commit" and item["novo"]["lucro_min"] == 9e9
 
 
 def test_faixa_de_maio_e_descartada_quando_o_app_ja_tem_a_de_novembro():
-    # o robô só achou o documento de maio (18 a 22): é mais antigo que o guidance atual, descarta
     item = _planejar([(MAI, FATO_BB_MAI), (FEV, FATO_BB_FEV)], anterior=GUIDANCE_NOV)
     assert item["acao"] == "nada" and item["novo"] is None and "mais antigo" in item["motivo"]
 
 
-def test_faixa_de_maio_sem_guidance_no_app_nunca_e_publicada_sozinha():
-    # primeira execução, sem guidance salvo: documento com mais de 120 dias vai para revisão
-    item = _planejar([(MAI, FATO_BB_MAI)])
-    assert item["acao"] == "pr" and "120 dias" in item["motivo"]
-    assert item["novo"]["lucro_min"] == 18e9      # aparece no PR, para você recusar
+def test_documento_com_mais_de_120_dias_e_duvida_e_trava_mesmo_passando_nas_travas():
+    ant = {**GUIDANCE_APROVADO, "lucro_min": 17e9, "lucro_max": 21e9, "data": "01/04/2026"}
+    item = _planejar([(MAI, FATO_BB_MAI + " Tabela: Lucro Líquido Ajustado 18 a 22")], referencia=ant,
+                     mercado={"preco": 14.86, "pl": 5.0})
+    assert all(t["ok"] for t in item["travas"])
+    assert item["acao"] == "pr" and "120 dias" in item["motivo"] and item["duvidas"]
 
 
 def test_nunca_volta_para_documento_antigo_quando_o_novo_e_ambiguo():
-    # o mais novo (novembro) traz anterior e revisada; não pode cair para o fato de maio ou fevereiro
     item = _planejar([(NOV, TABELA_BB_NOV), (MAI, FATO_BB_MAI), (FEV, FATO_BB_FEV)])
     assert item["acao"] == "erro" and item["novo"] is None
 
 
-def test_ambiguo_lido_pela_api_do_claude_vai_para_revisao():
+def test_ambiguo_lido_pela_api_do_claude_passa_pelas_travas():
     lido = Extracao(lucro_min=9e9, lucro_max=11e9, payout=0.25, ano=2026,
-                    trecho="Lucro Líquido Ajustado 18 a 22 9 a 11", metodo="API do Claude",
-                    motivos=["lido pela API do Claude: precisa de revisão"])
-    item = _planejar([(NOV, TABELA_BB_NOV)], claude=lambda *args: lido)
-    assert item["acao"] == "pr" and (item["novo"]["lucro_min"], item["novo"]["lucro_max"]) == (9e9, 11e9)
+                    trecho="Lucro Líquido Ajustado 18 a 22 9 a 11", metodo="API do Claude")
+    item = _planejar([(NOV, TABELA_BB_NOV)], claude=lambda *args: lido, anterior=GUIDANCE_APROVADO)
+    # "9 a 11" aparece uma vez só na tabela: trava 2 segura
+    assert item["acao"] == "pr" and _travou(item, "Número em 2 lugares") and "API do Claude" in item["motivo"]
     assert item["novo"]["metodo"] == "API do Claude"
 
 
 def test_documento_ja_tentado_nao_chama_a_api_de_novo():
     chamadas = []
     item = _planejar([(NOV, TABELA_BB_NOV)], claude=lambda *a: chamadas.append(a),
-                     vistos={"https://cvm.example/doc0.pdf"})
+                     vistos={"https://www.rad.cvm.gov.br/doc0.pdf"})
     assert not chamadas and item["acao"] == "nada"
 
 
@@ -141,26 +181,29 @@ GUIDANCE_MAI = {"lucro_min": 18e9, "lucro_max": 22e9, "acoes": 5.73e9, "payout":
                 "data": "13/05/2026", "documento": "x"}
 
 
-def test_corte_de_exatamente_50_por_cento_vai_para_revisao_mesmo_com_confianca_alta():
-    # o corte real do BB: de 18 a 22 (maio) para 9 a 11 (novembro), LPA de 20 para 10 bi / ações
-    item = _planejar([(NOV, FATO_BB_NOV)], anterior=GUIDANCE_MAI)
-    assert item["acao"] == "pr" and "mudou 50%" in item["motivo"]
-    assert (item["novo"]["lucro_min"], item["novo"]["lucro_max"]) == (9e9, 11e9)
+def test_corte_de_50_por_cento_trava():
+    # o corte real do BB: de 18 a 22 (maio) para 9 a 11 (novembro)
+    item = _planejar([(NOV, FATO_BB_NOV_TABELA)], anterior=GUIDANCE_MAI)
+    assert item["acao"] == "pr" and _travou(item, "Variação até 20%") and "-50.0%" in item["motivo"]
 
 
-def test_corte_maior_que_50_por_cento_vai_para_revisao():
-    item = _planejar([(NOV, FATO_BB_NOV.replace("9 bilhões", "8 bilhões"))], anterior=GUIDANCE_MAI)
-    assert item["acao"] == "pr" and "mudou" in item["motivo"]
-
-
-def test_mudanca_menor_que_50_por_cento_com_confianca_alta_vai_direto():
-    anterior = {**GUIDANCE_MAI, "lucro_min": 12e9, "lucro_max": 14e9}     # LPA de 13 para 10: -23%
-    assert _planejar([(NOV, FATO_BB_NOV)], anterior=anterior)["acao"] == "commit"
+@pytest.mark.parametrize("anterior,acao", [((12e9, 13e9), "commit"),     # 12,5 -> 10 bi: -20,0% (no limite)
+                                           ((12e9, 14e9), "pr")])        # 13 -> 10 bi: -23%
+def test_corte_de_20_por_cento(anterior, acao):
+    ant = {**GUIDANCE_APROVADO, "lucro_min": anterior[0], "lucro_max": anterior[1]}
+    assert _planejar([(NOV, FATO_BB_NOV_TABELA)], anterior=ant)["acao"] == acao
 
 
 def test_mesmo_documento_ja_aplicado_nao_muda_nada():
-    anterior = {**GUIDANCE_NOV, "documento": "https://cvm.example/doc0.pdf"}
-    assert _planejar([(NOV, FATO_BB_NOV)], anterior=anterior)["acao"] == "nada"
+    anterior = {**GUIDANCE_NOV, "documento": "https://www.rad.cvm.gov.br/doc0.pdf"}
+    assert _planejar([(NOV, FATO_BB_NOV_TABELA)], anterior=anterior)["acao"] == "nada"
+
+
+def test_ocorrencias_contam_texto_e_tabela_mas_nao_percentual():
+    assert fg.ocorrencias_da_faixa(FATO_BB_NOV_TABELA, {"lucro_min": 9e9, "lucro_max": 11e9}) == 2
+    assert fg.ocorrencias_da_faixa("crescimento entre 9% a 11%", {"lucro_min": 9e9, "lucro_max": 11e9}) == 0
+    txt = "now expects 2026 adjusted EPS of $5.50 to $5.80. Outlook table: Adjusted EPS | $5.50 - $5.80"
+    assert fg.ocorrencias_da_faixa(txt, {"lpa_min": 5.5, "lpa_max": 5.8}) == 2
 
 
 # ------------------------------------------------------------ EUA (SEC)
@@ -224,17 +267,32 @@ def test_duas_faixas_novas_diferentes_continua_sem_confianca():
     assert fg.extrair_eps_eua(txt, 2026)["confianca"] == "baixa"
 
 
-def test_planejar_eua_primeira_gravacao_vai_para_pr():
+def _planejar_adm(texto, referencia, mercado={"preco": 60.0, "pl": 12.0}):
     doc = {"form": "8-K", "data": "2026-11-03", "acc": "0000007084-26-000054", "cik": "0000007084"}
-    item = fg.planejar_ticker_eua("ADM", HOJE, None, cabecalho=lambda: {"User-Agent": "x"},
+    return fg.planejar_ticker_eua("ADM", HOJE, None, cabecalho=lambda: {"User-Agent": "x"},
                                   buscar_cik=lambda t, c: ("0000007084", "ARCHER-DANIELS-MIDLAND CO"),
-                                  buscar_docs=lambda cik, c: [doc], ler_anexo=lambda d, c: ("https://sec/ex991.htm", ADM_TXT))
+                                  buscar_docs=lambda cik, c: [doc],
+                                  ler_anexo=lambda d, c: ("https://www.sec.gov/Archives/edgar/data/7084/ex991.htm", texto),
+                                  buscar_mercado=lambda t: mercado, referencia=referencia)
+
+
+def test_planejar_eua_primeira_gravacao_trava():
+    item = _planejar_adm(ADM_TXT, None)
     assert item["acao"] == "pr" and item["novo"]["lpa_min"] == 5.50 and item["novo"]["data"] == "03/11/2026"
-    assert "SEC" in item["novo"]["fonte"]
+    assert "SEC" in item["novo"]["fonte"] and _travou(item, "Variação até 20%")
+
+
+def test_planejar_eua_passa_nas_4_travas_e_publica():
+    txt = ADM_TXT + " 2026 Outlook table: Adjusted EPS $5.50 - $5.80"
+    item = _planejar_adm(txt, {"lpa_min": 5.40, "lpa_max": 5.80, "data": "03/11/2026"})   # 5,60 -> 5,65: +0,9%
+    assert item["acao"] == "commit", item["motivo"]
+    # P/L 60 / 5,65 = 10,6 contra 12 de 12 meses: plausível
+    assert "10.6" in item["travas"][3]["detalhe"]
 
 
 def test_aplicar_grava_so_o_tipo_pedido(tmp_path, monkeypatch):
     monkeypatch.setattr(fg, "ARQ_AUTO", tmp_path / "auto.json")
+    monkeypatch.setattr(fg, "ARQ_LOG", tmp_path / "log.json")
     plano = [{"ticker": "BBAS3", "acao": "commit", "novo": {"lucro_min": 1}, "motivo": ""},
              {"ticker": "ITUB4", "acao": "pr", "novo": {"lucro_min": 2}, "motivo": ""},
              {"ticker": "VALE3", "acao": "erro", "novo": None, "motivo": ""}]
@@ -596,3 +654,43 @@ def test_api_falha_mantem_o_anterior_e_marca_sem_guidance():
                            ler_anexo=lambda d, c: ("https://sec/x", "sem faixa"),
                            ler_claude=lambda texto, ano: chamadas.append(1), vistos=vistos)
     assert len(chamadas) == 1
+
+
+# ------------------------------------------------------------ log de decisões, avisos e resumo de sexta
+def test_log_registra_publicado_e_travado_sem_repetir_travado(tmp_path, monkeypatch):
+    monkeypatch.setattr(fg, "ARQ_LOG", tmp_path / "log.json")
+    pub = _planejar([(NOV, FATO_BB_NOV_TABELA)], anterior=GUIDANCE_APROVADO)
+    trav = {**_planejar([(NOV, FATO_BB_NOV_TABELA)], anterior=GUIDANCE_MAI), "ticker": "ITUB4"}
+    novos = fg.registrar([pub, trav], dt.date(2026, 11, 13))
+    assert [(r["ticker"], r["decisao"]) for r in novos] == [("BBAS3", "publicado"), ("ITUB4", "travado")]
+    assert novos[0]["faixa"] == "lucro R$ 9,0 a 11,0 bi (2026)"
+    registro = json.loads((tmp_path / "log.json").read_text())
+    assert fg.ja_avisado(registro, trav)                 # dia seguinte: mesmo documento, não avisa de novo
+    assert fg.registrar([trav], dt.date(2026, 11, 14)) == []
+
+
+def test_pr_nao_reabre_quando_todos_os_travados_ja_foram_avisados(tmp_path, monkeypatch):
+    monkeypatch.setattr(fg, "ARQ_AUTO", tmp_path / "auto.json")
+    plano = [{"ticker": "ITUB4", "acao": "pr", "novo": {"lucro_min": 2}, "motivo": "", "ja_avisado": True}]
+    assert fg.aplicar(plano, "pr") == [] and not (tmp_path / "auto.json").exists()
+
+
+def test_resumo_de_sexta_separa_publicado_e_travado():
+    registro = [
+        {"data": "2026-11-09", "ticker": "BBAS3", "decisao": "publicado", "faixa": "lucro R$ 9,0 a 11,0 bi (2026)",
+         "fonte": "BB, Fato Relevante", "url": "https://www.rad.cvm.gov.br/x", "travas": [], "duvidas": []},
+        {"data": "2026-11-12", "ticker": "AAPL", "decisao": "travado", "faixa": "LPA 7.10 a 7.30 (2026)",
+         "fonte": "Apple 8-K", "url": "https://www.sec.gov/x",
+         "travas": [{"nome": "Variação até 20%", "ok": False, "detalhe": "sem guidance anterior no app para comparar"}],
+         "duvidas": []},
+        {"data": "2026-11-01", "ticker": "VELHO", "decisao": "publicado", "faixa": "x", "fonte": "x", "url": "x"}]
+    txt = fg.resumo_semana(registro, dt.date(2026, 11, 13))
+    assert "Publicado sozinho (1)" in txt and "**BBAS3** (09/11/2026)" in txt
+    assert "Travado para você decidir (1)" in txt and "❌ Variação até 20%" in txt and "VELHO" not in txt
+    assert "Nada." in fg.resumo_semana([], dt.date(2026, 11, 13))
+
+
+def test_aviso_de_publicado_mostra_as_travas():
+    item = _planejar([(NOV, FATO_BB_NOV_TABELA)], anterior=GUIDANCE_APROVADO)
+    txt = fg.aviso_publicado([item])
+    assert "## BBAS3: lucro R$ 9,0 a 11,0 bi (2026)" in txt and txt.count("✅") == 4

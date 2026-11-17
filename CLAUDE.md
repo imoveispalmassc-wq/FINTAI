@@ -28,12 +28,18 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   pagina). API falhou ou sem guidance: mantém o anterior e o log diz "sem guidance".
   A leitura da API só vale se a faixa estiver no documento (achada pelos padrões ou no trecho, sem
   contar espaços e separadores de tabela). Ticker não gravado vira aviso amarelo na execução do Actions.
-  Primeira gravação de cada ticker: sempre pull request. Depois de aprovada, confiança alta e variação
-  menor que 50%: commit direto. API do Claude, confiança baixa ou LPA mudando 50% ou mais: pull request.
+  AUTOMÁTICO COM PROTEÇÃO (`avaliar_travas`): publica sozinho (commit + issue "Guidance publicado sozinho")
+  só se passar nas 4 travas: (1) fonte oficial (documento da empresa na CVM ou 8-K/6-K na SEC); (2) a mesma
+  faixa aparece 2+ vezes no documento (texto + tabela); (3) LPA projetado muda no máximo 20% contra o guidance
+  do app (cadastro manual ou automático salvo; sem anterior = trava); (4) P/L novo (cotação ÷ LPA projetado)
+  positivo, até 100 e entre 1/3 e 3x o P/L de 12 meses do Yahoo. Dúvida também trava: projeção de outro ano ou
+  documento com mais de 120 dias. Travou: não grava no app, abre pull request dizendo qual trava falhou e
+  espera a decisão (merge publica, fechar descarta); o mesmo documento travado não é avisado de novo.
+  Toda decisão vai para `utils/guidance_log.json`; toda sexta (`.github/workflows/resumo-semanal.yml`)
+  sai uma issue com o publicado sozinho e o travado na semana. Nunca chuta número.
   Nunca usa documento mais antigo que o mais novo com faixa de lucro, nem mais antigo que o guidance já
-  salvo (descarta). Documento com mais de 120 dias vai para PR. Cadastro manual em override.py ganha
-  do automático. EUA: User-Agent "fintai/1.0 (contato: ...)" com o e-mail só do Secret SEC_CONTACT_EMAIL
-  (nunca no código); sem o Secret, os tickers dos EUA ficam de fora com aviso. Leitura pela API sempre vai para PR.
+  salvo (descarta). Cadastro manual em override.py ganha do automático. EUA: User-Agent "fintai/1.0 (contato: ...)" com o e-mail só do Secret SEC_CONTACT_EMAIL
+  (nunca no código); sem o Secret, os tickers dos EUA ficam de fora com aviso. Leitura pela API passa pelas mesmas 4 travas.
   Duas faixas de LPA no mesmo comunicado: ignora a perto de previously/prior/previous/earlier e fica com a perto de
   updated/revised/now expects/raising/lowering; se ainda sobrarem duas, não grava (aviso amarelo).
 - A página de exemplo (`docs/index.html`, gerada por `tools/gerar_demo.py`) não busca dados.

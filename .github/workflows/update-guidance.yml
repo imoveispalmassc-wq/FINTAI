@@ -8,6 +8,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  issues: write            # aviso "Guidance publicado" depois de publicar sozinho
 
 concurrency:
   group: update-guidance
@@ -41,20 +42,28 @@ jobs:
           SEC_CONTACT_EMAIL: ${{ secrets.SEC_CONTACT_EMAIL }}
         run: python -m utils.fetch_guidance planejar --saida plano.json
 
-      - name: Publicar o que tem confiança alta
+      # AUTOMÁTICO COM PROTEÇÃO: só publica sozinho o que passou nas 4 travas, e avisa depois
+      - name: Publicar o que passou nas 4 travas
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          python -m utils.fetch_guidance aplicar plano.json --tipo commit
-          if ! git diff --quiet -- utils/guidance_auto.json utils/guidance_inicial.json utils/contabil_sec.json utils/contabil_br.json; then
+          python -m utils.fetch_guidance aplicar plano.json --tipo commit --aviso publicado.md
+          arquivos="utils/guidance_auto.json utils/guidance_inicial.json utils/contabil_sec.json utils/contabil_br.json utils/guidance_log.json"
+          if ! git diff --quiet -- $arquivos; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add utils/guidance_auto.json utils/guidance_inicial.json utils/contabil_sec.json utils/contabil_br.json
+            git add $arquivos
             git commit -m "Guidance oficial atualizado automaticamente (CVM/SEC)"
             git push origin HEAD:main
           else
-            echo "Nada com confiança alta para publicar."
+            echo "Nada passou nas 4 travas hoje."
+          fi
+          if [ -f publicado.md ]; then
+            gh issue create --title "Guidance publicado sozinho ($(date -u +%d/%m/%Y))" --body-file publicado.md
           fi
 
-      - name: Abrir pull request para revisar o resto
+      # travou em alguma trava (ou ficou dúvida): não grava no app, abre PR explicando e espera sua decisão
+      - name: Abrir pull request com o que travou
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -65,11 +74,11 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git checkout -b "$ramo"
             git add utils/guidance_auto.json
-            git commit -m "Guidance para revisar ($(date -u +%d/%m/%Y))"
+            git commit -m "Guidance travado para revisar ($(date -u +%d/%m/%Y))"
             git push --force origin "$ramo"
             gh pr create --base main --head "$ramo" \
-              --title "Guidance para revisar ($(date -u +%d/%m/%Y))" --body-file pr.md \
+              --title "Guidance travado: precisa da sua decisão ($(date -u +%d/%m/%Y))" --body-file pr.md \
               || gh pr edit "$ramo" --body-file pr.md
           else
-            echo "Nada para revisar."
+            echo "Nada novo travado."
           fi

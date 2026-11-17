@@ -5,6 +5,7 @@ Roda todo dia pelo GitHub Actions (.github/workflows/update-guidance.yml):
     python -m utils.fetch_guidance planejar --saida plano.json
     python -m utils.fetch_guidance aplicar plano.json --tipo commit
     python -m utils.fetch_guidance aplicar plano.json --tipo pr --resumo pr.md
+    python -m utils.fetch_guidance resumo --dias 7 --saida resumo.md     (toda sexta)
 
 Fluxo por ticker (lista em utils/guidance_tickers.json):
 1. Acha o CNPJ pelo ticker no cadastro aberto da CVM (FCA, valores mobiliários).
@@ -15,12 +16,17 @@ Fluxo por ticker (lista em utils/guidance_tickers.json):
    b) só se os padrões acharem a faixa mas sem confiança, pede à API do Claude (precisa da
       variável ANTHROPIC_API_KEY, guardada nos Secrets do GitHub). O trecho devolvido tem de
       existir no documento, senão o resultado é descartado.
-4. Decide como publicar:
-   - "commit": ticker já aprovado antes, padrões de texto com confiança alta e variação de menos de 50%
-     no LPA projetado;
-   - "pr": primeira gravação do ticker, API do Claude, confiança baixa, documento com mais de 120 dias
-     ou variação de 50% ou mais (mesmo com confiança alta);
+4. Decide como publicar (AUTOMÁTICO COM PROTEÇÃO, função avaliar_travas):
+   - "commit" (publica sozinho e abre um aviso "Guidance publicado") só se passar nas 4 travas:
+     1) fonte é o comunicado oficial da empresa (documento entregue à CVM ou 8-K/6-K na SEC);
+     2) a mesma faixa aparece em 2 lugares do documento (texto e tabela);
+     3) o LPA projetado mudou no máximo 20% contra o guidance que está no app;
+     4) o P/L resultante é positivo e não absurdo contra o P/L de 12 meses do Yahoo;
+     e sem dúvida: projeção do ano certo e documento com até 120 dias.
+   - "pr" (travado): falhou alguma trava ou ficou dúvida. Não grava no app: abre um pull request
+     explicando o que travou, e só entra se você aprovar.
    - nada muda quando não acha guidance ou não tem confiança: só registra no log.
+   Cada decisão vai para utils/guidance_log.json, de onde sai o resumo de sexta (comando resumo).
 
 O resultado vai para utils/guidance_auto.json, que utils/override.py lê. Um cadastro manual em
 override.py sempre ganha do automático.
@@ -55,7 +61,10 @@ ARQ_VISTOS = RAIZ / ".guidance_cache" / "vistos.json"   # persistido pelo cache 
 
 CVM = "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC"
 CABECALHO = {"User-Agent": "fintai-guidance/1.0 (+https://github.com/imoveispalmassc-wq/fintai)"}
-LIMITE_MUDANCA = 0.50        # variação do LPA projetado de 50% ou mais vai para revisão
+LIMITE_AUTO = 0.20           # trava 3: publica sozinho só com variação do LPA projetado de até 20%
+PL_MAXIMO = 100              # trava 4: P/L acima disso é absurdo
+PL_FATOR = 3                 # trava 4: P/L novo fora de 1/3 a 3x o P/L de 12 meses do Yahoo é absurdo
+ARQ_LOG = RAIZ / "utils" / "guidance_log.json"
 IDADE_MAXIMA_DIAS = 120      # documento mais velho que isso (mais de um trimestre) vai para revisão
 MAX_DOCUMENTOS = 6           # documentos lidos por ticker, do mais novo para o mais antigo
 MODELO = "claude-opus-5-5"
@@ -504,13 +513,133 @@ def _lpa(o: dict) -> float | None:
         return None
 
 
+# ------------------------------------------------------------ AUTOMÁTICO COM PROTEÇÃO: as 4 travas
+HOSTS_OFICIAIS = ("cvm.gov.br", "sec.gov")
+RE_FAIXA_USD = re.compile(r"\$?\s?(\d{1,3}\.\d{2})\s*(?:to|and|through|-|–|—|\|)\s*\$?\s?(\d{1,3}\.\d{2})", re.I)
+
+
+def mercado_yahoo(ticker: str) -> dict | None:
+    """Cotação e P/L de 12 meses do Yahoo (B3 com .SA). None se o Yahoo não responder."""
+    import yfinance as yf
+
+    simbolo = f"{ticker}.SA" if re.fullmatch(r"[A-Z]{4}\d{1,2}", ticker) else ticker
+    try:
+        info = yf.Ticker(simbolo).info or {}
+    except Exception:  # noqa: BLE001
+        return None
+    preco = info.get("currentPrice") or info.get("regularMarketPrice")
+    if not preco:
+        return None
+    return {"preco": float(preco), "pl": float(info["trailingPE"]) if info.get("trailingPE") else None}
+
+
+def ocorrencias_da_faixa(texto: str, novo: dict) -> int:
+    """Quantas vezes a faixa escolhida aparece no documento (ex.: no texto e na tabela)."""
+    if "lpa_min" in novo:
+        alvo = (round(float(novo["lpa_min"]), 2), round(float(novo["lpa_max"]), 2))
+        return sum((round(float(m.group(1)), 2), round(float(m.group(2)), 2)) == alvo for m in RE_FAIXA_USD.finditer(texto))
+    t = normalizar(texto)
+    alvo = (float(novo["lucro_min"]), float(novo["lucro_max"]))
+    n = 0
+    for m in RE_FAIXA.finditer(t):
+        if t[m.end(): m.end() + 2].lstrip().startswith("%"):
+            continue                                   # "9% a 11%" é outra coisa
+        a, b = numero_br(m.group(1)), numero_br(m.group(3))
+        if any(abs(a * mult - alvo[0]) < 1 and abs(b * mult - alvo[1]) < 1 for mult in (1e9, 1e6, 1e3, 1)):
+            n += 1
+    return n
+
+
+def _variacao(novo: dict, ref: dict) -> float | None:
+    """Variação do guidance novo contra o do app (pelo lucro médio quando os dois são em lucro, senão pelo LPA)."""
+    try:
+        if "lucro_min" in novo and "lucro_min" in ref:
+            a = (float(novo["lucro_min"]) + float(novo["lucro_max"])) / 2
+            b = (float(ref["lucro_min"]) + float(ref["lucro_max"])) / 2
+        else:
+            a, b = _lpa(novo), _lpa(ref)
+        return round(a / b - 1, 6) if a and b else None
+    except (KeyError, TypeError, ValueError, ZeroDivisionError):
+        return None
+
+
+def avaliar_travas(ticker: str, novo: dict, referencia: dict | None, texto: str, hoje: dt.date,
+                   duvidas: list[str], buscar_mercado=mercado_yahoo) -> dict:
+    """As 4 travas do AUTOMÁTICO COM PROTEÇÃO. Publica sozinho só se as 4 passarem e não houver dúvida."""
+    from urllib.parse import urlparse
+
+    travas = []
+    host = (urlparse(novo.get("url") or "").hostname or "").lower()
+    oficial = any(host == h or host.endswith("." + h) for h in HOSTS_OFICIAIS)
+    travas.append({"nome": "Fonte oficial", "ok": oficial,
+                   "detalhe": f"comunicado da empresa em {host}" if oficial else f"documento fora da CVM/SEC ({host or 'sem link'})"})
+
+    n = ocorrencias_da_faixa(texto, novo)
+    travas.append({"nome": "Número em 2 lugares", "ok": n >= 2,
+                   "detalhe": f"a faixa aparece {n} vez(es) no documento" + ("" if n >= 2 else "; precisa de 2 (texto + tabela)")})
+
+    var = _variacao(novo, referencia) if referencia else None
+    if var is None:
+        travas.append({"nome": "Variação até 20%", "ok": False,
+                       "detalhe": "sem guidance anterior no app para comparar" if not referencia else "não deu para comparar com o anterior"})
+    else:
+        travas.append({"nome": "Variação até 20%", "ok": abs(var) <= LIMITE_AUTO,
+                       "detalhe": f"{var:+.1%} contra o guidance anterior ({referencia.get('data') or 'sem data'})"})
+
+    lpa = _lpa(novo)
+    mercado = None
+    try:
+        mercado = buscar_mercado(ticker)
+    except Exception:  # noqa: BLE001
+        mercado = None
+    if not lpa or not mercado:
+        travas.append({"nome": "P/L plausível", "ok": False, "detalhe": "sem cotação ou LPA para calcular o P/L"})
+    else:
+        pl = mercado["preco"] / lpa
+        ref_pl = mercado.get("pl")
+        if not ref_pl and referencia and _lpa(referencia):
+            ref_pl = mercado["preco"] / _lpa(referencia)
+        if pl <= 0 or pl > PL_MAXIMO:
+            ok, det = False, f"P/L {pl:.1f} fora de 0 a {PL_MAXIMO}"
+        elif not ref_pl or ref_pl <= 0:
+            ok, det = False, f"P/L {pl:.1f}, mas sem P/L de referência no Yahoo para comparar"
+        else:
+            ok = ref_pl / PL_FATOR <= pl <= ref_pl * PL_FATOR
+            det = f"P/L {pl:.1f} (cotação {mercado['preco']:.2f} ÷ LPA {lpa:.2f}) contra {ref_pl:.1f} de 12 meses"
+            if not ok:
+                det += f": fora de 1/{PL_FATOR} a {PL_FATOR}x"
+        travas.append({"nome": "P/L plausível", "ok": ok, "detalhe": det})
+
+    publica = all(t["ok"] for t in travas) and not duvidas
+    falhas = [f"{t['nome']}: {t['detalhe']}" for t in travas if not t["ok"]] + [f"Dúvida: {d}" for d in duvidas]
+    return {"publica": publica, "travas": travas, "duvidas": list(duvidas),
+            "motivo": "passou nas 4 travas" if publica else "TRAVADO - " + "; ".join(falhas)}
+
+
+def _decidir(item: dict, ticker: str, novo: dict, referencia: dict | None, texto: str, hoje: dt.date,
+             data_doc: dt.date | None, duvidas: list[str], buscar_mercado, extras=()) -> dict:
+    idade = (hoje - data_doc).days if data_doc else None
+    if idade is None or idade > IDADE_MAXIMA_DIAS:
+        duvidas = duvidas + [f"documento de {novo['data']}, com mais de {IDADE_MAXIMA_DIAS} dias: "
+                             "pode existir guidance mais novo que o robô não leu"]
+    av = avaliar_travas(ticker, novo, referencia, texto, hoje, duvidas, buscar_mercado)
+    item.update(acao="commit" if av["publica"] else "pr", novo=novo, travas=av["travas"], duvidas=av["duvidas"],
+                motivo="; ".join([av["motivo"], *[e for e in extras if e]]))
+    return item
+
+
 def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: set[str], *,
                     buscar_cnpj=cnpj_do_ticker, buscar_docs=documentos_cvm, ler_pdf=texto_do_pdf,
-                    buscar_acoes=acoes_yahoo, ler_com_claude=extrair_com_claude) -> dict:
-    """Decide o que fazer com um ticker. Não grava nada."""
+                    buscar_acoes=acoes_yahoo, ler_com_claude=extrair_com_claude,
+                    buscar_mercado=mercado_yahoo, referencia: dict | None = None) -> dict:
+    """Decide o que fazer com um ticker. Não grava nada.
+
+    referencia: guidance que está no app (o automático salvo ou o cadastro manual), base da trava de 20%."""
+    referencia = referencia or anterior
     item = {"ticker": ticker, "acao": "nada", "motivo": "", "novo": None, "anterior": anterior}
     if not re.fullmatch(r"[A-Z]{4}\d{1,2}", ticker):
-        return planejar_ticker_eua(ticker, hoje, anterior, vistos=vistos)
+        return planejar_ticker_eua(ticker, hoje, anterior, vistos=vistos, buscar_mercado=buscar_mercado,
+                                   referencia=referencia)
     empresa = buscar_cnpj(ticker, hoje)
     if not empresa:
         item.update(acao="erro", motivo="CNPJ não encontrado no cadastro da CVM")
@@ -564,24 +693,9 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
         if anterior and all(anterior.get(k) == novo[k] for k in ("lucro_min", "lucro_max", "payout", "ano")):
             item["motivo"] = "mesma faixa do guidance atual"
             return item
-        lpa_novo, lpa_ant = _lpa(novo), _lpa(anterior or {})
-        # arredonda para o corte de exatamente 50% (ex.: 18-22 -> 9-11) não escapar por erro de ponto flutuante
-        mudou_muito = bool(lpa_ant and lpa_novo and round(abs(lpa_novo / lpa_ant - 1), 6) >= LIMITE_MUDANCA)
-        motivos = list(ex.motivos)
-        primeira = not anterior        # ticker ainda sem guidance aprovado: a primeira gravação sempre passa por você
-        if primeira:
-            motivos.append("primeira gravação deste ticker: precisa da sua aprovação")
-        idade = (hoje - data_doc).days if data_doc else None
-        velho = idade is None or idade > IDADE_MAXIMA_DIAS
-        if velho:
-            motivos.append(f"documento de {_data_br(doc['data'])}, com mais de {IDADE_MAXIMA_DIAS} dias: "
-                           "pode existir guidance mais novo que o robô não leu")
-        if mudou_muito:
-            motivos.append(f"LPA projetado mudou {abs(lpa_novo / lpa_ant - 1):.0%} (revisão a partir de {LIMITE_MUDANCA:.0%})")
-        revisar = primeira or ex.metodo == "API do Claude" or ex.confianca != "alta" or mudou_muito or velho
-        item.update(acao="pr" if revisar else "commit", novo=novo,
-                    motivo="; ".join(motivos) or "padrões de texto, confiança alta")
-        return item
+        duvidas = [] if ex.ano == ano else [f"projeção para {ex.ano}, não para {ano}"]
+        return _decidir(item, ticker, novo, referencia, texto, hoje, data_doc, duvidas, buscar_mercado,
+                        extras=[ex.metodo if ex.metodo == "API do Claude" else ""])
     item["motivo"] = "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior"
     return item
 
@@ -730,8 +844,10 @@ def extrair_eps_eua(texto: str, ano_minimo: int) -> dict | None:
 
 def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
                         cabecalho=cabecalho_sec, buscar_cik=cik_do_ticker, buscar_docs=documentos_sec,
-                        ler_anexo=anexo_sec, ler_claude=extrair_eps_com_claude, vistos: set | None = None) -> dict:
+                        ler_anexo=anexo_sec, ler_claude=extrair_eps_com_claude, vistos: set | None = None,
+                        buscar_mercado=mercado_yahoo, referencia: dict | None = None) -> dict:
     """Mesmo critério do Brasil, com documentos da SEC. Não grava nada."""
+    referencia = referencia or anterior
     item = {"ticker": ticker, "acao": "nada", "motivo": "", "novo": None, "anterior": anterior}
     cab = cabecalho()
     if not cab:
@@ -785,23 +901,11 @@ def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
         if anterior and all(anterior.get(k) == novo.get(k) for k in ("lpa_min", "lpa_max", "dividendo", "ano")):
             item["motivo"] = "mesma faixa do guidance atual"
             return item
-        lpa_novo, lpa_ant = _lpa(novo), _lpa(anterior or {})
-        mudou_muito = bool(lpa_ant and lpa_novo and round(abs(lpa_novo / lpa_ant - 1), 6) >= LIMITE_MUDANCA)
-        motivos = []
-        if not anterior:
-            motivos.append("primeira gravação deste ticker: precisa da sua aprovação")
-        if novo["metodo"] == "API do Claude":
-            motivos.append(f"lido pela API do Claude (página {ex.get('pagina')}): precisa de revisão")
-        idade = (hoje - data_doc).days if data_doc else None
-        if idade is None or idade > IDADE_MAXIMA_DIAS:
-            motivos.append(f"documento de {_data_br(doc['data'])}, com mais de {IDADE_MAXIMA_DIAS} dias")
-        if mudou_muito:
-            motivos.append(f"LPA projetado mudou {abs(lpa_novo / lpa_ant - 1):.0%} (revisão a partir de {LIMITE_MUDANCA:.0%})")
         if ex.get("escolha"):
             novo["escolha"] = ex["escolha"]
-        item.update(acao="pr" if motivos else "commit", novo=novo,
-                    motivo="; ".join(motivos + ([ex["escolha"]] if ex.get("escolha") else [])) or "padrões de texto, confiança alta")
-        return item
+        duvidas = [] if ex.get("ano") and int(ex["ano"]) >= hoje.year else [f"projeção para {ex.get('ano')}, não para {hoje.year} ou depois"]
+        return _decidir(item, ticker, novo, referencia, texto, hoje, data_doc, duvidas, buscar_mercado,
+                        extras=["API do Claude" if novo["metodo"] == "API do Claude" else "", ex.get("escolha")])
     # 2ª camada: regex não achou faixa em nenhum comunicado -> API do Claude no mais novo (uma vez por documento)
     if primeiro and primeiro[1] not in vistos:
         doc, link, texto = primeiro
@@ -812,8 +916,9 @@ def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
                     "lucro_tipo": "LPA ajustado", "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {_data_br(doc['data'])} (SEC)",
                     "data": _data_br(doc["data"]), "url": link, "documento": link, "ano": lido["ano"],
                     "metodo": "API do Claude", "trecho": lido["trecho"]}
-            item.update(acao="pr", novo=novo, motivo=f"lido pela API do Claude (página {lido.get('pagina')}): precisa de revisão")
-            return item
+            duvidas = [] if lido.get("ano") and int(lido["ano"]) >= hoje.year else [f"projeção para {lido.get('ano')}"]
+            return _decidir(item, ticker, novo, referencia, texto, hoje, _data(doc["data"]), duvidas, buscar_mercado,
+                            extras=[f"API do Claude, página {lido.get('pagina')}"])
     item["motivo"] = "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior"
     return item
 
@@ -1310,12 +1415,18 @@ def planejar(hoje: dt.date | None = None) -> list[dict]:
     auto = _ler_json(ARQ_AUTO, {})
     vistos_por_ticker = _ler_json(ARQ_VISTOS, {})
     iniciais = _ler_json(ARQ_INICIAL, {})
+    registro = _ler_json(ARQ_LOG, [])
+    try:
+        from utils.override import OVERRIDE as manuais
+    except Exception:  # noqa: BLE001
+        manuais = {}
     plano = []
     for t in tickers:
         log.info("%s", t)
         vistos = set(vistos_por_ticker.get(t, []))
         try:
-            item = planejar_ticker(t, hoje, auto.get(t), vistos)
+            # base da trava de 20%: o guidance que o app mostra (cadastro manual ganha do automático)
+            item = planejar_ticker(t, hoje, auto.get(t), vistos, referencia=manuais.get(t) or auto.get(t))
         except Exception as e:  # noqa: BLE001 - um ticker com erro não derruba os outros
             item = {"ticker": t, "acao": "erro", "motivo": f"{e.__class__.__name__}: {e}", "novo": None, "anterior": auto.get(t)}
         try:
@@ -1339,6 +1450,12 @@ def planejar(hoje: dt.date | None = None) -> list[dict]:
             item["inicial"] = ini
             log.info("  projeção inicial %s: %s", ini["ano"], "achada" if ini["novo"] else ini["motivo"])
         vistos_por_ticker[t] = sorted(vistos)[-50:]
+        if item["acao"] == "pr":
+            item["ja_avisado"] = ja_avisado(registro, item)
+        for tr in item.get("travas", []):
+            log.info("  [%s] %s: %s", "ok" if tr["ok"] else "TRAVOU", tr["nome"], tr["detalhe"])
+        if item["acao"] == "pr" and os.environ.get("GITHUB_ACTIONS"):
+            print(f"::warning title=Guidance {t} travado::{item['motivo']}", flush=True)
         nivel = logging.ERROR if item["acao"] == "erro" else logging.INFO
         log.log(nivel, "  -> %s: %s", item["acao"], item["motivo"])
         if item["acao"] in ("nada", "erro") and os.environ.get("GITHUB_ACTIONS"):
@@ -1354,19 +1471,92 @@ def planejar(hoje: dt.date | None = None) -> list[dict]:
     return plano
 
 
-def aplicar(plano: list[dict], tipo: str) -> list[dict]:
-    """Grava em guidance_auto.json só os itens do tipo pedido ("commit" ou "pr")."""
+def aplicar(plano: list[dict], tipo: str, hoje: dt.date | None = None) -> list[dict]:
+    """"commit": grava em guidance_auto.json o que passou nas 4 travas e registra no log tudo o que foi
+    publicado ou travado. "pr": grava os travados (vão para o pull request), só se houver algum ainda não avisado."""
     auto = _ler_json(ARQ_AUTO, {})
     aplicados = [i for i in plano if i["acao"] == tipo and i["novo"]]
+    if tipo == "pr" and all(i.get("ja_avisado") for i in aplicados):
+        return []                                  # nada novo travado: não abre de novo o mesmo aviso
     for i in aplicados:
         auto[i["ticker"]] = i["novo"]
     if aplicados:
         ARQ_AUTO.write_text(json.dumps(dict(sorted(auto.items())), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if tipo == "commit":
+        registrar(plano, hoje or dt.date.today())
         aplicar_iniciais(plano)
         aplicar_contabil(plano)
         aplicar_contabil_br(plano)
     return aplicados
+
+
+# ------------------------------------------------------------ log de decisões e resumo de sexta
+def _faixa_txt(n: dict) -> str:
+    if "lpa_min" in n:
+        return f"LPA {n['lpa_min']:.2f} a {n['lpa_max']:.2f} ({n.get('periodo') or n.get('ano')})"
+    if "lucro_min" in n and "lucro_max" in n:
+        return f"lucro R$ {n['lucro_min'] / 1e9:.1f} a {n['lucro_max'] / 1e9:.1f} bi ({n.get('ano')})".replace(".", ",")
+    return "faixa não informada"
+
+
+def ja_avisado(registro: list[dict], item: dict) -> bool:
+    """Mesmo documento e mesma faixa já travados antes: não avisa de novo todo dia."""
+    n = item.get("novo") or {}
+    return any(r.get("ticker") == item["ticker"] and r.get("decisao") == "travado"
+               and r.get("documento") == n.get("documento") and r.get("faixa") == _faixa_txt(n) for r in registro)
+
+
+def registrar(plano: list[dict], hoje: dt.date) -> list[dict]:
+    """Acrescenta em guidance_log.json o que foi publicado sozinho e o que travou (sem repetir travados)."""
+    registro = _ler_json(ARQ_LOG, [])
+    novos = []
+    for i in plano:
+        if i["acao"] not in ("commit", "pr") or not i.get("novo") or (i["acao"] == "pr" and ja_avisado(registro, i)):
+            continue
+        n = i["novo"]
+        novos.append({"data": hoje.isoformat(), "ticker": i["ticker"],
+                      "decisao": "publicado" if i["acao"] == "commit" else "travado",
+                      "faixa": _faixa_txt(n), "fonte": n.get("fonte"), "url": n.get("url"), "documento": n.get("documento"),
+                      "travas": i.get("travas", []), "duvidas": i.get("duvidas", []), "motivo": i["motivo"]})
+    if novos:
+        registro = (registro + novos)[-500:]
+        ARQ_LOG.write_text(json.dumps(registro, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return novos
+
+
+def _linhas_travas(i: dict) -> list[str]:
+    return [f"  - {'✅' if t['ok'] else '❌'} {t['nome']}: {t['detalhe']}" for t in i.get("travas", [])] + \
+           [f"  - ❓ Dúvida: {d}" for d in i.get("duvidas", [])]
+
+
+def aviso_publicado(itens: list[dict]) -> str:
+    linhas = ["O robô publicou sozinho no app (passou nas 4 travas do AUTOMÁTICO COM PROTEÇÃO).", ""]
+    for i in itens:
+        n, ref = i["novo"], i.get("anterior") or {}
+        linhas += [f"## {i['ticker']}: {_faixa_txt(n)}", "",
+                   f"- **Anterior no robô:** " + (_faixa_txt(ref) if ref.get("lpa_min") or ref.get("lucro_min") else "nenhum"),
+                   f"- **Fonte:** [{n['fonte']}]({n['url']})",
+                   f"- **Trecho:** \"{n['trecho']}\"", "- **Travas:**", *_linhas_travas(i), ""]
+    linhas.append("Se algo estiver errado, cadastre o valor certo em utils/override.py (o manual ganha do automático).")
+    return "\n".join(linhas)
+
+
+def resumo_semana(registro: list[dict], hoje: dt.date, dias: int = 7) -> str:
+    inicio = hoje - dt.timedelta(days=dias - 1)
+    semana = [r for r in registro if inicio.isoformat() <= r.get("data", "") <= hoje.isoformat()]
+    pub = [r for r in semana if r["decisao"] == "publicado"]
+    trav = [r for r in semana if r["decisao"] == "travado"]
+    linhas = [f"Semana de {inicio:%d/%m/%Y} a {hoje:%d/%m/%Y}.", "",
+              f"## Publicado sozinho ({len(pub)})", ""]
+    linhas += [f"- **{r['ticker']}** ({_data_br(r['data'])}): {r['faixa']}. [{r['fonte']}]({r['url']})" for r in pub] or ["- Nada."]
+    linhas += ["", f"## Travado para você decidir ({len(trav)})", ""]
+    for r in trav:
+        linhas += [f"- **{r['ticker']}** ({_data_br(r['data'])}): {r['faixa']}. [{r['fonte']}]({r['url']})", *_linhas_travas(r)]
+    if not trav:
+        linhas.append("- Nada.")
+    else:
+        linhas += ["", "Os travados estão no pull request \"Guidance para revisar\": aprovar (merge) publica; fechar descarta."]
+    return "\n".join(linhas)
 
 
 def aplicar_iniciais(plano: list[dict]) -> int:
@@ -1388,7 +1578,8 @@ def resumo_pr(itens: list[dict]) -> str:
     def bi(v):
         return f"R$ {v / 1e9:,.1f} bi".replace(",", "X").replace(".", ",").replace("X", ".")
 
-    linhas = ["Guidance encontrado automaticamente que precisa de revisão antes de ir para o app.", ""]
+    linhas = ["AUTOMÁTICO COM PROTEÇÃO: estes guidances NÃO foram publicados porque falharam em alguma trava "
+              "(ou ficou dúvida). Nada mudou no app. Aprovar (merge) publica; fechar descarta.", ""]
     for i in itens:
         n, a = i["novo"], i.get("anterior") or {}
         payout = "—" if n.get("payout") is None else f"{n['payout']:.0%}"
@@ -1398,7 +1589,9 @@ def resumo_pr(itens: list[dict]) -> str:
         linhas += [f"## {i['ticker']}", "",
                    f"- **Novo:** {novo_txt}, LPA projetado {_lpa(n):.2f}",
                    f"- **Anterior:** " + (f"LPA {_lpa(a):.2f}" if _lpa(a) else "nenhum"),
-                   f"- **Por que revisar:** {i['motivo']}",
+                   f"- **O que travou:** {i['motivo']}",
+                   *(["- **Travas:**", *_linhas_travas(i)] if i.get("travas") else []),
+                   *(["- Já avisado antes (mesmo documento)."] if i.get("ja_avisado") else []),
                    f"- **Método:** {n['metodo']}",
                    f"- **Fonte:** [{n['fonte']}]({n['url']})",
                    f"- **Trecho do documento:** \"{n['trecho']}\"", ""]
@@ -1416,7 +1609,14 @@ def main(argv: list[str] | None = None) -> int:
     pa.add_argument("plano")
     pa.add_argument("--tipo", choices=["commit", "pr"], required=True)
     pa.add_argument("--resumo")
+    pa.add_argument("--aviso", help="arquivo com o aviso dos publicados sozinho (vira issue)")
+    pr = sub.add_parser("resumo", help="resumo da semana: publicados e travados")
+    pr.add_argument("--dias", type=int, default=7)
+    pr.add_argument("--saida", default="resumo.md")
     args = p.parse_args(argv)
+    if args.cmd == "resumo":
+        Path(args.saida).write_text(resumo_semana(_ler_json(ARQ_LOG, []), dt.date.today(), args.dias), encoding="utf-8")
+        return 0
     if args.cmd == "planejar":
         plano = planejar()
         Path(args.saida).write_text(json.dumps(plano, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1427,6 +1627,8 @@ def main(argv: list[str] | None = None) -> int:
     log.info("%s: %d ticker(s) gravado(s)", args.tipo, len(aplicados))
     if args.resumo and aplicados:
         Path(args.resumo).write_text(resumo_pr(aplicados), encoding="utf-8")
+    if args.aviso and aplicados and args.tipo == "commit":
+        Path(args.aviso).write_text(aviso_publicado(aplicados), encoding="utf-8")
     return 0
 
 

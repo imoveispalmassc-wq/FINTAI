@@ -1,0 +1,30 @@
+name: Resumo semanal do guidance
+
+on:
+  schedule:
+    - cron: "47 20 * * 5"   # toda sexta às 17h47 de Brasília (20h47 UTC)
+  workflow_dispatch: {}     # botão "Run workflow" para gerar na hora
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  resumo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # o que o robô publicou sozinho na semana + o que ficou travado (lido de utils/guidance_log.json)
+      - name: Montar resumo da semana
+        run: python -m utils.fetch_guidance resumo --dias 7 --saida resumo.md
+
+      - name: Abrir aviso com o resumo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue create --title "Resumo do guidance - semana até $(date -u +%d/%m/%Y)" --body-file resumo.md
