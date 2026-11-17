@@ -56,8 +56,12 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   (senão as bases são diferentes, ex.: ajustado x contábil). Aí tenta o lucro contábil de cada balanço
   (lucro trimestral ÷ ações; trimestre faltante pelo anual ou pelo LPA de 12 meses; precisa bater com o LPA atual
   e cobrir 6+ meses, só os dias cobertos). Sem isso: preço médio do ano ÷ LPA atual.
-- Card de P/L: linhas P/L, Lucro líquido (lucro/ação × ações do Yahoo), Lucro/ação, Cotação; colunas Contábil (LPA 12 meses, data do último balanço), Previsão do ano (consenso do Yahoo,
-  com analistas e faixa) e Média 12m. Guidance oficial e lucro ajustado aparecem em linhas à parte, com fonte.
+- Card de P/L: linhas P/L, Lucro líquido (lucro/ação × ações do Yahoo), Lucro/ação, Cotação; colunas Contábil 12 meses
+  (real, muda a cada balanço), Início do ano (primeiro guidance do ano, congelado, com data e fonte) e Previsão atual
+  (guidance oficial se houver, senão consenso do Yahoo com analistas e faixa). Média 12m e lucro ajustado em linhas à parte.
+- Projeção do início do ano: utils/guidance_inicial.json (ticker -> ano -> faixa, fonte, data, travado). O robô busca o
+  primeiro documento do ano com projeção (release do 4T anterior, jan-abr; depois o 10-K) e grava uma única vez:
+  nunca sobrescreve. Sem achar: {"status": "sem projeção inicial encontrada"}.
 - Retorno acumulado: período (1/3/5 anos) no topo; barras com o ativo primeiro e os indicadores em ordem crescente.
 - SIMONS, nesta ordem: (1) MM200 no gráfico com preço e distância %; (2) classificação pela faixa de 52 semanas
   (30/70) + MM200: OPORTUNIDADE = zona de oportunidade e preço até +5% da MM200; CARO = zona cara ou +15% ou

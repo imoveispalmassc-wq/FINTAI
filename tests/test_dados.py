@@ -207,3 +207,16 @@ def test_receita_media_no_ultimo_ano_com_cada_balanco():
     m = media_no_periodo(pd.Series(1.0, index=dias), s)
     assert 1.93e10 < m < 2.40e10
     assert media_no_periodo(pd.Series(1.0, index=dias), None) is None
+
+
+def test_contabil_muda_quando_chega_balanco_novo():
+    import pandas as pd
+    from calculos import lpa_contabil_ttm
+    lucro, anual, acoes, datas = _bb_contabil()
+    antes = lpa_contabil_ttm(lucro, anual, acoes, 1.93, datas)
+    # sai o balanço do 4T26 (lucro 0,30/ação): o 4T25 (0,92) sai da soma de 12 meses
+    lucro2 = pd.concat([lucro, pd.Series({pd.Timestamp("2026-09-30"): 0.17 * acoes, pd.Timestamp("2026-12-31"): 0.30 * acoes})])
+    datas2 = datas.append(pd.DatetimeIndex([pd.Timestamp("2027-02-10")]).tz_localize("America/Sao_Paulo"))
+    depois = lpa_contabil_ttm(lucro2, anual, acoes, 1.31, datas2)
+    assert round(antes.iloc[-1], 2) == 1.93 and round(depois.iloc[-1], 2) == 1.31
+    assert f"{depois.index[-1]:%d/%m/%Y}" == "10/02/2027"

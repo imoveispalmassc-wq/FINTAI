@@ -582,31 +582,33 @@ function montar(root, d) {
       && Math.abs(d.lpaAgora / d.lpa - 1) > 0.10 ? d.lpaAgora : null;
     const plAjustado = tem(lpaAjustado) ? d.preco / lpaAjustado : null;
     const [cPL, tPL] = prejuizo ? ['neutro', 'Sem lucro em 12 meses'] : tem(difPL) ? selo(difPL, true) : semDado;
-    // previsão: guidance oficial (override) ou consenso do Yahoo para o ano em curso
-    // previsão = consenso dos analistas no Yahoo (o número das plataformas); o guidance da empresa vai numa linha à parte
-    const Fp = d.consensoAno || {};
-    const lpaPrev = tem(Fp.lpa) && Fp.lpa > 0 ? Fp.lpa : null;
+    // três colunas: contábil (real, muda a cada balanço) | início do ano (1º guidance, congelado) | previsão atual
+    const Fp = d.consensoAno || {}, G0 = d.guidance, GI = d.guidanceInicial || {};
+    const anoPrev = (G0 && G0.periodo) || (d.lpaAnos && d.lpaAnos.length ? d.lpaAnos[d.lpaAnos.length - 1].ano + 1 : null);
+    const lpaCons = tem(Fp.lpa) && Fp.lpa > 0 ? Fp.lpa : null;
+    const lpaGuia = G0 && tem(G0.lpa) && G0.lpa > 0 ? G0.lpa : null;
+    const lpaPrev = lpaGuia || lpaCons;                      // previsão atual: guidance da empresa ou consenso
     const plPrev = tem(lpaPrev) ? d.preco / lpaPrev : null;
-    const anoPrev = d.lpaAnos && d.lpaAnos.length ? d.lpaAnos[d.lpaAnos.length - 1].ano + 1 : null;
-    const fontePrev = tem(lpaPrev) ? `Consenso Yahoo${tem(Fp.analistas) ? ` · ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' · pouco confiável' : ''}` : '';
+    const lpaIni = tem(GI.lpa) && GI.lpa > 0 ? GI.lpa : null;
+    const plIni = tem(lpaIni) ? d.preco / lpaIni : null;
+    const fontePrev = lpaGuia ? `GUIDANCE OFICIAL · ${G0.data}` : tem(lpaCons) ? `Consenso Yahoo${tem(Fp.analistas) ? ` · ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' · pouco confiável' : ''}` : '';
     const lpaMedioImpl = tem(d.precoMedio12) && tem(d.plMedio12) && d.plMedio12 > 0 ? d.precoMedio12 / d.plMedio12 : null;
     const B = d.balanco;
     const rotBal = B && B.data ? `último balanço divulgado em ${B.data}` : 'último balanço divulgado';
-    const G0 = d.guidance;
+    const faixaG = g => g.porLpa === false ? `lucro de ${din(g.lucroMin / 1e9, 0)} a ${din(g.lucroMax / 1e9, 0)} bi (LPA ${din(g.lpa)})` : `${g.lucroTipo || g.tipo || 'LPA'} de ${din(g.lpaMin)} a ${din(g.lpaMax)}, médio ${din(g.lpa)}`;
     const linhasPL = prejuizo ? ['A empresa teve prejuízo nos últimos 12 meses, então a relação preço/lucro não se aplica.']
       : !tem(d.pl) ? ['O Yahoo Finance não traz o lucro por ação deste ativo.']
       : [
-        `<b>Contábil</b> (${rotBal}): cotação de hoje ÷ lucro por ação dos últimos 12 meses.${tem(d.acoes) && d.acoes > 0 ? ` Lucro = lucro por ação × ${f(d.acoes / 1e9, 2)} bi de ações (Yahoo).` : ''}`,
-        tem(plPrev) ? `<b>Previsão ${anoPrev || ''}</b>: consenso${tem(Fp.analistas) ? ` de ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance${tem(Fp.baixa) && tem(Fp.alta) ? `, de ${din(Fp.baixa)} a ${din(Fp.alta)}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' (poucos analistas: pouco confiável)' : ''}.`
-          : `<b>Previsão</b>: sem estimativa no Yahoo.`,
+        `<b>Contábil 12 meses</b> (${rotBal}): cotação de hoje ÷ lucro por ação real dos últimos 12 meses. Muda a cada balanço.${tem(d.acoes) && d.acoes > 0 ? ` Lucro = lucro por ação × ${f(d.acoes / 1e9, 2)} bi de ações (Yahoo).` : ''}`,
+        lpaIni ? `<b>Início do ano ${GI.ano}</b> (congelado): primeiro guidance da empresa para o ano, ${faixaG(GI)}. Fonte: ${GI.fonte}, ${GI.data}. Não muda.`
+          : `<b>Início do ano ${GI.ano || anoPrev || ''}</b>: ${GI.status || 'sem projeção inicial encontrada'}.`,
+        lpaGuia ? `<b>Previsão atual ${anoPrev || ''}</b>: GUIDANCE OFICIAL · ${G0.data}: ${faixaG(G0)}. Fonte: ${G0.fonte}.${G0.bases && G0.bases.length ? ` Base ${G0.bases[0].ano} recalculada pela empresa: ${din(G0.bases[0].valor)}${tem(G0.bases[0].antes) ? ` (antes ${din(G0.bases[0].antes)})` : ''}, ${sinal((lpaGuia / G0.bases[0].valor - 1) * 100, 1)} no guidance.` : ''}${lpaIni ? ` Desde o início do ano: ${sinal((lpaGuia / lpaIni - 1) * 100, 1)}.` : ''}${tem(lpaCons) ? ` Consenso Yahoo: ${din(lpaCons)}.` : ''}`
+          : tem(lpaCons) ? `<b>Previsão atual ${anoPrev || ''}</b>: consenso${tem(Fp.analistas) ? ` de ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance${tem(Fp.baixa) && tem(Fp.alta) ? `, de ${din(Fp.baixa)} a ${din(Fp.alta)}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' (poucos analistas: pouco confiável)' : ''}. Pode mudar.`
+          : `<b>Previsão atual</b>: sem estimativa no Yahoo nem guidance cadastrado.`,
         !tem(difPL) ? '<b>Média 12m</b>: sem histórico para comparar.'
-          : `<b>Média 12m</b>: ${d.plMetodo === 'contabil' ? `média do P/L de cada pregão desde ${d.mediaDesde}${tem(d.mediaMeses) && d.mediaMeses < 11.5 ? ` (${f(d.mediaMeses, 0)} meses com balanço no Yahoo)` : ''}, com o lucro contábil em vigor em cada data. O lucro/ação é a média equivalente`
-            : d.plMetodo === 'simplificado' ? 'preço médio do último ano ÷ o mesmo lucro contábil (o Yahoo não traz o lucro de cada balanço)' : 'média do P/L de cada pregão, com o lucro de cada balanço'}. O P/L contábil está ${sinal(difPL, 1)} contra a média: ${difPL < -5 ? 'mais barata que no último ano' : difPL > 5 ? 'mais cara que no último ano' : 'perto da média'}.`];
+          : `<b>Média 12m</b>: P/L ${f(d.plMedio12)}${tem(lpaMedioImpl) ? ` (lucro/ação ${f(lpaMedioImpl)}, cotação média ${f(d.precoMedio12)})` : ''}, ${d.plMetodo === 'contabil' ? `com o lucro contábil de cada balanço desde ${d.mediaDesde}` : d.plMetodo === 'simplificado' ? 'preço médio do ano ÷ o mesmo lucro contábil' : 'com o lucro de cada balanço'}. O P/L contábil está ${sinal(difPL, 1)} contra a média: ${difPL < -5 ? 'mais barata que no último ano' : difPL > 5 ? 'mais cara que no último ano' : 'perto da média'}.`];
     const frasePL = linhasPL.join('<br>');
-    const lpaGuia = G0 && tem(G0.lpa) && G0.lpa > 0 ? G0.lpa : null;
-    const notaAjustado = [
-      lpaGuia ? `GUIDANCE OFICIAL · ${G0.data}: ${G0.porLpa ? `${G0.lucroTipo}${G0.periodo ? ` ${G0.periodo}` : ''} de ${din(G0.lpaMin)} a ${din(G0.lpaMax)}, médio ${din(lpaGuia)}` : `lucro de ${din(G0.lucroMin / 1e9, 0)} a ${din(G0.lucroMax / 1e9, 0)} bi, LPA ${din(lpaGuia)}`}, P/L ${f(d.preco / lpaGuia)}.${G0.bases && G0.bases.length ? ` Base ${G0.bases[0].ano} recalculada pela empresa: ${din(G0.bases[0].valor)}${tem(G0.bases[0].antes) ? ` (antes ${din(G0.bases[0].antes)})` : ''}, ${sinal((lpaGuia / G0.bases[0].valor - 1) * 100, 1)} no guidance.` : ''}` : '',
-      tem(plAjustado) ? `Lucro ajustado (Yahoo): LPA ${din(lpaAjustado)}, P/L ${f(plAjustado)}. É a base de alguns sites.` : ''].filter(Boolean).join('<br>');
+    const notaAjustado = tem(plAjustado) ? `Lucro ajustado (Yahoo): LPA ${din(lpaAjustado)}, P/L ${f(plAjustado)}. É a base de alguns sites.` : '';
 
     // 2. Dividendos
     const dyDif = tem(dy) && tem(d.dyMedio12) && d.dyMedio12 > 0 ? (dy / d.dyMedio12 - 1) * 100 : null;
@@ -643,12 +645,12 @@ function montar(root, d) {
         <div class="card crit">
           <div class="topo-c"><span class="nome">Preço vs Lucro (P/L)</span><span class="st ${cPL}">${tPL}</span></div>
           <div class="tab-pl num">
-            <span></span><div class="cab"><div>Contábil</div><div class="i">12 meses</div></div><div class="cab"><div>Previsão</div><div class="i">${anoPrev || ''}</div></div><div class="cab"><div>Média 12m</div><div class="i">${d.plMetodo === 'contabil' ? 'cada balanço' : 'último ano'}</div></div>
-            <span class="rot">P/L</span><b class="gr">${f(d.pl)}</b><b class="gr">${tem(plPrev) ? f(plPrev) : '—'}</b><b class="gr">${f(d.plMedio12)}</b>
-            ${tem(d.acoes) && d.acoes > 0 ? (() => { const tot = l => tem(l) ? l * d.acoes : null; const vals = [tot(d.lpa), tot(lpaPrev), tot(lpaMedioImpl)]; const ref = Math.max(...vals.filter(tem).map(Math.abs), 0); const [div, un] = ref >= 1e12 ? [1e12, 'tri'] : ref >= 1e9 ? [1e9, 'bi'] : [1e6, 'mi'];
+            <span></span><div class="cab"><div>Contábil</div><div class="i">12 meses · real</div></div><div class="cab"><div>Início do ano</div><div class="i">${GI.ano || anoPrev || ''} · congelado</div></div><div class="cab"><div>Previsão atual</div><div class="i">${lpaGuia ? 'guidance' : tem(lpaCons) ? 'analistas' : ''}</div></div>
+            <span class="rot">P/L</span><b class="gr">${f(d.pl)}</b><b class="gr">${tem(plIni) ? f(plIni) : '—'}</b><b class="gr">${tem(plPrev) ? f(plPrev) : '—'}</b>
+            ${tem(d.acoes) && d.acoes > 0 ? (() => { const tot = l => tem(l) ? l * d.acoes : null; const vals = [tot(d.lpa), tot(lpaIni), tot(lpaPrev)]; const ref = Math.max(...vals.filter(tem).map(Math.abs), 0); const [div, un] = ref >= 1e12 ? [1e12, 'tri'] : ref >= 1e9 ? [1e9, 'bi'] : [1e6, 'mi'];
               return `<span class="rot">Lucro<br>${d.moeda} <span class="un">${un}</span></span>${vals.map(v => `<b>${tem(v) ? f(v / div, 1) : '—'}</b>`).join('')}`; })() : ''}
-            <span class="rot">Lucro/ação<br>${d.moeda}</span><b>${f(d.lpa)}</b><b>${tem(lpaPrev) ? f(lpaPrev) : 'Sem dado'}</b><b>${tem(lpaMedioImpl) ? f(lpaMedioImpl) : '—'}</b>
-            <span class="rot">Cotação<br>${d.moeda}</span><b>${f(d.preco)}</b><b>${tem(plPrev) ? f(d.preco) : '—'}</b><b>${tem(d.precoMedio12) ? f(d.precoMedio12) : '—'}</b>
+            <span class="rot">Lucro/ação<br>${d.moeda}</span><b>${f(d.lpa)}</b><b>${tem(lpaIni) ? f(lpaIni) : 'Sem dado'}</b><b>${tem(lpaPrev) ? f(lpaPrev) : 'Sem dado'}</b>
+            <span class="rot">Cotação<br>${d.moeda}</span><b>${f(d.preco)}</b><b>${tem(plIni) ? f(d.preco) : '—'}</b><b>${tem(plPrev) ? f(d.preco) : '—'}</b>
           </div>
           <p class="linhas-pl">${frasePL}</p>${notaAjustado ? `<div class="nota" style="margin:-4px 0 8px">${notaAjustado}</div>` : ''}
           <button class="link" data-folha="f-pl">Ver como calculamos</button>

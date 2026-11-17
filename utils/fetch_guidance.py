@@ -50,6 +50,7 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 ARQ_AUTO = RAIZ / "utils" / "guidance_auto.json"
 ARQ_TICKERS = RAIZ / "utils" / "guidance_tickers.json"
+ARQ_INICIAL = RAIZ / "utils" / "guidance_inicial.json"
 ARQ_VISTOS = RAIZ / ".guidance_cache" / "vistos.json"   # persistido pelo cache do GitHub Actions
 
 CVM = "https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC"
@@ -697,6 +698,124 @@ def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
     return item
 
 
+# ------------------------------------------------------------ projeção do início do ano (congelada)
+def _janela_inicial(ano: str) -> tuple[dt.date, dt.date, int]:
+    """Período em que sai o primeiro guidance do ano: release do 4T do ano anterior (jan-abr) e o 10-K.
+    Ano fiscal (FY2027): o ano fiscal pode começar no meio do ano anterior, então a janela começa em julho."""
+    fiscal = ano.upper().startswith("FY")
+    n = int(re.sub(r"\D", "", ano))
+    inicio = dt.date(n - 1, 7, 1) if fiscal else dt.date(n, 1, 1)
+    return inicio, dt.date(n, 4, 30), n
+
+
+def documentos_sec_periodo(cik: str, cab: dict, inicio: dt.date, fim: dt.date) -> list[dict]:
+    """8-K de resultado (2.02), 6-K e 10-K entre as datas, do MAIS ANTIGO para o mais novo."""
+    sub = _get_sec(f"{SEC_DADOS}/submissions/CIK{cik}.json", cab).json()
+    rec = sub.get("filings", {}).get("recent", {})
+    n = len(rec.get("form", []))
+    docs = []
+    for i in range(n):
+        form, data = rec["form"][i], rec["filingDate"][i]
+        itens = (rec.get("items") or [""] * n)[i]
+        d = _data(data)
+        if not d or not inicio <= d <= fim:
+            continue
+        if form == "8-K" and "2.02" not in (itens or ""):
+            continue
+        if form not in ("8-K", "6-K", "10-K"):
+            continue
+        docs.append({"form": form, "data": data, "acc": rec["accessionNumber"][i], "cik": cik,
+                     "principal": (rec.get("primaryDocument") or [""] * n)[i]})
+    return sorted(docs, key=lambda x: x["data"])
+
+
+def texto_sec(doc: dict, cab: dict) -> tuple[str, str] | None:
+    """8-K/6-K: o press release (Exhibit 99.1). 10-K: o documento principal."""
+    if doc["form"] == "10-K" and doc.get("principal"):
+        url = f"{SEC_ARQUIVOS}/Archives/edgar/data/{int(doc['cik'])}/{doc['acc'].replace('-', '')}/{doc['principal']}"
+        return url, texto_de_html(_get_sec(url, cab).text)
+    return anexo_sec(doc, cab)
+
+
+def buscar_inicial_eua(ticker: str, ano: str, *, cabecalho=cabecalho_sec, buscar_cik=cik_do_ticker,
+                       buscar_docs=documentos_sec_periodo, ler=texto_sec) -> tuple[dict | None, str]:
+    """Primeiro guidance de LPA para o ano (`2026` ou `FY2027`). Devolve (novo, motivo)."""
+    cab = cabecalho()
+    if not cab:
+        return None, "sem SEC_CONTACT_EMAIL"
+    empresa = buscar_cik(ticker, cab)
+    if not empresa:
+        return None, "ticker não encontrado na SEC"
+    cik, nome = empresa
+    inicio, fim, n = _janela_inicial(ano)
+    for doc in buscar_docs(cik, cab, inicio, fim):
+        try:
+            lido = ler(doc, cab)
+        except Exception as e:  # noqa: BLE001
+            log.info("  inicial: não abriu %s de %s (%s)", doc["form"], _data_br(doc["data"]), e.__class__.__name__)
+            continue
+        if not lido:
+            continue
+        link, texto = lido
+        ex = extrair_eps_eua(texto, n)
+        if not ex or ex["ano"] != n:
+            continue
+        if ex["confianca"] != "alta":
+            return None, "projeção inicial encontrada sem confiança: " + "; ".join(ex["motivos"])
+        return ({"lpa_min": ex["lpa_min"], "lpa_max": ex["lpa_max"], "lucro_tipo": "LPA ajustado",
+                 "fonte": f"{nome}, Form {doc['form']}{' Exhibit 99.1' if doc['form'] != '10-K' else ''} de {_data_br(doc['data'])} (SEC)",
+                 "data": _data_br(doc["data"]), "url": link, "metodo": "robô (primeiro documento do ano)",
+                 "trecho": ex["trecho"][:400]}, "")
+    return None, "sem projeção inicial encontrada"
+
+
+def buscar_inicial_br(ticker: str, ano: str, *, buscar_cnpj=cnpj_do_ticker, buscar_docs=documentos_cvm,
+                      ler_pdf=texto_do_pdf, buscar_acoes=acoes_yahoo) -> tuple[dict | None, str]:
+    """Primeiro guidance de lucro do ano nos documentos da CVM (jan a abr). Só com confiança alta."""
+    n = int(re.sub(r"\D", "", ano))
+    empresa = buscar_cnpj(ticker, dt.date(n, 12, 31))
+    if not empresa:
+        return None, "CNPJ não encontrado na CVM"
+    cnpj, nome = empresa
+    docs = [d for d in buscar_docs(cnpj, dt.date(n, 12, 31))
+            if (x := _data(d["data"])) and dt.date(n, 1, 1) <= x <= dt.date(n, 4, 30)]
+    for doc in sorted(docs, key=lambda d: d["data"]):
+        try:
+            _, texto = ler_pdf(doc["link"])
+        except Exception:  # noqa: BLE001
+            continue
+        ex = extrair_por_padroes(texto, n)
+        if ex is None or ex.ano != n:
+            continue
+        if ex.confianca != "alta":
+            return None, "projeção inicial encontrada sem confiança: " + "; ".join(ex.motivos)
+        acoes = buscar_acoes(ticker)
+        if not acoes:
+            return None, "número de ações indisponível"
+        return ({"lucro_min": ex.lucro_min, "lucro_max": ex.lucro_max, "acoes": acoes,
+                 "fonte": f"{nome}, {doc['categoria'] or 'documento'} de {_data_br(doc['data'])} (CVM)",
+                 "data": _data_br(doc["data"]), "url": doc["link"], "metodo": "robô (primeiro documento do ano)",
+                 "trecho": ex.trecho[:400]}, "")
+    return None, "sem projeção inicial encontrada"
+
+
+def ano_alvo(ticker: str, hoje: dt.date) -> str:
+    """Ano da projeção: o período do guidance atual (ex.: FY2027) ou o ano corrente."""
+    from utils.override import tabela
+    return str((tabela().get(ticker) or {}).get("periodo") or hoje.year)
+
+
+def planejar_inicial(ticker: str, hoje: dt.date, iniciais: dict) -> dict | None:
+    """Busca a projeção inicial só se ainda não houver uma gravada (congelada)."""
+    from utils.override import _tem_projecao
+    ano = ano_alvo(ticker, hoje)
+    if _tem_projecao((iniciais.get(ticker) or {}).get(ano)):
+        return None                                      # já travada: nunca busca de novo
+    br = bool(re.fullmatch(r"[A-Z]{4}\d{1,2}", ticker))
+    novo, motivo = (buscar_inicial_br if br else buscar_inicial_eua)(ticker, ano)
+    return {"ano": ano, "novo": novo, "motivo": motivo}
+
+
 def _ler_json(caminho: Path, padrao):
     try:
         return json.loads(caminho.read_text(encoding="utf-8"))
@@ -709,6 +828,7 @@ def planejar(hoje: dt.date | None = None) -> list[dict]:
     tickers = [t.strip().upper() for t in _ler_json(ARQ_TICKERS, [])]
     auto = _ler_json(ARQ_AUTO, {})
     vistos_por_ticker = _ler_json(ARQ_VISTOS, {})
+    iniciais = _ler_json(ARQ_INICIAL, {})
     plano = []
     for t in tickers:
         log.info("%s", t)
@@ -717,6 +837,13 @@ def planejar(hoje: dt.date | None = None) -> list[dict]:
             item = planejar_ticker(t, hoje, auto.get(t), vistos)
         except Exception as e:  # noqa: BLE001 - um ticker com erro não derruba os outros
             item = {"ticker": t, "acao": "erro", "motivo": f"{e.__class__.__name__}: {e}", "novo": None, "anterior": auto.get(t)}
+        try:
+            ini = planejar_inicial(t, hoje, iniciais)
+        except Exception as e:  # noqa: BLE001
+            ini = {"ano": ano_alvo(t, hoje), "novo": None, "motivo": f"{e.__class__.__name__}: {e}"}
+        if ini:
+            item["inicial"] = ini
+            log.info("  projeção inicial %s: %s", ini["ano"], "achada" if ini["novo"] else ini["motivo"])
         vistos_por_ticker[t] = sorted(vistos)[-50:]
         nivel = logging.ERROR if item["acao"] == "erro" else logging.INFO
         log.log(nivel, "  -> %s: %s", item["acao"], item["motivo"])
@@ -737,7 +864,24 @@ def aplicar(plano: list[dict], tipo: str) -> list[dict]:
         auto[i["ticker"]] = i["novo"]
     if aplicados:
         ARQ_AUTO.write_text(json.dumps(dict(sorted(auto.items())), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if tipo == "commit":
+        aplicar_iniciais(plano)
     return aplicados
+
+
+def aplicar_iniciais(plano: list[dict]) -> int:
+    """Grava as projeções iniciais achadas (ou o aviso de que não achou). Nunca sobrescreve uma já gravada."""
+    from utils.override import gravar_inicial
+    tab, n = _ler_json(ARQ_INICIAL, {}), 0
+    for i in plano:
+        ini = i.get("inicial")
+        if not ini:
+            continue
+        tab, gravou = gravar_inicial(tab, i["ticker"], ini["ano"], ini["novo"])
+        n += gravou
+    if n:
+        ARQ_INICIAL.write_text(json.dumps(dict(sorted(tab.items())), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return n
 
 
 def resumo_pr(itens: list[dict]) -> str:

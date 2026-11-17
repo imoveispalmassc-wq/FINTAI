@@ -13,6 +13,7 @@ from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, lpa_contabil
                       graham_duas_versoes, pl_medio_longo, preco_justo_graham, preco_teto_bazin)
 from utils.lynch import crescimento_anual, peg, preco_lynch, regra_prejuizo, veredito
 from utils.override import guidance as guidance_oficial
+from utils.override import guidance_inicial
 from utils.percentile import percentil_na_faixa, zonas
 from utils.signals import (backtest_percentil, decidir_estado, fundamento_quebrou,
                            selo_backtest)
@@ -311,6 +312,13 @@ def _backtest(hist, anos, nome):
     }
 
 
+def _inicial(curto: str, guia: dict | None, lpa_anos, r: Resultado, acoes) -> dict:
+    """Projeção do início do ano (congelada) para o mesmo período do guidance atual."""
+    ano = (guia or {}).get("periodo") or str(lpa_anos[-1][0] + 1 if lpa_anos else r.data_ultimo.year)
+    g = guidance_inicial(curto, ano, acoes_padrao=acoes) or {}
+    return {k: (_n(v, 4) if isinstance(v, float) else v) for k, v in g.items()}
+
+
 def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) -> dict:
     """Pacote completo da tela para um ticker."""
     info, hist = d["info"], d["hist"]
@@ -386,6 +394,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "regra": {"status": regra["status"], "media": _n(regra["media"], 4), "mensagem": regra["mensagem"]},
         "lynch": lynch,
         "guidance": guia, "consensoAno": consenso_ano,
+        "guidanceInicial": _inicial(curto, guia, lpa_anos, r, f["acoes"]),
         "simons": modo_simons(hist, r, faixa),
         "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "precoMedio12": _n(f["preco_medio"], 4), "mediaDesde": f["media_desde"], "mediaMeses": f["media_meses"], "plMetodo": f["metodo"],
         "lpa": _n(f["lpa"], 4), "lpaAgora": _n(f["lpa_agora"], 4), "lpa12Atras": _n(f["lpa_antes"], 4),

@@ -158,3 +158,64 @@ def guidance(ticker: str, tabela: dict | None = None, acoes_padrao: float | None
         "acoesFonte": "cadastro" if o.get("acoes") not in (None, "") else "Yahoo Finance",
         "lucroTipo": str(o.get("lucro_tipo") or "lucro líquido"),
     }
+
+
+# ------------------------------------------------------------ projeção do início do ano (congelada)
+# Primeiro guidance que a empresa deu para o ano (ex.: ADM 2026 no release do 4T25). Gravado uma vez e
+# TRAVADO: nunca é sobrescrito, mesmo quando a empresa atualiza o guidance depois. O robô grava em
+# guidance_inicial.json; sem achar, fica {"status": "sem projeção inicial encontrada"}.
+ARQ_INICIAL = Path(__file__).with_name("guidance_inicial.json")
+SEM_INICIAL = "sem projeção inicial encontrada"
+
+
+def tabela_inicial() -> dict[str, dict]:
+    try:
+        dados = json.loads(ARQ_INICIAL.read_text(encoding="utf-8"))
+        return dados if isinstance(dados, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _tem_projecao(o: dict | None) -> bool:
+    return bool(o) and ("lpa_min" in o or "lucro_min" in o)
+
+
+def gravar_inicial(tabela: dict, ticker: str, ano: str, novo: dict | None) -> tuple[dict, bool]:
+    """Grava a projeção inicial do ano só se ainda não houver uma. Devolve (tabela, gravou).
+
+    Já existindo projeção para (ticker, ano), nada muda: o guidance inicial é congelado."""
+    t = {k: dict(v) for k, v in tabela.items()}
+    atual = t.setdefault(ticker, {}).get(ano)
+    if _tem_projecao(atual):
+        return t, False
+    if novo is None:
+        if not atual:
+            t[ticker][ano] = {"status": SEM_INICIAL}
+            return t, True
+        return t, False
+    t[ticker][ano] = {**novo, "travado": True}
+    return t, True
+
+
+def guidance_inicial(ticker: str, ano: str, tabela: dict | None = None, acoes_padrao: float | None = None) -> dict | None:
+    """Projeção do início do ano já calculada (lpa, lpaMin, lpaMax, fonte, data) ou {"status": ...}."""
+    tabela = tabela_inicial() if tabela is None else tabela
+    chave = ticker.strip().upper()
+    chave = chave[:-3] if chave.endswith(".SA") else chave
+    o = (tabela.get(chave) or {}).get(str(ano))
+    if o is None:
+        return {"status": SEM_INICIAL, "ano": str(ano)}
+    if not _tem_projecao(o):
+        return {"status": o.get("status") or SEM_INICIAL, "ano": str(ano)}
+    if validar(chave, o):
+        return {"status": "projeção inicial inválida no cadastro", "ano": str(ano)}
+    if "lpa_min" in o:
+        lmin, lmax = float(o["lpa_min"]), float(o["lpa_max"])
+    else:
+        acoes = float(o["acoes"]) if o.get("acoes") not in (None, "") else acoes_padrao
+        if not acoes:
+            return {"status": "sem número de ações para a projeção inicial", "ano": str(ano)}
+        lmin, lmax = float(o["lucro_min"]) / acoes, float(o["lucro_max"]) / acoes
+    return {"ano": str(ano), "lpa": (lmin + lmax) / 2, "lpaMin": lmin, "lpaMax": lmax, "fonte": str(o["fonte"]),
+            "data": str(o["data"]), "url": str(o.get("url") or ""), "tipo": str(o.get("lucro_tipo") or "LPA"),
+            "travado": True}

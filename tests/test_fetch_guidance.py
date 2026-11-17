@@ -272,3 +272,19 @@ def test_a_api_recebe_as_faixas_do_documento():
         return None
     _planejar([(NOV, TABELA_BB_NOV)], claude=claude)
     assert (9e9, 11e9) in recebido["faixas"] and (18e9, 22e9) in recebido["faixas"]
+
+
+def test_inicial_eua_pega_o_primeiro_documento_do_ano():
+    docs = [{"form": "8-K", "data": "2026-02-03", "acc": "a1", "cik": "7084"},
+            {"form": "8-K", "data": "2026-04-29", "acc": "a2", "cik": "7084"}]
+    textos = {"a1": "ADM provides 2026 guidance: the Company expects 2026 adjusted EPS of approximately $3.60 to $4.25.",
+              "a2": "ADM now expects 2026 adjusted EPS of $4.00 to $4.50."}
+    novo, motivo = fg.buscar_inicial_eua("ADM", "2026", cabecalho=lambda: {"User-Agent": "x"},
+                                         buscar_cik=lambda t, c: ("0000007084", "ADM"),
+                                         buscar_docs=lambda cik, c, i, f: docs,
+                                         ler=lambda d, c: (f"https://sec/{d['acc']}", textos[d["acc"]]))
+    assert motivo == "" and (novo["lpa_min"], novo["lpa_max"], novo["data"]) == (3.60, 4.25, "03/02/2026")
+    vazio, motivo2 = fg.buscar_inicial_eua("HSIC", "2026", cabecalho=lambda: {"User-Agent": "x"},
+                                           buscar_cik=lambda t, c: ("1", "HSIC"), buscar_docs=lambda *a: [],
+                                           ler=lambda d, c: None)
+    assert vazio is None and motivo2 == "sem projeção inicial encontrada"

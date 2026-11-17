@@ -1,0 +1,29 @@
+{
+  "ADM": {
+    "2026": {
+      "lpa_min": 3.6,
+      "lpa_max": 4.25,
+      "lucro_tipo": "LPA ajustado",
+      "fonte": "ADM Reports Fourth Quarter and Full Year 2025 Results; Provides 2026 Guidance (SEC Form 8-K, Exhibit 99.1)",
+      "data": "03/02/2026",
+      "url": "https://www.sec.gov/Archives/edgar/data/7084/000000708426000005/adm-ex991_20251231xq4.htm",
+      "metodo": "backfill (release do 4T25)",
+      "travado": true
+    }
+  },
+  "HSIC": {
+    "2026": {
+      "status": "sem projeção inicial encontrada"
+    }
+  },
+  "ACM": {
+    "FY2027": {
+      "status": "sem projeção inicial encontrada"
+    }
+  },
+  "XP": {
+    "2026": {
+      "status": "sem projeção inicial encontrada"
+    }
+  }
+}
