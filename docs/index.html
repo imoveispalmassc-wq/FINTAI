@@ -978,7 +978,7 @@ function montar(root, d) {
     const frasePL = linhasPL.join('<br>');
     const lpaGuia = G0 && tem(G0.lpa) && G0.lpa > 0 ? G0.lpa : null;
     const notaAjustado = [
-      lpaGuia ? `GUIDANCE OFICIAL · ${G0.data}: lucro de ${din(G0.lucroMin / 1e9, 0)} a ${din(G0.lucroMax / 1e9, 0)} bi, LPA ${din(lpaGuia)}, P/L ${f(d.preco / lpaGuia)}.` : '',
+      lpaGuia ? `GUIDANCE OFICIAL · ${G0.data}: ${G0.porLpa ? `${G0.lucroTipo}${G0.periodo ? ` ${G0.periodo}` : ''} de ${din(G0.lpaMin)} a ${din(G0.lpaMax)}, médio ${din(lpaGuia)}` : `lucro de ${din(G0.lucroMin / 1e9, 0)} a ${din(G0.lucroMax / 1e9, 0)} bi, LPA ${din(lpaGuia)}`}, P/L ${f(d.preco / lpaGuia)}.` : '',
       tem(plAjustado) ? `Lucro ajustado (Yahoo): LPA ${din(lpaAjustado)}, P/L ${f(plAjustado)}. É a base de alguns sites.` : ''].filter(Boolean).join('<br>');
 
     // 2. Dividendos
@@ -1032,7 +1032,7 @@ function montar(root, d) {
             <div>Dividendo por ação / ano<b>${din(d.dividendo)}</b></div>
             <div>DY atual<b>${tem(dy) ? f(dy) + '%' : '—'}</b></div>
             <div>DY média 12m<b>${tem(d.dyMedio12) ? f(d.dyMedio12) + '%' : '—'}</b></div>
-            ${d.guidance && tem(d.guidance.payout) ? `<div>Projetado (guidance, payout ${f(d.guidance.payout * 100, 0)}%)<b>${din(d.guidance.dividendo)} · ${f(d.guidance.dividendo / d.preco * 100, 1)}%</b></div>` : ''}
+            ${d.guidance && tem(d.guidance.dividendo) ? `<div>Projetado (guidance${d.guidance.dividendoFonte === 'empresa' ? ', anual da empresa' : `, payout ${f(d.guidance.payout * 100, 0)}%`})<b>${din(d.guidance.dividendo)} · ${f(d.guidance.dividendo / d.preco * 100, 1)}%</b></div>` : ''}
             <div>Diferença<b>${sinal(dyDif, 0)}</b></div>
           </div>
           ${exemplo}
@@ -1337,10 +1337,12 @@ function montar(root, d) {
       const varProj = tem(proj) && tem(ultimo) && ultimo > 0 ? (proj / ultimo - 1) * 100 : null;
       const Fu = d.lynch && d.lynch.futuro ? d.lynch.futuro : {};
       const G = d.guidance;
-      const consenso = !tem(proj) ? '' : G ? `Guidance oficial da empresa (${G.fonte}, ${G.data}): ${G.lucroTipo || 'lucro líquido'} de ${din(G.lucroMin / 1e9, 1)} a ${din(G.lucroMax / 1e9, 1)} bi ÷ ${f(G.acoes / 1e9, 2)} bi de ações${G.acoesFonte === 'Yahoo Finance' ? ' (Yahoo Finance)' : ''} = LPA de ${din(G.lpaMin)} a ${din(G.lpaMax)}, ponto médio ${din(G.lpa)}` : `Consenso${tem(Fu.analistas) ? ` de ${f(Fu.analistas, 0)} ${Fu.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance`
+      const consenso = !tem(proj) ? '' : G ? (G.porLpa ? `Guidance oficial da empresa (${G.fonte}, ${G.data}): ${G.lucroTipo}${G.periodo ? ` ${G.periodo}` : ''} de ${din(G.lpaMin)} a ${din(G.lpaMax)}, ponto médio ${din(G.lpa)}`
+        : `Guidance oficial da empresa (${G.fonte}, ${G.data}): ${G.lucroTipo || 'lucro líquido'} de ${din(G.lucroMin / 1e9, 1)} a ${din(G.lucroMax / 1e9, 1)} bi ÷ ${f(G.acoes / 1e9, 2)} bi de ações${G.acoesFonte === 'Yahoo Finance' ? ' (Yahoo Finance)' : ''} = LPA de ${din(G.lpaMin)} a ${din(G.lpaMax)}, ponto médio ${din(G.lpa)}`) : `Consenso${tem(Fu.analistas) ? ` de ${f(Fu.analistas, 0)} ${Fu.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance`
         + (tem(Fu.lpaBaixa) && tem(Fu.lpaAlta) ? `, de ${din(Fu.lpaBaixa)} a ${din(Fu.lpaAlta)}` : '')
         + (tem(Fu.analistas) && Fu.analistas < 3 ? '. Poucos analistas: estimativa pouco confiável' : '');
-      const divG = G && tem(G.payout) ? ` Dividendo projetado: ${din(G.lpa)} × payout ${f(G.payout * 100, 0)}% = ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.` : '';
+      const divG = G && tem(G.dividendo) ? (G.dividendoFonte === 'empresa' ? ` Dividendo anual divulgado pela empresa: ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`
+        : ` Dividendo projetado: ${din(G.lpa)} × payout ${f(G.payout * 100, 0)}% = ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`) : '';
       const linhaProj = anoProj ? `<div class="proj"><span>${anoProj} <span class="tag-proj">${G ? 'guidance' : 'projeção'}</span>${ex('lpaEsteAno')}</span><b>${tem(proj) ? din(proj) : 'Sem estimativa'}</b></div>` : '';
       el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>
         <div class="card">${G ? `<div style="margin-bottom:10px"><span class="selo ok">GUIDANCE OFICIAL · ${G.data}</span>

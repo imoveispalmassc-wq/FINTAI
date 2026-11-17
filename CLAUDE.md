@@ -14,7 +14,9 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 - Estimativas de analistas mostram a base (ano atual, próximo ano fiscal, longo prazo), o número
   de analistas e a faixa quando o Yahoo informa. Com menos de 3 analistas, avisar que é pouco confiável.
 - Projeção da empresa (guidance) não vem do Yahoo: só entra com fonte citada, pelo `OVERRIDE` em
-  `utils/override.py` (lucro_min, lucro_max, fonte, data; acoes e payout opcionais, sem acoes usa o Yahoo). Com override, o guidance ganha
+  `utils/override.py` (lucro_min, lucro_max, fonte, data; acoes e payout opcionais, sem acoes usa o Yahoo). Guidance
+  em lucro por ação (EUA): lpa_min/lpa_max no lugar do lucro; dividendo (anual da empresa, ganha do payout) e
+  periodo (ex.: FY2027) opcionais. Com override, o guidance ganha
   do Yahoo: LPA projetado = (lucro_min + lucro_max) / 2 / acoes; dividendo projetado = LPA × payout.
   A tela mostra o selo "GUIDANCE OFICIAL" com a data. Sem override, vale o consenso do Yahoo.
 - Guidance automático: `utils/fetch_guidance.py` roda todo dia às 9h (`.github/workflows/update-guidance.yml`)

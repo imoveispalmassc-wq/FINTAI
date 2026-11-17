@@ -354,7 +354,8 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
                 "lucroMin": _n(g["lucroMin"], 0), "lucroMax": _n(g["lucroMax"], 0),
                 "acoes": _n(g["acoes"], 0), "fonte": g["fonte"], "data": g["data"],
                 "url": g["url"] if g["url"].startswith("https://") else "", "metodo": g["metodo"],
-                "acoesFonte": g["acoesFonte"], "lucroTipo": g["lucroTipo"]}
+                "acoesFonte": g["acoesFonte"], "lucroTipo": g["lucroTipo"], "porLpa": g.get("porLpa", False),
+                "periodo": g.get("periodo", ""), "dividendoFonte": g.get("dividendoFonte", "")}
 
     after = None
     if info.get("postMarketPrice") and info.get("postMarketChangePercent") is not None:

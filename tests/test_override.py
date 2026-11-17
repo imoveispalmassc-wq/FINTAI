@@ -69,3 +69,21 @@ def test_cadastro_do_bbas3_com_o_guidance_de_11_11_2026():
     assert (o["lucro_min"], o["lucro_max"], o["payout"], o["data"]) == (9e9, 11e9, 0.25, "11/11/2026")
     g = guidance("BBAS3", OVERRIDE, acoes_padrao=5.73e9)
     assert g["lpa"] == pytest.approx(10e9 / 5.73e9) and g["dividendo"] == pytest.approx(g["lpa"] * 0.25)
+
+
+def test_guidance_em_lucro_por_acao_com_dividendo_da_empresa():
+    from utils.override import guidance, validar
+    t = {"ACM": {"lpa_min": 6.15, "lpa_max": 6.35, "periodo": "FY2027", "dividendo": 1.36,
+                 "fonte": "AECOM 8-K", "data": "16/11/2026"}}
+    g = guidance("ACM", tabela=t)
+    assert g["porLpa"] and g["lpa"] == pytest.approx(6.25) and (g["lpaMin"], g["lpaMax"]) == (6.15, 6.35)
+    assert g["dividendo"] == 1.36 and g["dividendoFonte"] == "empresa" and g["periodo"] == "FY2027"
+    assert validar("X", {"lpa_min": 6, "lpa_max": 5, "fonte": "f", "data": "d"}) == ["lpa_min maior que lpa_max"]
+    assert validar("X", {"lpa_min": 6, "lpa_max": 7, "data": "d"}) == ["falta o campo 'fonte'"]
+
+
+def test_cadastros_adm_e_acm_e_xp_sem_guidance():
+    from utils.override import OVERRIDE, guidance
+    assert guidance("ADM")["lpa"] == pytest.approx(5.65)
+    assert guidance("ACM")["lpa"] == pytest.approx(6.25) and guidance("ACM")["dividendo"] == 1.36
+    assert "XP" not in OVERRIDE and "HSIC" not in OVERRIDE

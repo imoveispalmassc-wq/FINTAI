@@ -16,6 +16,10 @@ Regras para cadastrar (ver CLAUDE.md: só com fonte citada):
 - fonte: de onde veio (ex.: "Banco do Brasil, release 4T25 - guidance 2026").
 - data: data da divulgação, "DD/MM/AAAA".
 
+Guidance em lucro por ação (comum nos EUA): em vez de lucro_min/lucro_max, use lpa_min/lpa_max
+(LPA projetado direto, sem precisar de ações). Opcionais: dividendo (dividendo anual por ação
+divulgado pela empresa; ganha do payout) e periodo (ex.: "2026", "FY2027" para ano fiscal).
+
 Exemplo (NÃO é dado real; o dicionário começa vazio):
     "XXXX3": {"lucro_min": 10_000_000_000, "lucro_max": 12_000_000_000, "acoes": 1_000_000_000,
               "payout": 0.40, "fonte": "Empresa X, release 4T25", "data": "10/02/2026"},
@@ -32,6 +36,14 @@ OVERRIDE: dict[str, dict] = {
     "BBAS3": {"lucro_min": 9_000_000_000, "lucro_max": 11_000_000_000, "payout": 0.25,
               "lucro_tipo": "lucro líquido ajustado",
               "fonte": "Banco do Brasil, Fato Relevante - Revisão do Guidance 2026 (RI)", "data": "11/11/2026"},
+    # ADM, "ADM Reports Third Quarter 2026 Results" (8-K/press release, 03/11/2026): LPA ajustado 2026
+    # elevado para cerca de US$ 5,50 a 5,80 (antes US$ 5,15 a 5,60).
+    "ADM": {"lpa_min": 5.50, "lpa_max": 5.80, "periodo": "2026", "lucro_tipo": "LPA ajustado",
+            "fonte": "ADM, resultado do 3T26 (press release / 8-K)", "data": "03/11/2026"},
+    # AECOM, resultado do 4T do ano fiscal 2026 (8-K, 16/11/2026): LPA ajustado FY2027 de US$ 6,15 a 6,35;
+    # dividendo trimestral elevado em 10% para US$ 0,34 (US$ 1,36 por ano).
+    "ACM": {"lpa_min": 6.15, "lpa_max": 6.35, "periodo": "FY2027", "lucro_tipo": "LPA ajustado",
+            "dividendo": 1.36, "fonte": "AECOM, resultado do 4T do ano fiscal 2026 (8-K)", "data": "16/11/2026"},
 }
 
 # Cadastro automático, gravado pelo robô diário (utils/fetch_guidance.py).
@@ -51,12 +63,25 @@ def tabela() -> dict[str, dict]:
     return {**_auto(), **OVERRIDE}
 
 CAMPOS = ("lucro_min", "lucro_max", "fonte", "data")   # acoes e payout são opcionais
+CAMPOS_LPA = ("lpa_min", "lpa_max", "fonte", "data")   # guidance em lucro por ação
 
 
 def validar(ticker: str, o: dict) -> list[str]:
     """Problemas no cadastro de um override. Lista vazia = válido."""
-    erros = [f"falta o campo '{c}'" for c in CAMPOS if c not in o or o[c] in (None, "")]
+    por_lpa = "lpa_min" in o or "lpa_max" in o
+    erros = [f"falta o campo '{c}'" for c in (CAMPOS_LPA if por_lpa else CAMPOS) if c not in o or o[c] in (None, "")]
     if erros:
+        return erros
+    if por_lpa:
+        try:
+            lmin, lmax = float(o["lpa_min"]), float(o["lpa_max"])
+            div = None if o.get("dividendo") in (None, "") else float(o["dividendo"])
+        except (TypeError, ValueError):
+            return ["lpa_min, lpa_max e dividendo precisam ser números"]
+        if lmin > lmax:
+            erros.append("lpa_min maior que lpa_max")
+        if div is not None and div < 0:
+            erros.append("dividendo não pode ser negativo")
         return erros
     try:
         lmin, lmax = (float(o[c]) for c in ("lucro_min", "lucro_max"))
@@ -83,12 +108,24 @@ def guidance(ticker: str, tabela: dict | None = None, acoes_padrao: float | None
     o = tabela.get(chave)
     if not o or validar(chave, o):
         return None
+    base = {"fonte": str(o["fonte"]), "data": str(o["data"]), "url": str(o.get("url") or ""),
+            "metodo": str(o.get("metodo") or "cadastro manual"), "periodo": str(o.get("periodo") or "")}
+    if "lpa_min" in o:
+        lmin, lmax = float(o["lpa_min"]), float(o["lpa_max"])
+        lpa = (lmin + lmax) / 2
+        div = None if o.get("dividendo") in (None, "") else float(o["dividendo"])
+        payout = None if o.get("payout") is None else float(o["payout"])
+        return {**base, "lpa": lpa, "lpaMin": lmin, "lpaMax": lmax, "porLpa": True,
+                "dividendo": div if div is not None else (None if payout is None else lpa * payout),
+                "dividendoFonte": "empresa" if div is not None else ("payout" if payout is not None else ""),
+                "payout": payout, "lucroMin": None, "lucroMax": None, "acoes": None, "acoesFonte": "",
+                "lucroTipo": str(o.get("lucro_tipo") or "LPA")}
     acoes = float(o["acoes"]) if o.get("acoes") not in (None, "") else acoes_padrao
     if not acoes or acoes <= 0:
         return None
     lpa = (float(o["lucro_min"]) + float(o["lucro_max"])) / 2 / acoes
     payout = None if o.get("payout") is None else float(o["payout"])
-    return {
+    return {**base, "porLpa": False, "dividendoFonte": "payout" if payout is not None else "",
         "lpa": lpa,
         "lpaMin": float(o["lucro_min"]) / acoes,
         "lpaMax": float(o["lucro_max"]) / acoes,
