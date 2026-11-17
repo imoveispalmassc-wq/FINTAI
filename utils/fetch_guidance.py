@@ -356,6 +356,7 @@ def documentos_cvm(cnpj: str, hoje: dt.date) -> list[dict]:
                 continue
             docs.append({"data": _campo(l, "data", "entrega") or _campo(l, "data", "referencia"),
                          "categoria": _campo(l, "categoria"), "assunto": _campo(l, "assunto"),
+                         "tipo": " ".join([_campo(l, "tipo"), _campo(l, "especie")]).strip(),
                          "link": _campo(l, "link")})
     docs = [d for d in docs if d["link"].startswith("http")]
     return sorted(docs, key=lambda d: d["data"], reverse=True)
@@ -887,41 +888,56 @@ def _valor_reais(numero: str, unidade: str) -> float:
     return numero_br(numero) * (1e9 if unidade.lower().startswith("bilh") else 1e6)
 
 
-def extrair_lucro_trimestre(texto: str, tri: str, linha: str = "Lucro Líquido Ajustado") -> tuple[float | None, str]:
+def ler_lucro_trimestre(texto: str, tri: str, linha: str = "Lucro Líquido Ajustado") -> dict:
     """Lucro da `linha` no trimestre `tri` (ex.: "3T26"), em reais, no release de resultados.
 
-    Duas leituras: a frase do texto ("lucro líquido ajustado de R$ 1,27 bilhão no 3T26") e a linha da tabela
-    (cabeçalho com os trimestres + linha com os valores). Divergência de mais de 3% entre as duas: sem confiança."""
+    Leituras: (1) frase do texto ("lucro líquido ajustado de R$ 1,27 bilhão no 3T26", "No 3T26, o lucro líquido
+    ajustado foi de R$ 1,3 bilhão", "... R$ 1,3 bilhão no trimestre"); (2) linha da tabela, usando o grupo de
+    colunas de trimestres que contém `tri` (releases do BB têm "3T25 2T26 3T26 Var.% ... 9M25 9M26").
+    Devolve {"frase", "tabela", "valor", "motivo"}; divergência de mais de 3% = sem valor."""
     t = normalizar(texto)
-    nome = re.escape(linha).replace(r"\ ", r"\s+").replace("í", "[ií]").replace("Í", "[IÍ]")
-    achados = {}
-    # frase: "... lucro líquido ajustado ... R$ 1,27 bilhão ... 3T26" ou "No 3T26, o lucro líquido ajustado foi de R$ 1,27 bilhão"
-    # NUM e UNID já são grupos: 1-2 na primeira forma da frase, 3-4 na segunda
-    for m in re.finditer(rf"{nome}[^.]{{0,80}}?R\$\s*{NUM}\s*{UNID}[^.]{{0,40}}?\b{tri}\b|\b{tri}\b[^.]{{0,60}}?{nome}[^.]{{0,40}}?R\$\s*{NUM}\s*{UNID}", t, re.I):
-        num, uni = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
-        if multiplicador(uni):
-            achados.setdefault("frase", _valor_reais(num, uni))
-    # tabela: cabeçalho com os trimestres antes da linha; valores na mesma ordem
-    for m in re.finditer(rf"{nome}\s+((?:\(?-?\d{{1,3}}(?:\.\d{{3}})*(?:,\d+)?\)?%?\s+){{1,10}})", t, re.I):
+    nome = re.escape(linha).replace(r"\ ", r"\s+").replace(" ", r"\s+").replace("í", "[ií]").replace("Í", "[IÍ]")
+    out = {"frase": None, "tabela": None, "valor": None, "motivo": ""}
+    # NUM e UNID já são grupos: 1-2, 3-4 e 5-6 nas três formas da frase
+    padrao = (rf"{nome}[^.]{{0,80}}?R\$\s*{NUM}\s*{UNID}[^.]{{0,40}}?\b{tri}\b"
+              rf"|\b{tri}\b[^.]{{0,60}}?{nome}[^.]{{0,40}}?R\$\s*{NUM}\s*{UNID}"
+              rf"|{nome}[^.]{{0,60}}?R\$\s*{NUM}\s*{UNID}[^.]{{0,12}}?\bno\s+(?:trimestre|período)\b")
+    for m in re.finditer(padrao, t, re.I):
+        g = m.groups()
+        num, uni = next(((g[i], g[i + 1]) for i in (0, 2, 4) if g[i]), (None, None))
+        if num and multiplicador(uni):
+            out["frase"] = _valor_reais(num, uni)
+            break
+    # tabela
+    for m in re.finditer(rf"{nome}\s+((?:\(?-?\d{{1,3}}(?:\.\d{{3}})*(?:,\d+)?\)?%?\s+){{1,12}})", t, re.I):
         antes = t[max(0, m.start() - 2500): m.start()]
-        cabs = list(re.finditer(r"((?:\b(?:[1-4]T\d{2}|\d{1,2}M\d{2})\b[\s/]*){1,10})", antes))
-        if not cabs:
+        grupos = [g for g in re.finditer(r"((?:\b(?:[1-4]T\d{2}|\d{1,2}M\d{2})\b[\s/]*){1,10})", antes)
+                  if tri in re.findall(r"\b(?:[1-4]T\d{2}|\d{1,2}M\d{2})\b", g.group(1))]
+        if not grupos:
             continue
-        colunas = re.findall(r"\b(?:[1-4]T\d{2}|\d{1,2}M\d{2})\b", cabs[-1].group(1))
+        colunas = re.findall(r"\b(?:[1-4]T\d{2}|\d{1,2}M\d{2})\b", grupos[-1].group(1))
         valores = [v for v in m.group(1).split() if not v.endswith("%")]
-        if tri not in colunas or len(valores) < len(colunas):
+        if len(valores) < len(colunas):
             continue
-        # unidade da tabela: a indicação mais próxima antes da linha ("R$ milhões", "R$ bilhões", "em milhões de reais")
         unids = re.findall(r"R\$\s*(milh|bilh)|(milh|bilh)[õo]es\s+de\s+reais", antes, re.I)
         uni = "bilh" if unids and "bilh" in "".join(unids[-1]).lower() else "milh"
-        v = valores[colunas.index(tri)].strip("()")
-        achados.setdefault("tabela", _valor_reais(v, uni) * (-1 if valores[colunas.index(tri)].startswith("(") else 1))
-    if not achados:
-        return None, f"linha '{linha}' do {tri} não encontrada"
-    vals = list(achados.values())
-    if len(vals) == 2 and abs(vals[0] / vals[1] - 1) > 0.03:
-        return None, f"frase ({vals[0] / 1e9:.2f} bi) e tabela ({vals[1] / 1e9:.2f} bi) divergem"
-    return achados.get("tabela", achados.get("frase")), "tabela" if "tabela" in achados else "frase"
+        bruto = valores[colunas.index(tri)]
+        out["tabela"] = _valor_reais(bruto.strip("()"), uni) * (-1 if bruto.startswith("(") else 1)
+        break
+    f, tb = out["frase"], out["tabela"]
+    if f is None and tb is None:
+        out["motivo"] = f"linha '{linha}' do {tri} não encontrada (nem frase nem tabela)"
+    elif f is not None and tb is not None and abs(f / tb - 1) > 0.03:
+        out["motivo"] = f"frase ({f / 1e9:.2f} bi) e tabela ({tb / 1e9:.2f} bi) divergem {abs(f / tb - 1):.1%}"
+    else:
+        out["valor"] = tb if tb is not None else f
+        out["motivo"] = "tabela" if tb is not None else "frase"
+    return out
+
+
+def extrair_lucro_trimestre(texto: str, tri: str, linha: str = "Lucro Líquido Ajustado") -> tuple[float | None, str]:
+    r = ler_lucro_trimestre(texto, tri, linha)
+    return r["valor"], r["motivo"]
 
 
 def contabil_br_de_trimestres(trimestres: list[dict], acoes: float | None, fonte: str, hoje: dt.date) -> dict:
@@ -939,32 +955,52 @@ def contabil_br_de_trimestres(trimestres: list[dict], acoes: float | None, fonte
 
 
 def contabil_br(ticker: str, hoje: dt.date, cfg: dict, *, buscar_cnpj=cnpj_do_ticker, buscar_docs=documentos_cvm,
-                ler_pdf=texto_do_pdf, buscar_acoes=acoes_yahoo) -> dict:
-    """Lê o lucro do trimestre no release de cada um dos 4 últimos trimestres (documentos da CVM)."""
+                ler_pdf=texto_do_pdf, buscar_acoes=acoes_yahoo, registrar=None) -> dict:
+    """Lê o lucro do trimestre no release de cada um dos 4 últimos trimestres (documentos da CVM).
+
+    Escreve no log uma linha por documento lido: "BBAS3 3T26: frase=... tabela=... divergência=... gravou=..."."""
+    registrar = registrar or (lambda msg: (log.info(msg), print(msg, flush=True) if os.environ.get("GITHUB_ACTIONS") else None))
     empresa = buscar_cnpj(ticker, hoje)
     if not empresa:
+        registrar(f"{ticker}: CNPJ não encontrado na CVM")
         return {"status": "pendente", "motivo": "CNPJ não encontrado na CVM"}
     linha, fonte = cfg.get("linha", "Lucro Líquido Ajustado"), cfg.get("fonte", f"{ticker}, Divulgação de Resultados")
+    docs = buscar_docs(empresa[0], hoje)
+    registrar(f"{ticker}: {len(docs)} documento(s) de resultado/projeção na CVM")
+    # na mesma data, o release de resultados vem antes de fato relevante, ITR etc.
+    prioridade = re.compile(r"resultado|desempenho|release|press", re.I)
+    docs = sorted(docs, key=lambda d: (d["data"], bool(prioridade.search(f"{d.get('categoria','')} {d.get('tipo','')} {d.get('assunto','')}"))), reverse=True)
     lidos = {}
-    for doc in buscar_docs(empresa[0], hoje):                 # do mais novo para o mais antigo
+    for doc in docs:                                           # do mais novo para o mais antigo
         d = _data(doc["data"])
-        if not d or not PALAVRAS_RESULTADO.search(f"{doc.get('categoria', '')} {doc.get('assunto', '')}"):
+        if not d:
             continue
         tri = trimestre_do_documento(d)
         if tri in lidos:
             continue
+        nome_doc = f"{_data_br(doc['data'])} {doc.get('categoria', '')} / {doc.get('tipo', '')} / {doc.get('assunto', '')}".strip()
         try:
             _, texto = ler_pdf(doc["link"])
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
+            registrar(f"{ticker} {tri}: doc={nome_doc} link={doc['link']} gravou=não motivo=não abriu ({e.__class__.__name__})")
             continue
-        v, como = extrair_lucro_trimestre(texto, tri, linha)
-        if v is None:
+        r = ler_lucro_trimestre(texto, tri, linha)
+        bi = lambda v: "—" if v is None else f"{v / 1e9:.2f} bi"
+        div = "—" if r["frase"] is None or r["tabela"] is None else f"{abs(r['frase'] / r['tabela'] - 1):.1%}"
+        registrar(f"{ticker} {tri}: frase={bi(r['frase'])} tabela={bi(r['tabela'])} divergência={div} "
+                  f"gravou={'sim' if r['valor'] is not None else 'não'} motivo={r['motivo']} doc={nome_doc} link={doc['link']}")
+        if r["valor"] is None:
             continue
-        lidos[tri] = {"tri": tri, "fim": f"{fim_do_trimestre(tri):%d/%m/%Y}", "lucro": v, "fonte": fonte,
-                      "data": _data_br(doc["data"]), "url": doc["link"], "leitura": como}
-        if len(lidos) >= 4 and all(tri_anterior(t) in lidos for t in sorted(lidos, key=fim_do_trimestre)[1:][-3:]):
+        lidos[tri] = {"tri": tri, "fim": f"{fim_do_trimestre(tri):%d/%m/%Y}", "lucro": r["valor"], "fonte": fonte,
+                      "data": _data_br(doc["data"]), "url": doc["link"], "leitura": r["motivo"]}
+        ordem = sorted(lidos, key=fim_do_trimestre)
+        if len(ordem) >= 4 and all(tri_anterior(b) == a for a, b in zip(ordem[-4:], ordem[-3:])):
             break
-    return contabil_br_de_trimestres(list(lidos.values()), buscar_acoes(ticker), fonte, hoje)
+    resultado = contabil_br_de_trimestres(list(lidos.values()), buscar_acoes(ticker), fonte, hoje)
+    registrar(f"{ticker}: contábil {resultado['status']}"
+              + (f" lucro 12m {resultado['lucro_12m'] / 1e9:.2f} bi, LPA {resultado['lpa_12m']:.2f}" if resultado["status"] == "ok"
+                 else f" ({resultado.get('motivo')})"))
+    return resultado
 
 
 # ------------------------------------------------------------ projeção do início do ano (congelada)

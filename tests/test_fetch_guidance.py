@@ -416,3 +416,28 @@ def test_pendente_nao_apaga_valor_bom_ja_gravado(tmp_path, monkeypatch):
     fg.aplicar_contabil_br([{"ticker": "BBAS3", "contabil_br": {"status": "pendente", "motivo": "PDF não abriu"}}])
     dado = json.loads(arq.read_text(encoding="utf-8"))["BBAS3"]
     assert dado["lpa_12m"] == 2.5 and dado["ultima_tentativa"] == "PDF não abriu"
+
+
+def test_release_do_bb_com_colunas_de_variacao_e_frase_arredondada():
+    txt = ("Análise do Desempenho 3T26. O lucro líquido ajustado foi de R$ 1,3 bilhão no 3T26, queda de 66,5%. "
+           "Tabela 1 - Principais Indicadores R$ milhões 3T25 2T26 3T26 Var. % 3T25 2T26 9M25 9M26 Var. % "
+           "Lucro Líquido Ajustado 3.785 3.906 1.270 (66,5) (67,5) 14.969 8.624 (42,4) RSPL Ajustado 8,4 8,3 2,8")
+    r = fg.ler_lucro_trimestre(txt, "3T26")
+    assert r["tabela"] == pytest.approx(1.270e9) and r["frase"] == pytest.approx(1.3e9)   # arredondada: 2,4%
+    assert r["valor"] == pytest.approx(1.270e9) and r["motivo"] == "tabela"
+    assert fg.ler_lucro_trimestre(txt, "2T26")["tabela"] == pytest.approx(3.906e9)
+    # frase "no trimestre", sem tabela
+    so_frase = "No período, o lucro líquido ajustado atingiu R$ 3,4 bilhões no trimestre, com RSPL de 8,4%."
+    assert fg.ler_lucro_trimestre(so_frase, "1T26")["valor"] == pytest.approx(3.4e9)
+
+
+def test_log_uma_linha_por_trimestre_e_documento_press_release():
+    docs = [{"data": BB_DATAS["3T26"], "categoria": "Dados Econômico-Financeiros", "tipo": "Press-release",
+             "assunto": "Análise do Desempenho 3T26", "link": "https://cvm/3T26.pdf"}]
+    linhas = []
+    fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {}, buscar_cnpj=lambda t, h: ("1", "BB"), buscar_docs=lambda c, h: docs,
+                   ler_pdf=lambda link: (b"", _release_bb("3T26")), buscar_acoes=lambda t: 5.71e9, registrar=linhas.append)
+    tri = next(l for l in linhas if l.startswith("BBAS3 3T26:"))
+    assert "frase=1.27 bi" in tri and "tabela=1.27 bi" in tri and "divergência=0.0%" in tri and "gravou=sim" in tri
+    assert "link=https://cvm/3T26.pdf" in tri and "Análise do Desempenho 3T26" in tri
+    assert linhas[-1].startswith("BBAS3: contábil pendente")          # só 1 trimestre: pendente, sem número
