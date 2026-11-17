@@ -441,3 +441,58 @@ def test_log_uma_linha_por_trimestre_e_documento_press_release():
     assert "frase=1.27 bi" in tri and "tabela=1.27 bi" in tri and "divergência=0.0%" in tri and "gravou=sim" in tri
     assert "link=https://cvm/3T26.pdf" in tri and "Análise do Desempenho 3T26" in tri
     assert linhas[-1].startswith("BBAS3: contábil pendente")          # só 1 trimestre: pendente, sem número
+
+
+# ------------------------------------------------------------ casos do log da execução #9 (BBAS3)
+def test_zero_nunca_e_gravado_e_tabela_em_bilhoes_sem_unidade():
+    # tabela em R$ bilhões sem unidade escrita: antes virava 3,9 milhões = "0.00 bi"
+    t = "No 2T26, o lucro líquido ajustado foi de R$ 3,91 bilhões. 1T26 2T26 Lucro Líquido Ajustado 3,4 3,9 RSPL"
+    r = fg.ler_lucro_trimestre(t, "2T26")
+    assert r["tabela"] == pytest.approx(3.9e9) and r["valor"] == pytest.approx(3.9e9)
+    # sem frase e sem unidade, "3,9" é ambíguo: não usa
+    assert fg.ler_lucro_trimestre("1T26 2T26 Lucro Líquido Ajustado 3,4 3,9 RSPL", "2T26")["valor"] is None
+    # zero é leitura inválida
+    zero = fg.ler_lucro_trimestre("R$ milhões 1T26 2T26 Lucro Líquido Ajustado 0 0 RSPL", "2T26")
+    assert zero["tabela"] is None and zero["valor"] is None
+
+
+def test_frase_do_ano_ou_do_semestre_e_descartada():
+    ano = ("No 4T25, o lucro líquido ajustado acumulado no ano foi de R$ 20,7 bilhões. "
+           "R$ milhões 4T24 3T25 4T25 Lucro Líquido Ajustado 9.578 3.785 5.737 RSPL")
+    r = fg.ler_lucro_trimestre(ano, "4T25")
+    assert r["frase"] is None and r["valor"] == pytest.approx(5.737e9) and r["motivo"] == "tabela"
+    sem = ("No 2T25, o lucro líquido ajustado no semestre foi de R$ 11,2 bilhões. "
+           "R$ milhões 2T24 1T25 2T25 1S24 1S25 Lucro Líquido Ajustado 9.501 7.373 3.784 18.700 11.157")
+    r2 = fg.ler_lucro_trimestre(sem, "2T25")
+    assert r2["frase"] is None and r2["valor"] == pytest.approx(3.784e9)
+
+
+def test_bbas3_fluxo_com_os_formatos_do_log_fica_consecutivo():
+    textos = {
+        "3T26": "R$ milhões 3T25 2T26 3T26 Var. % 9M25 9M26 Lucro Líquido Ajustado 3.785 3.906 1.270 (66,5) 14.969 8.624",
+        "2T26": "No 2T26, o lucro líquido ajustado foi de R$ 3,91 bilhões. 1T26 2T26 Lucro Líquido Ajustado 3,4 3,9 RSPL",
+        "1T26": "O lucro líquido ajustado alcançou R$ 3,4 bilhões no 1T26. R$ milhões 4T25 1T26 Lucro Líquido Ajustado 5.737 3.400",
+        "4T25": ("No 4T25, o lucro líquido ajustado acumulado no ano foi de R$ 20,7 bilhões. "
+                 "R$ milhões 4T24 3T25 4T25 Lucro Líquido Ajustado 9.578 3.785 5.737 RSPL"),
+    }
+    docs = [{"data": BB_DATAS[t], "categoria": "Dados Econômico-Financeiros", "tipo": "Press-release",
+             "assunto": f"Análise do Desempenho {t}", "link": f"https://cvm/{t}.pdf"} for t in ("3T26", "2T26", "1T26", "4T25")]
+    linhas = []
+    c = fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {"fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado"},
+                       buscar_cnpj=lambda t, h: ("1", "BB"), buscar_docs=lambda c, h: docs,
+                       ler_pdf=lambda link: (b"", textos[link.split("/")[-1][:4]]), buscar_acoes=lambda t: 5.709e9,
+                       registrar=linhas.append)
+    assert c["status"] == "ok" and [t["tri"] for t in c["trimestres"]] == ["4T25", "1T26", "2T26", "3T26"]
+    assert c["lidos"] == {"4T25": 5.737, "1T26": 3.4, "2T26": 3.9, "3T26": 1.27}
+    assert round(c["lucro_12m"] / 1e9, 2) == 14.31 and round(c["lpa_12m"], 2) == 2.51
+    assert all(any(l.startswith(f"BBAS3 {t}:") for l in linhas) for t in ("3T26", "2T26", "1T26", "4T25"))
+
+
+def test_valor_errado_ja_gravado_e_substituido_quando_acha_o_certo(tmp_path, monkeypatch):
+    import json
+    arq = tmp_path / "br.json"
+    arq.write_text(json.dumps({"BBAS3": {"status": "ok", "lpa_12m": 1.0, "lidos": {"2T26": 0.0}}}), encoding="utf-8")
+    monkeypatch.setattr(fg, "ARQ_CONTABIL_BR", arq)
+    novo = {"status": "ok", "lpa_12m": 2.51, "lidos": {"2T26": 3.9}}
+    fg.aplicar_contabil_br([{"ticker": "BBAS3", "contabil_br": novo}])
+    assert json.loads(arq.read_text(encoding="utf-8"))["BBAS3"]["lpa_12m"] == 2.51

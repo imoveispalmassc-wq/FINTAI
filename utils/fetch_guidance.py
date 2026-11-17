@@ -888,6 +888,12 @@ def _valor_reais(numero: str, unidade: str) -> float:
     return numero_br(numero) * (1e9 if unidade.lower().startswith("bilh") else 1e6)
 
 
+RE_ACUMULADO = re.compile(r"acumulad|no\s+ano\b|do\s+ano\b|em\s+20\d{2}\b|exerc[íi]cio|semestre|\b[1-2]S\d{2}\b|"
+                         r"\b(?:6|9|12)M\d{2}\b|nove\s+meses|seis\s+meses|12\s+meses|doze\s+meses|"
+                         r"janeiro\s+a|de\s+jan|at[ée]\s+(?:junho|setembro|dezembro)", re.I)
+LUCRO_MINIMO = 1e6         # lucro trimestral abaixo de R$ 1 milhão (ex.: 0,00) = leitura inválida
+
+
 def ler_lucro_trimestre(texto: str, tri: str, linha: str = "Lucro Líquido Ajustado") -> dict:
     """Lucro da `linha` no trimestre `tri` (ex.: "3T26"), em reais, no release de resultados.
 
@@ -905,25 +911,44 @@ def ler_lucro_trimestre(texto: str, tri: str, linha: str = "Lucro Líquido Ajust
     for m in re.finditer(padrao, t, re.I):
         g = m.groups()
         num, uni = next(((g[i], g[i + 1]) for i in (0, 2, 4) if g[i]), (None, None))
+        # só o trimestre isolado: frase com acumulado, ano, semestre, 9M/12M é descartada
+        contexto = t[max(0, m.start() - 60): m.end() + 50]
+        if RE_ACUMULADO.search(contexto):
+            continue
         if num and multiplicador(uni):
             out["frase"] = _valor_reais(num, uni)
             break
     # tabela
     for m in re.finditer(rf"{nome}\s+((?:\(?-?\d{{1,3}}(?:\.\d{{3}})*(?:,\d+)?\)?%?\s+){{1,12}})", t, re.I):
         antes = t[max(0, m.start() - 2500): m.start()]
-        grupos = [g for g in re.finditer(r"((?:\b(?:[1-4]T\d{2}|\d{1,2}M\d{2})\b[\s/]*){1,10})", antes)
-                  if tri in re.findall(r"\b(?:[1-4]T\d{2}|\d{1,2}M\d{2})\b", g.group(1))]
+        # grupo de colunas TRIMESTRAIS (1T..4T) que contém o trimestre; grupos acumulados (9M, 12M) não servem
+        grupos = [g for g in re.finditer(r"((?:\b[1-4]T\d{2}\b[\s/]*){1,10})", antes)
+                  if tri in re.findall(r"\b[1-4]T\d{2}\b", g.group(1))]
         if not grupos:
             continue
-        colunas = re.findall(r"\b(?:[1-4]T\d{2}|\d{1,2}M\d{2})\b", grupos[-1].group(1))
+        colunas = re.findall(r"\b[1-4]T\d{2}\b", grupos[-1].group(1))
         valores = [v for v in m.group(1).split() if not v.endswith("%")]
         if len(valores) < len(colunas):
             continue
-        unids = re.findall(r"R\$\s*(milh|bilh)|(milh|bilh)[õo]es\s+de\s+reais", antes, re.I)
-        uni = "bilh" if unids and "bilh" in "".join(unids[-1]).lower() else "milh"
         bruto = valores[colunas.index(tri)]
-        out["tabela"] = _valor_reais(bruto.strip("()"), uni) * (-1 if bruto.startswith("(") else 1)
+        num = numero_br(bruto.strip("()")) * (-1 if bruto.startswith("(") else 1)
+        unids = re.findall(r"R\$\s*(milh|bilh)|(milh|bilh)[õo]es\s+de\s+reais|em\s+(milh|bilh)[õo]es", antes[-1500:], re.I)
+        if unids:
+            uni = "bilh" if "bilh" in "".join(unids[-1]).lower() else "milh"
+        elif out["frase"]:
+            # sem unidade escrita: a que deixa a tabela mais perto da frase
+            uni = min(("milh", "bilh"), key=lambda u: abs(num * (1e9 if u == "bilh" else 1e6) - out["frase"]))
+        elif abs(num) >= 100:
+            uni = "milh"                      # 3.906 sem unidade = R$ milhões
+        else:
+            continue                          # "3,9" sem unidade e sem frase: ambíguo, não usa
+        valor = num * (1e9 if uni == "bilh" else 1e6)
+        if abs(valor) < LUCRO_MINIMO:
+            continue                          # 0,00 bi: leitura inválida, tenta outra linha / outro documento
+        out["tabela"] = valor
         break
+    if out["frase"] is not None and abs(out["frase"]) < LUCRO_MINIMO:
+        out["frase"] = None
     f, tb = out["frase"], out["tabela"]
     if f is None and tb is None:
         out["motivo"] = f"linha '{linha}' do {tri} não encontrada (nem frase nem tabela)"
@@ -996,7 +1021,14 @@ def contabil_br(ticker: str, hoje: dt.date, cfg: dict, *, buscar_cnpj=cnpj_do_ti
         ordem = sorted(lidos, key=fim_do_trimestre)
         if len(ordem) >= 4 and all(tri_anterior(b) == a for a, b in zip(ordem[-4:], ordem[-3:])):
             break
+    if lidos:
+        alvo = [max(lidos, key=fim_do_trimestre)]
+        while len(alvo) < 4:
+            alvo.append(tri_anterior(alvo[-1]))
+        for tri_falta in [x for x in alvo if x not in lidos]:
+            registrar(f"{ticker} {tri_falta}: gravou=não motivo=nenhum documento com o lucro do trimestre lido")
     resultado = contabil_br_de_trimestres(list(lidos.values()), buscar_acoes(ticker), fonte, hoje)
+    resultado["lidos"] = {k: round(v["lucro"] / 1e9, 4) for k, v in sorted(lidos.items(), key=lambda x: fim_do_trimestre(x[0]))}
     registrar(f"{ticker}: contábil {resultado['status']}"
               + (f" lucro 12m {resultado['lucro_12m'] / 1e9:.2f} bi, LPA {resultado['lpa_12m']:.2f}" if resultado["status"] == "ok"
                  else f" ({resultado.get('motivo')})"))
