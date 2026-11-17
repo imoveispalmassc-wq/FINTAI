@@ -1,4 +1,17 @@
 {
+  "ACM": {
+    "FY2027": {
+      "lpa_min": 6.15,
+      "lpa_max": 6.35,
+      "lucro_tipo": "LPA ajustado",
+      "fonte": "AECOM, Form 8-K Exhibit 99.1 de 16/11/2026 (SEC)",
+      "data": "16/11/2026",
+      "url": "https://www.sec.gov/Archives/edgar/data/868857/000110465926128300/tm2629784d1_ex99-1.htm",
+      "metodo": "robô (primeiro documento do ano)",
+      "trecho": "inancing fees $0.05 Restructuring and acquisition costs $0.23 to $0.15 Tax effect of the above items ($0.13) to ($0.11) Adjusted EPS guidance $6.15 to $6.35 FY2027 GAAP Net Income from Continuing",
+      "travado": true
+    }
+  },
   "ADM": {
     "2026": {
       "lpa_min": 3.6,
@@ -11,14 +24,30 @@
       "travado": true
     }
   },
-  "HSIC": {
+  "BBAS3": {
     "2026": {
-      "status": "sem projeção inicial encontrada"
+      "lucro_min": 22000000000.0,
+      "lucro_max": 26000000000.0,
+      "acoes": 5708922664.0,
+      "fonte": "BCO BRASIL S.A., Fato Relevante de 11/02/2026 (CVM)",
+      "data": "11/02/2026",
+      "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1476522&numSequencia=1001228&numVersao=1",
+      "metodo": "robô (primeiro documento do ano)",
+      "trecho": "Lucro Líquido Ajustado R$ bilhões 22 a 26",
+      "travado": true
     }
   },
-  "ACM": {
-    "FY2027": {
-      "status": "sem projeção inicial encontrada"
+  "HSIC": {
+    "2026": {
+      "lpa_min": 5.23,
+      "lpa_max": 5.37,
+      "lucro_tipo": "LPA ajustado",
+      "fonte": "HENRY SCHEIN INC, Form 8-K Exhibit 99.1 de 24/02/2026 (SEC)",
+      "data": "24/02/2026",
+      "url": "https://www.sec.gov/Archives/edgar/data/1000228/000100022826000010/exhibit991.htm",
+      "metodo": "robô (primeiro documento do ano)",
+      "trecho": "EPS of $0.85, compared to $0.74 GAAP diluted EPS in Q4 2024 ● Q4 2025 non-GAAP diluted EPS of $1.34, compared to $1.19 non-GAAP diluted EPS in Q4 2024 ● 2026 non-GAAP diluted EPS expected to be in the range of $5.23 to $5.37, with total sales growth expected to be",
+      "travado": true
     }
   },
   "XP": {
