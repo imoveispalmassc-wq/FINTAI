@@ -1,6 +1,14 @@
 {
   "BBAS3": {
     "status": "pendente",
-    "motivo": "trimestres lidos não são consecutivos"
+    "motivo": "trimestres lidos não são consecutivos",
+    "lidos": {
+      "4T24": 9.58,
+      "1T25": 7.4,
+      "2T25": 3.784,
+      "3T25": 3.785,
+      "2T26": 3.908,
+      "3T26": 1.27
+    }
   }
 }
