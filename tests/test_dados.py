@@ -220,3 +220,25 @@ def test_contabil_muda_quando_chega_balanco_novo():
     depois = lpa_contabil_ttm(lucro2, anual, acoes, 1.31, datas2)
     assert round(antes.iloc[-1], 2) == 1.93 and round(depois.iloc[-1], 2) == 1.31
     assert f"{depois.index[-1]:%d/%m/%Y}" == "10/02/2027"
+
+
+def test_contabil_volta_para_o_yahoo_se_a_sec_estiver_incompleta():
+    from tela.dados import contabil_12m
+    ok = {"ADM": {"status": "ok", "lpa_12m": 5.12, "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)"}}
+    assert contabil_12m("ADM", 5.10, ok)[:2] == (5.12, "SEC 10-Q/10-K, lucro por ação diluído (GAAP)")
+    inc = {"ADM": {"status": "incompleto", "motivo": "só 3 trimestre(s) na SEC"}}
+    assert contabil_12m("ADM", 5.10, inc)[:2] == (5.10, "Yahoo - SEC incompleto")
+    assert contabil_12m("ADM", 5.10, {})[:2] == (5.10, "Yahoo - SEC ainda não lida pelo robô")
+    assert contabil_12m("BBAS3.SA", 1.93, ok)[:2] == (1.93, "Yahoo Finance")
+
+
+def test_card_pl_na_ordem_inicio_contabil_previsao():
+    import pathlib
+    js = pathlib.Path(__file__).resolve().parent.parent.joinpath("tela", "detalhe.js").read_text(encoding="utf-8")
+    tab = js[js.index('<div class="tab-pl num">'):]
+    cab = tab[:tab.index('<span class="rot">P/L</span>')]
+    assert cab.index("Início do ano") < cab.index("Contábil") < cab.index("Previsão atual")
+    linha_pl = tab[tab.index('<span class="rot">P/L</span>'):tab.index("\n", tab.index('<span class="rot">P/L</span>'))]
+    assert linha_pl.index("plIni") < linha_pl.index("d.pl)") < linha_pl.index("plPrev")
+    textos = js[js.index("const linhasPL"):js.index("const frasePL")]
+    assert textos.index("Início do ano") < textos.index("Contábil 12 meses") < textos.index("Previsão atual") < textos.index("Média 12m")

@@ -5,6 +5,9 @@ usam o mesmo valor. O que faltar vai como None e a tela mostra "Dados indisponí
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import math
 
 import pandas as pd
@@ -91,11 +94,32 @@ def ultimo_balanco(lpa_tri) -> dict | None:
     return {"data": f"{_sem_fuso(lpa_tri.dropna()).index.max():%d/%m/%Y}"}
 
 
-def fundamentos(d: dict, r: Resultado) -> dict:
+ARQ_CONTABIL_SEC = Path(__file__).resolve().parent.parent / "utils" / "contabil_sec.json"
+
+
+def contabil_12m(ticker: str | None, lpa_yahoo: float | None, tabela: dict | None = None) -> tuple[float | None, str, dict | None]:
+    """LPA contábil de 12 meses: SEC (robô, soma dos 4 últimos trimestres de LPA diluído) se estiver completa;
+    senão o Yahoo, com o motivo. Devolve (lpa, fonte, detalhe da SEC)."""
+    if tabela is None:
+        try:
+            tabela = json.loads(ARQ_CONTABIL_SEC.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            tabela = {}
+    if not ticker or ticker.endswith(".SA"):
+        return lpa_yahoo, "Yahoo Finance", None
+    c = tabela.get(ticker.upper())
+    if not c:
+        return lpa_yahoo, "Yahoo - SEC ainda não lida pelo robô", None
+    if c.get("status") != "ok" or c.get("lpa_12m") is None:
+        return lpa_yahoo, "Yahoo - SEC incompleto", c
+    return float(c["lpa_12m"]), c.get("fonte") or "SEC 10-Q/10-K", c
+
+
+def fundamentos(d: dict, r: Resultado, ticker: str | None = None) -> dict:
     """Indicadores fundamentalistas, calculados uma única vez."""
     info, hist, lpa_tri = d["info"], _sem_fuso(d["hist"]), d["lpa_tri"]
     preco, fim = r.preco_atual, r.data_ultimo
-    lpa = info.get("trailingEps") or info.get("epsTrailingTwelveMonths")
+    lpa, lpa_fonte, lpa_sec = contabil_12m(ticker, info.get("trailingEps") or info.get("epsTrailingTwelveMonths"))
     pl = preco / lpa if lpa and lpa > 0 else None       # sempre preço ÷ LPA, para as contas baterem
     splits = hist["Stock Splits"] if "Stock Splits" in hist else None
     pl_medio, metodo = pl_medio_12m(r.fechamentos_1a, lpa_tri, lpa, splits)
@@ -145,7 +169,7 @@ def fundamentos(d: dict, r: Resultado) -> dict:
     divida, caixa, ebitda = info.get("totalDebt"), info.get("totalCash"), info.get("ebitda")
     dl_ebitda = (divida - (caixa or 0)) / ebitda if divida is not None and ebitda and ebitda > 0 else None
     return dict(
-        pl=pl, pl_medio=pl_medio, metodo=metodo, lpa=lpa, preco_medio=preco_medio,
+        pl=pl, pl_medio=pl_medio, metodo=metodo, lpa=lpa, lpa_fonte=lpa_fonte, lpa_sec=lpa_sec, preco_medio=preco_medio,
         media_desde=media_desde, media_meses=media_meses,
         lpa_agora=lpa_agora, lpa_antes=lpa_antes, base_lpa=base_lpa,
         div=div12, div_antes=div12_antes, dy=dy, dy_medio=dy_medio,
@@ -325,7 +349,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
     cod = info.get("currency") or ("BRL" if ticker.endswith(".SA") else "USD")
     moeda = SIMBOLO.get(cod, cod)
     curto = ticker[:-3] if ticker.endswith(".SA") else ticker
-    f = fundamentos(d, r)
+    f = fundamentos(d, r, ticker)
 
     bt5, btmax = _backtest(hist, 5, curto), _backtest(hist, None, curto)
     quebrou, motivo = fundamento_quebrou(f["lucros"], f["dl_ebitda"])
@@ -398,7 +422,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "simons": modo_simons(hist, r, faixa),
         "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "precoMedio12": _n(f["preco_medio"], 4), "mediaDesde": f["media_desde"], "mediaMeses": f["media_meses"], "plMetodo": f["metodo"],
         "lpa": _n(f["lpa"], 4), "lpaAgora": _n(f["lpa_agora"], 4), "lpa12Atras": _n(f["lpa_antes"], 4),
-        "baseLpa": f["base_lpa"], "balanco": f["balanco"],
+        "baseLpa": f["base_lpa"], "balanco": f["balanco"], "lpaFonte": f["lpa_fonte"], "lpaSec": f["lpa_sec"],
         "receita": _n(f["receita"], 0), "receitaMedia": _n(f["receita_media"], 0),
         "receitaPrev": _n(f["receita_prev"], 0), "analistasReceitaAno": f["analistas_rec"],
         "dividendo": _n(f["div"], 4), "dividendo12Atras": _n(f["div_antes"], 4),

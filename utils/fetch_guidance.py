@@ -698,6 +698,82 @@ def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
     return item
 
 
+# ------------------------------------------------------------ contábil 12 meses pela SEC (EPS diluído GAAP)
+ARQ_CONTABIL = RAIZ / "utils" / "contabil_sec.json"
+CONTABIL_IDADE_MAX = 200    # último trimestre com mais de 200 dias: a SEC está atrasada/incompleta
+
+
+def lpa_ttm_sec(fatos: dict, hoje: dt.date) -> dict:
+    """LPA diluído (GAAP) dos últimos 12 meses = soma dos últimos 4 trimestres dos 10-Q/10-K.
+
+    Trimestres de 3 meses vêm direto dos 10-Q; o 4º trimestre fiscal = ano (10-K) - 9 meses acumulados (10-Q).
+    Devolve {"status": "ok", "lpa_12m", "trimestres", ...} ou {"status": "incompleto", "motivo"}."""
+    eps = (((fatos.get("facts") or {}).get("us-gaap") or {}).get("EarningsPerShareDiluted") or {}).get("units", {}).get("USD/shares", [])
+    if not eps:
+        return {"status": "incompleto", "motivo": "SEC sem EarningsPerShareDiluted"}
+    por_periodo = {}
+    for e in eps:
+        if e.get("form") not in ("10-Q", "10-K", "10-Q/A", "10-K/A") or "start" not in e or "end" not in e:
+            continue
+        ini, fim = _data(e["start"]), _data(e["end"])
+        if not ini or not fim:
+            continue
+        chave = (ini, fim)
+        # a versão mais recente do mesmo período ganha (reapresentações)
+        if chave not in por_periodo or e.get("filed", "") > por_periodo[chave].get("filed", ""):
+            por_periodo[chave] = e
+    tri, longos = {}, []
+    for (ini, fim), e in por_periodo.items():
+        dias = (fim - ini).days
+        if 80 <= dias <= 100:
+            tri[fim] = (float(e["val"]), e.get("filed", ""), e.get("form", ""))
+        elif 255 <= dias <= 285 or 350 <= dias <= 380:
+            longos.append((ini, fim, dias, float(e["val"]), e.get("filed", ""), e.get("form", "")))
+    # 4º trimestre: ano fiscal menos os 9 meses do mesmo ano fiscal
+    for ini, fim, dias, val, filed, form in longos:
+        if dias < 350 or fim in tri:
+            continue
+        nove = next((l for l in longos if l[0] == ini and 255 <= l[2] <= 285), None)
+        if nove:
+            tri[fim] = (val - nove[3], filed, form)
+    fins = sorted(tri)
+    if len(fins) < 4:
+        return {"status": "incompleto", "motivo": f"só {len(fins)} trimestre(s) na SEC"}
+    ultimos = fins[-4:]
+    if any(not 80 <= (b - a).days <= 100 for a, b in zip(ultimos, ultimos[1:])):
+        return {"status": "incompleto", "motivo": "trimestres da SEC não são consecutivos"}
+    if (hoje - ultimos[-1]).days > CONTABIL_IDADE_MAX:
+        return {"status": "incompleto", "motivo": f"último trimestre na SEC termina em {ultimos[-1]:%d/%m/%Y}"}
+    return {"status": "ok", "lpa_12m": round(sum(tri[f][0] for f in ultimos), 4),
+            "trimestres": [{"fim": f"{f:%d/%m/%Y}", "lpa": round(tri[f][0], 4), "form": tri[f][2]} for f in ultimos],
+            "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
+            "data": _data_br(max(tri[f][1] for f in ultimos)), "atualizado": f"{hoje:%d/%m/%Y}"}
+
+
+def contabil_eua(ticker: str, hoje: dt.date, *, cabecalho=cabecalho_sec, buscar_cik=cik_do_ticker) -> dict:
+    cab = cabecalho()
+    if not cab:
+        return {"status": "incompleto", "motivo": "sem SEC_CONTACT_EMAIL"}
+    empresa = buscar_cik(ticker, cab)
+    if not empresa:
+        return {"status": "incompleto", "motivo": "ticker não encontrado na SEC"}
+    fatos = _get_sec(f"{SEC_DADOS}/api/xbrl/companyfacts/CIK{empresa[0]}.json", cab).json()
+    return lpa_ttm_sec(fatos, hoje)
+
+
+def aplicar_contabil(plano: list[dict]) -> int:
+    """Grava o contábil da SEC (sempre o mais novo; não é congelado)."""
+    tab, n = _ler_json(ARQ_CONTABIL, {}), 0
+    for i in plano:
+        c = i.get("contabil")
+        if c and tab.get(i["ticker"]) != c:
+            tab[i["ticker"]] = c
+            n += 1
+    if n:
+        ARQ_CONTABIL.write_text(json.dumps(dict(sorted(tab.items())), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return n
+
+
 # ------------------------------------------------------------ projeção do início do ano (congelada)
 def _janela_inicial(ano: str) -> tuple[dt.date, dt.date, int]:
     """Período em que sai o primeiro guidance do ano: release do 4T do ano anterior (jan-abr) e o 10-K.
@@ -841,6 +917,12 @@ def planejar(hoje: dt.date | None = None) -> list[dict]:
             ini = planejar_inicial(t, hoje, iniciais)
         except Exception as e:  # noqa: BLE001
             ini = {"ano": ano_alvo(t, hoje), "novo": None, "motivo": f"{e.__class__.__name__}: {e}"}
+        if not re.fullmatch(r"[A-Z]{4}\d{1,2}", t):
+            try:
+                item["contabil"] = contabil_eua(t, hoje)
+            except Exception as e:  # noqa: BLE001
+                item["contabil"] = {"status": "incompleto", "motivo": f"{e.__class__.__name__}: {e}"}
+            log.info("  contábil SEC: %s", item["contabil"].get("lpa_12m") or item["contabil"].get("motivo"))
         if ini:
             item["inicial"] = ini
             log.info("  projeção inicial %s: %s", ini["ano"], "achada" if ini["novo"] else ini["motivo"])
@@ -866,6 +948,7 @@ def aplicar(plano: list[dict], tipo: str) -> list[dict]:
         ARQ_AUTO.write_text(json.dumps(dict(sorted(auto.items())), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if tipo == "commit":
         aplicar_iniciais(plano)
+        aplicar_contabil(plano)
     return aplicados
 
 

@@ -56,9 +56,13 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   (senão as bases são diferentes, ex.: ajustado x contábil). Aí tenta o lucro contábil de cada balanço
   (lucro trimestral ÷ ações; trimestre faltante pelo anual ou pelo LPA de 12 meses; precisa bater com o LPA atual
   e cobrir 6+ meses, só os dias cobertos). Sem isso: preço médio do ano ÷ LPA atual.
-- Card de P/L: linhas P/L, Lucro líquido (lucro/ação × ações do Yahoo), Lucro/ação, Cotação; colunas Contábil 12 meses
-  (real, muda a cada balanço), Início do ano (primeiro guidance do ano, congelado, com data e fonte) e Previsão atual
-  (guidance oficial se houver, senão consenso do Yahoo com analistas e faixa). Média 12m e lucro ajustado em linhas à parte.
+- Card de P/L: linhas P/L, Lucro líquido (lucro/ação × ações do Yahoo), Lucro/ação, Cotação; colunas em ordem
+  cronológica: Início do ano (primeiro guidance do ano, congelado, com data e fonte) -> Contábil 12 meses (real, muda a
+  cada balanço) -> Previsão atual (guidance oficial se houver, senão consenso do Yahoo). Textos na mesma ordem, depois
+  Média 12m e lucro ajustado.
+- Contábil 12 meses (EUA): utils/contabil_sec.json, gravado pelo robô = soma dos 4 últimos trimestres de LPA diluído
+  (GAAP) dos 10-Q/10-K (4º tri = ano − 9 meses). SEC incompleta (menos de 4 trimestres, fora de sequência ou último
+  trimestre com mais de 200 dias): usa o Yahoo e mostra "fonte: Yahoo - SEC incompleto". B3: Yahoo.
 - Projeção do início do ano: utils/guidance_inicial.json (ticker -> ano -> faixa, fonte, data, travado). O robô busca o
   primeiro documento do ano com projeção (release do 4T anterior, jan-abr; depois o 10-K) e grava uma única vez:
   nunca sobrescreve. Sem achar: {"status": "sem projeção inicial encontrada"}.

@@ -599,9 +599,9 @@ function montar(root, d) {
     const linhasPL = prejuizo ? ['A empresa teve prejuízo nos últimos 12 meses, então a relação preço/lucro não se aplica.']
       : !tem(d.pl) ? ['O Yahoo Finance não traz o lucro por ação deste ativo.']
       : [
-        `<b>Contábil 12 meses</b> (${rotBal}): cotação de hoje ÷ lucro por ação real dos últimos 12 meses. Muda a cada balanço.${tem(d.acoes) && d.acoes > 0 ? ` Lucro = lucro por ação × ${f(d.acoes / 1e9, 2)} bi de ações (Yahoo).` : ''}`,
         lpaIni ? `<b>Início do ano ${GI.ano}</b> (congelado): primeiro guidance da empresa para o ano, ${faixaG(GI)}. Fonte: ${GI.fonte}, ${GI.data}. Não muda.`
           : `<b>Início do ano ${GI.ano || anoPrev || ''}</b>: ${GI.status || 'sem projeção inicial encontrada'}.`,
+        `<b>Contábil 12 meses</b> (${rotBal}): cotação de hoje ÷ lucro por ação real dos últimos 12 meses. Muda a cada balanço. Fonte: ${d.lpaFonte || 'Yahoo Finance'}${d.lpaSec && d.lpaSec.trimestres ? ` (${d.lpaSec.trimestres.map(t => `${t.fim.slice(3)} ${f(t.lpa)}`).join(' + ')} = ${f(d.lpa)})` : ''}.${tem(d.acoes) && d.acoes > 0 ? ` Lucro = lucro por ação × ${f(d.acoes / 1e9, 2)} bi de ações (Yahoo).` : ''}`,
         lpaGuia ? `<b>Previsão atual ${anoPrev || ''}</b>: GUIDANCE OFICIAL · ${G0.data}: ${faixaG(G0)}. Fonte: ${G0.fonte}.${G0.bases && G0.bases.length ? ` Base ${G0.bases[0].ano} recalculada pela empresa: ${din(G0.bases[0].valor)}${tem(G0.bases[0].antes) ? ` (antes ${din(G0.bases[0].antes)})` : ''}, ${sinal((lpaGuia / G0.bases[0].valor - 1) * 100, 1)} no guidance.` : ''}${lpaIni ? ` Desde o início do ano: ${sinal((lpaGuia / lpaIni - 1) * 100, 1)}.` : ''}${tem(lpaCons) ? ` Consenso Yahoo: ${din(lpaCons)}.` : ''}`
           : tem(lpaCons) ? `<b>Previsão atual ${anoPrev || ''}</b>: consenso${tem(Fp.analistas) ? ` de ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance${tem(Fp.baixa) && tem(Fp.alta) ? `, de ${din(Fp.baixa)} a ${din(Fp.alta)}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' (poucos analistas: pouco confiável)' : ''}. Pode mudar.`
           : `<b>Previsão atual</b>: sem estimativa no Yahoo nem guidance cadastrado.`,
@@ -645,12 +645,12 @@ function montar(root, d) {
         <div class="card crit">
           <div class="topo-c"><span class="nome">Preço vs Lucro (P/L)</span><span class="st ${cPL}">${tPL}</span></div>
           <div class="tab-pl num">
-            <span></span><div class="cab"><div>Contábil</div><div class="i">12 meses · real</div></div><div class="cab"><div>Início do ano</div><div class="i">${GI.ano || anoPrev || ''} · congelado</div></div><div class="cab"><div>Previsão atual</div><div class="i">${lpaGuia ? 'guidance' : tem(lpaCons) ? 'analistas' : ''}</div></div>
-            <span class="rot">P/L</span><b class="gr">${f(d.pl)}</b><b class="gr">${tem(plIni) ? f(plIni) : '—'}</b><b class="gr">${tem(plPrev) ? f(plPrev) : '—'}</b>
-            ${tem(d.acoes) && d.acoes > 0 ? (() => { const tot = l => tem(l) ? l * d.acoes : null; const vals = [tot(d.lpa), tot(lpaIni), tot(lpaPrev)]; const ref = Math.max(...vals.filter(tem).map(Math.abs), 0); const [div, un] = ref >= 1e12 ? [1e12, 'tri'] : ref >= 1e9 ? [1e9, 'bi'] : [1e6, 'mi'];
+            <span></span><div class="cab"><div>Início do ano</div><div class="i">${GI.ano || anoPrev || ''} · congelado</div></div><div class="cab"><div>Contábil</div><div class="i">12 meses · real</div></div><div class="cab"><div>Previsão atual</div><div class="i">${lpaGuia ? 'guidance' : tem(lpaCons) ? 'analistas' : ''}</div></div>
+            <span class="rot">P/L</span><b class="gr">${tem(plIni) ? f(plIni) : '—'}</b><b class="gr">${f(d.pl)}</b><b class="gr">${tem(plPrev) ? f(plPrev) : '—'}</b>
+            ${tem(d.acoes) && d.acoes > 0 ? (() => { const tot = l => tem(l) ? l * d.acoes : null; const vals = [tot(lpaIni), tot(d.lpa), tot(lpaPrev)]; const ref = Math.max(...vals.filter(tem).map(Math.abs), 0); const [div, un] = ref >= 1e12 ? [1e12, 'tri'] : ref >= 1e9 ? [1e9, 'bi'] : [1e6, 'mi'];
               return `<span class="rot">Lucro<br>${d.moeda} <span class="un">${un}</span></span>${vals.map(v => `<b>${tem(v) ? f(v / div, 1) : '—'}</b>`).join('')}`; })() : ''}
-            <span class="rot">Lucro/ação<br>${d.moeda}</span><b>${f(d.lpa)}</b><b>${tem(lpaIni) ? f(lpaIni) : 'Sem dado'}</b><b>${tem(lpaPrev) ? f(lpaPrev) : 'Sem dado'}</b>
-            <span class="rot">Cotação<br>${d.moeda}</span><b>${f(d.preco)}</b><b>${tem(plIni) ? f(d.preco) : '—'}</b><b>${tem(plPrev) ? f(d.preco) : '—'}</b>
+            <span class="rot">Lucro/ação<br>${d.moeda}</span><b>${tem(lpaIni) ? f(lpaIni) : 'Sem dado'}</b><b>${f(d.lpa)}</b><b>${tem(lpaPrev) ? f(lpaPrev) : 'Sem dado'}</b>
+            <span class="rot">Cotação<br>${d.moeda}</span><b>${tem(plIni) ? f(d.preco) : '—'}</b><b>${f(d.preco)}</b><b>${tem(plPrev) ? f(d.preco) : '—'}</b>
           </div>
           <p class="linhas-pl">${frasePL}</p>${notaAjustado ? `<div class="nota" style="margin:-4px 0 8px">${notaAjustado}</div>` : ''}
           <button class="link" data-folha="f-pl">Ver como calculamos</button>

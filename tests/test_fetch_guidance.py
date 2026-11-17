@@ -288,3 +288,40 @@ def test_inicial_eua_pega_o_primeiro_documento_do_ano():
                                            buscar_cik=lambda t, c: ("1", "HSIC"), buscar_docs=lambda *a: [],
                                            ler=lambda d, c: None)
     assert vazio is None and motivo2 == "sem projeção inicial encontrada"
+
+
+# ------------------------------------------------------------ contábil 12 meses pela SEC
+def _fato(ini, fim, val, form, filed):
+    return {"start": ini, "end": fim, "val": val, "form": form, "filed": filed}
+
+
+def _fatos_adm(com_4t26=False):
+    e = [  # 2025: 9 meses acumulados e ano (10-K) -> 4T25 = 2,23 - 1,29 = 0,94
+        _fato("2025-01-01", "2025-09-30", 1.29, "10-Q", "2025-11-04"),
+        _fato("2025-01-01", "2025-12-31", 2.23, "10-K", "2026-02-18"),
+        # 2026: trimestres de 3 meses
+        _fato("2026-01-01", "2026-03-31", 1.07, "10-Q", "2026-05-05"),
+        _fato("2026-04-01", "2026-06-30", 1.41, "10-Q", "2026-08-05"),
+        _fato("2026-07-01", "2026-09-30", 1.70, "10-Q", "2026-11-04"),
+        _fato("2026-01-01", "2026-09-30", 4.18, "10-Q", "2026-11-04"),
+    ]
+    if com_4t26:
+        e.append(_fato("2026-01-01", "2026-12-31", 5.38, "10-K", "2027-02-17"))
+    return {"facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"USD/shares": e}}}}}
+
+
+def test_contabil_sec_soma_4_trimestres_e_recalcula_com_balanco_novo():
+    c = fg.lpa_ttm_sec(_fatos_adm(), dt.date(2026, 11, 17))
+    assert c["status"] == "ok" and c["lpa_12m"] == pytest.approx(5.12)       # 0,94 + 1,07 + 1,41 + 1,70
+    assert [t["fim"] for t in c["trimestres"]] == ["31/12/2025", "31/03/2026", "30/06/2026", "30/09/2026"]
+    novo = fg.lpa_ttm_sec(_fatos_adm(com_4t26=True), dt.date(2027, 2, 20))  # chega o 10-K de 2026
+    assert novo["lpa_12m"] == pytest.approx(5.38) and novo["trimestres"][-1]["fim"] == "31/12/2026"
+
+
+def test_contabil_sec_incompleto():
+    fatos = _fatos_adm()
+    fatos["facts"]["us-gaap"]["EarningsPerShareDiluted"]["units"]["USD/shares"] = \
+        fatos["facts"]["us-gaap"]["EarningsPerShareDiluted"]["units"]["USD/shares"][2:5]   # só 3 trimestres
+    assert fg.lpa_ttm_sec(fatos, dt.date(2026, 11, 17))["status"] == "incompleto"
+    assert fg.lpa_ttm_sec(_fatos_adm(), dt.date(2027, 8, 1))["status"] == "incompleto"   # SEC atrasada
+    assert fg.lpa_ttm_sec({}, dt.date(2026, 11, 17))["status"] == "incompleto"
