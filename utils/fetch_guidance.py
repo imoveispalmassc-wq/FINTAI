@@ -197,29 +197,33 @@ def extrair_por_padroes(texto: str, ano_alvo: int) -> Extracao | None:
 ESQUEMA_CLAUDE = {
     "type": "object",
     "properties": {
-        "tem_guidance_de_lucro": {"type": "boolean"},
+        "tem_guidance": {"type": "boolean"},
         "ano": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
-        "lucro_min_reais": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-        "lucro_max_reais": {"anyOf": [{"type": "number"}, {"type": "null"}]},
-        "payout_fracao": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "lucro_min": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "lucro_max": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "lpa_min": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "lpa_max": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+        "payout": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "trecho": {"type": "string"},
+        "pagina": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
     },
-    "required": ["tem_guidance_de_lucro", "ano", "lucro_min_reais", "lucro_max_reais", "payout_fracao", "trecho"],
+    "required": ["tem_guidance", "ano", "lucro_min", "lucro_max", "lpa_min", "lpa_max", "payout", "trecho", "pagina"],
     "additionalProperties": False,
 }
 
-INSTRUCAO_CLAUDE = """Você lê um documento oficial de uma empresa brasileira (fato relevante, comunicado ou \
-release de resultados entregue à CVM) e extrai o guidance (projeção oficial) de LUCRO LÍQUIDO do ano {ano}.
+INSTRUCAO_CLAUDE = """Você lê um documento oficial de uma empresa ({origem}) e extrai o guidance (projeção oficial da própria empresa) de LUCRO para o ano {ano}. Responda só com o JSON pedido.
 
 Regras:
-- Use só o que está escrito no documento. Não estime nem complete nada.
+- Use só o que está escrito no documento. Não estime, não calcule e não complete nada.
+- Projeção de analistas, consenso de mercado ou resultado já realizado NÃO é guidance.
 - Se houver projeção anterior e revisada, use a VIGENTE (a mais recente/revisada).
-- lucro_min_reais e lucro_max_reais em reais, por extenso (R$ 9 bilhões = 9000000000).
-  Se o guidance for um valor único, repita-o nos dois campos.
-- payout_fracao: fração do lucro distribuída (30% = 0.30), só se o documento disser; senão null.
-- trecho: copie EXATAMENTE, palavra por palavra, a frase ou linha de tabela de onde tirou a faixa de lucro.
-- Se o documento não traz guidance de lucro líquido para {ano}, responda tem_guidance_de_lucro = false \
-e os números como null."""
+- lucro_min / lucro_max: lucro líquido projetado, na moeda do documento e em unidades por extenso
+  (R$ 9 bilhões = 9000000000). Se a empresa projeta lucro por ação, use lpa_min / lpa_max (ex.: 5.50 e 5.80)
+  e deixe lucro_min / lucro_max como null. Valor único: repita nos dois campos.
+- payout: fração do lucro distribuída (30% = 0.30), só se o documento disser; senão null.
+- trecho: copie EXATAMENTE, palavra por palavra, a frase ou linha de tabela de onde tirou a faixa.
+- pagina: número da página do PDF onde está o trecho (1 = primeira); null se não souber.
+- Sem guidance de lucro para {ano}: tem_guidance = false e todos os números null."""
 
 
 def _so_letras_numeros(texto: str) -> str:
@@ -240,48 +244,65 @@ def _confere(a: float, b: float, texto: str, trecho: str, faixas_do_documento) -
     return None
 
 
-def extrair_com_claude(pdf: bytes, texto: str, ano_alvo: int, faixas_do_documento=()) -> Extracao | None:
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        log.info("  sem ANTHROPIC_API_KEY: leitura pela API do Claude desligada")
-        return None
-    import anthropic
+def ler_com_claude(pdf: bytes | None, texto: str, ano_alvo: int, origem: str, chamar=None) -> dict | None:
+    """2ª camada: pede à API do Claude o guidance em JSON (lucro_min, lucro_max, lpa_min, lpa_max, payout, trecho,
+    pagina). A chave vem só de ANTHROPIC_API_KEY (Secret do GitHub) e nunca vai para o log.
+    Devolve o JSON lido ou None (sem chave, erro da API, recusa ou sem guidance)."""
+    if chamar is None:
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            log.info("  sem ANTHROPIC_API_KEY: leitura pela API do Claude desligada")
+            return None
+        import anthropic
 
-    client = anthropic.Anthropic()
+        client = anthropic.Anthropic()
+
+        def chamar(conteudo):
+            try:
+                resposta = client.beta.messages.create(
+                    model=MODELO, max_tokens=16000,
+                    betas=["server-side-fallback-2026-07-01"], fallbacks="default",
+                    output_config={"format": {"type": "json_schema", "schema": ESQUEMA_CLAUDE}},
+                    messages=[{"role": "user", "content": conteudo}],
+                )
+            except anthropic.APIStatusError as e:
+                log.error("  API do Claude recusou a chamada (%s): %s", e.status_code, e.message)
+                return None
+            except anthropic.APIConnectionError:
+                log.error("  API do Claude fora do alcance")
+                return None
+            if resposta.stop_reason in ("refusal", "max_tokens"):
+                log.error("  API do Claude não concluiu a leitura (%s)", resposta.stop_reason)
+                return None
+            return next((b.text for b in resposta.content if b.type == "text"), "")
     conteudo = []
-    if pdf and len(pdf) < 30 * 1024 * 1024:
+    if pdf and pdf.lstrip().startswith(b"%PDF") and len(pdf) < 30 * 1024 * 1024:
         conteudo.append({"type": "document", "source": {
             "type": "base64", "media_type": "application/pdf", "data": base64.standard_b64encode(pdf).decode()}})
     else:
         conteudo.append({"type": "text", "text": texto[:400_000]})
-    conteudo.append({"type": "text", "text": INSTRUCAO_CLAUDE.format(ano=ano_alvo)})
-    try:
-        resposta = client.beta.messages.create(
-            model=MODELO, max_tokens=16000,
-            betas=["server-side-fallback-2026-07-01"], fallbacks="default",
-            output_config={"format": {"type": "json_schema", "schema": ESQUEMA_CLAUDE}},
-            messages=[{"role": "user", "content": conteudo}],
-        )
-    except anthropic.APIStatusError as e:
-        log.error("  API do Claude recusou a chamada (%s): %s", e.status_code, e.message)
+    conteudo.append({"type": "text", "text": INSTRUCAO_CLAUDE.format(ano=ano_alvo, origem=origem)})
+    bruto = chamar(conteudo)
+    if not bruto:
         return None
-    except anthropic.APIConnectionError:
-        log.error("  API do Claude fora do alcance")
-        return None
-    if resposta.stop_reason in ("refusal", "max_tokens"):
-        log.error("  API do Claude não concluiu a leitura (%s)", resposta.stop_reason)
-        return None
-    bruto = next((b.text for b in resposta.content if b.type == "text"), "")
     try:
         dados = json.loads(bruto)
     except json.JSONDecodeError:
         log.error("  resposta da API do Claude fora do formato")
         return None
-    if not dados.get("tem_guidance_de_lucro"):
-        log.info("  API do Claude: documento sem guidance de lucro para %s", ano_alvo)
+    if not dados.get("tem_guidance"):
+        log.info("  API do Claude: documento sem guidance para %s", ano_alvo)
         return None
-    a, b, trecho = dados.get("lucro_min_reais"), dados.get("lucro_max_reais"), normalizar(dados.get("trecho", ""))
+    return dados
+
+
+def extrair_com_claude(pdf: bytes, texto: str, ano_alvo: int, faixas_do_documento=(), chamar=None) -> Extracao | None:
+    """B3: faixa de LUCRO pela API do Claude, aceita só se conferida no documento."""
+    dados = ler_com_claude(pdf, texto, ano_alvo, "brasileira, documento entregue à CVM", chamar)
+    if not dados:
+        return None
+    a, b, trecho = dados.get("lucro_min"), dados.get("lucro_max"), normalizar(dados.get("trecho", ""))
     if not (a and b and 0 < a <= b <= a * 2):
-        log.error("  API do Claude devolveu faixa inválida: %s a %s", a, b)
+        log.error("  API do Claude devolveu faixa de lucro inválida: %s a %s", a, b)
         return None
     # a faixa tem de estar no documento: sem isso, o número pode ter sido inventado
     conferido = _confere(float(a), float(b), texto, trecho, faixas_do_documento)
@@ -289,12 +310,31 @@ def extrair_com_claude(pdf: bytes, texto: str, ano_alvo: int, faixas_do_document
         log.error("  API do Claude leu R$ %.1f a %.1f bi, mas a faixa não foi encontrada no documento: descartado",
                   a / 1e9, b / 1e9)
         return None
-    log.info("  API do Claude leu R$ %.1f a %.1f bi (%s)", a / 1e9, b / 1e9, conferido)
-    payout = dados.get("payout_fracao")
+    log.info("  API do Claude leu R$ %.1f a %.1f bi (%s, página %s)", a / 1e9, b / 1e9, conferido, dados.get("pagina"))
+    payout = dados.get("payout")
     return Extracao(lucro_min=float(a), lucro_max=float(b),
                     payout=float(payout) if payout is not None and 0 < payout <= 1 else None,
                     ano=dados.get("ano"), trecho=trecho[:400], confianca="baixa", metodo="API do Claude",
-                    motivos=[f"lido pela API do Claude ({conferido}): precisa de revisão"], candidatos=1)
+                    motivos=[f"lido pela API do Claude ({conferido}, página {dados.get('pagina')}): precisa de revisão"],
+                    candidatos=1)
+
+
+def extrair_eps_com_claude(texto: str, ano_alvo: int, chamar=None) -> dict | None:
+    """EUA: faixa de LPA pela API do Claude no press release; aceita só se o trecho estiver no documento."""
+    dados = ler_com_claude(None, texto, ano_alvo, "dos EUA, press release no 8-K/6-K da SEC", chamar)
+    if not dados:
+        return None
+    a, b, trecho = dados.get("lpa_min"), dados.get("lpa_max"), normalizar(dados.get("trecho", ""))
+    if not (a and b and 0 < a <= b <= a * 2):
+        log.error("  API do Claude devolveu faixa de LPA inválida: %s a %s", a, b)
+        return None
+    pedaco = _so_letras_numeros(trecho)[:80]
+    if len(pedaco) < 15 or pedaco not in _so_letras_numeros(texto):
+        log.error("  API do Claude leu LPA %.2f a %.2f, mas o trecho não está no documento: descartado", a, b)
+        return None
+    log.info("  API do Claude leu LPA %.2f a %.2f (trecho conferido)", a, b)
+    return {"lpa_min": float(a), "lpa_max": float(b), "ano": dados.get("ano") or ano_alvo, "trecho": trecho[:400],
+            "pagina": dados.get("pagina"), "payout": dados.get("payout")}
 
 
 # ------------------------------------------------------------ CVM (dados abertos)
@@ -470,13 +510,14 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
     """Decide o que fazer com um ticker. Não grava nada."""
     item = {"ticker": ticker, "acao": "nada", "motivo": "", "novo": None, "anterior": anterior}
     if not re.fullmatch(r"[A-Z]{4}\d{1,2}", ticker):
-        return planejar_ticker_eua(ticker, hoje, anterior)
+        return planejar_ticker_eua(ticker, hoje, anterior, vistos=vistos)
     empresa = buscar_cnpj(ticker, hoje)
     if not empresa:
         item.update(acao="erro", motivo="CNPJ não encontrado no cadastro da CVM")
         return item
     cnpj, nome = empresa
     ano = hoje.year
+    tentou_claude = False
     for doc in buscar_docs(cnpj, hoje)[:MAX_DOCUMENTOS]:
         if anterior and anterior.get("documento") == doc["link"]:
             item["motivo"] = "guidance já atualizado com o documento mais recente"
@@ -494,9 +535,16 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
             continue
         ex = extrair_por_padroes(texto, ano)
         if ex is None:
-            continue                                   # documento sem faixa de lucro: tenta o anterior
+            # 2ª camada: o regex não achou faixa num documento de projeção -> API do Claude (uma vez por documento)
+            assunto = f"{doc.get('categoria', '')} {doc.get('tipo', '')} {doc.get('assunto', '')}"
+            if not tentou_claude and PALAVRAS_PROJECAO.search(assunto) and doc["link"] not in vistos:
+                tentou_claude = True
+                vistos.add(doc["link"])
+                ex = ler_com_claude(pdf, texto, ano, ())
+            if ex is None:
+                continue                               # documento sem faixa de lucro: tenta o anterior
         # este é o documento mais novo com faixa de lucro: nunca volta para um mais antigo
-        if ex.confianca != "alta":
+        if ex.confianca != "alta" and ex.metodo != "API do Claude":
             if doc["link"] in vistos:
                 item["motivo"] = "documento já tentado sem confiança; aguardando documento novo"
                 return item
@@ -534,7 +582,7 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
         item.update(acao="pr" if revisar else "commit", novo=novo,
                     motivo="; ".join(motivos) or "padrões de texto, confiança alta")
         return item
-    item["motivo"] = "nenhum documento recente com guidance de lucro"
+    item["motivo"] = "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior"
     return item
 
 
@@ -682,7 +730,7 @@ def extrair_eps_eua(texto: str, ano_minimo: int) -> dict | None:
 
 def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
                         cabecalho=cabecalho_sec, buscar_cik=cik_do_ticker, buscar_docs=documentos_sec,
-                        ler_anexo=anexo_sec) -> dict:
+                        ler_anexo=anexo_sec, ler_claude=extrair_eps_com_claude, vistos: set | None = None) -> dict:
     """Mesmo critério do Brasil, com documentos da SEC. Não grava nada."""
     item = {"ticker": ticker, "acao": "nada", "motivo": "", "novo": None, "anterior": anterior}
     cab = cabecalho()
@@ -694,6 +742,8 @@ def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
         item.update(acao="erro", motivo="ticker não encontrado na lista da SEC")
         return item
     cik, nome = empresa
+    vistos = set() if vistos is None else vistos
+    primeiro = None                                   # comunicado mais novo, para a 2ª camada (API do Claude)
     for doc in buscar_docs(cik, cab):
         data_doc, data_ant = _data(doc["data"]), _data((anterior or {}).get("data"))
         if data_doc and data_ant and data_doc < data_ant:
@@ -710,16 +760,26 @@ def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
         if anterior and anterior.get("documento") == link:
             item["motivo"] = "guidance já atualizado com o documento mais recente"
             return item
+        primeiro = primeiro or (doc, link, texto)
         ex = extrair_eps_eua(texto, hoje.year)
         if ex is None:
             continue                                   # comunicado sem faixa de LPA: tenta o anterior
         if ex["confianca"] != "alta":
-            item.update(acao="erro", motivo="faixa de LPA encontrada sem confiança: " + "; ".join(ex["motivos"]))
-            return item
+            # 2ª camada: regex achou faixa sem confiança -> API do Claude neste comunicado (uma vez por documento)
+            lido = None
+            if link not in vistos:
+                vistos.add(link)
+                lido = ler_claude(texto, hoje.year)
+            if not lido:
+                item.update(acao="erro", motivo="faixa de LPA encontrada sem confiança: " + "; ".join(ex["motivos"])
+                            + "; API do Claude não confirmou")
+                return item
+            ex = {**ex, **lido, "periodo": ex.get("periodo") or str(lido["ano"]), "confianca": "baixa",
+                  "dividendo": None, "metodo": "API do Claude"}
         novo = {"lpa_min": ex["lpa_min"], "lpa_max": ex["lpa_max"], "periodo": ex["periodo"],
                 "lucro_tipo": "LPA ajustado", "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {_data_br(doc['data'])} (SEC)",
                 "data": _data_br(doc["data"]), "url": link, "documento": link, "ano": ex["ano"],
-                "metodo": "padrões de texto (SEC)", "trecho": ex["trecho"][:400]}
+                "metodo": ex.get("metodo", "padrões de texto (SEC)"), "trecho": ex["trecho"][:400]}
         if ex["dividendo"]:
             novo["dividendo"] = ex["dividendo"]
         if anterior and all(anterior.get(k) == novo.get(k) for k in ("lpa_min", "lpa_max", "dividendo", "ano")):
@@ -730,6 +790,8 @@ def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
         motivos = []
         if not anterior:
             motivos.append("primeira gravação deste ticker: precisa da sua aprovação")
+        if novo["metodo"] == "API do Claude":
+            motivos.append(f"lido pela API do Claude (página {ex.get('pagina')}): precisa de revisão")
         idade = (hoje - data_doc).days if data_doc else None
         if idade is None or idade > IDADE_MAXIMA_DIAS:
             motivos.append(f"documento de {_data_br(doc['data'])}, com mais de {IDADE_MAXIMA_DIAS} dias")
@@ -740,7 +802,19 @@ def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
         item.update(acao="pr" if motivos else "commit", novo=novo,
                     motivo="; ".join(motivos + ([ex["escolha"]] if ex.get("escolha") else [])) or "padrões de texto, confiança alta")
         return item
-    item["motivo"] = "nenhum 8-K/6-K recente com faixa de LPA projetado"
+    # 2ª camada: regex não achou faixa em nenhum comunicado -> API do Claude no mais novo (uma vez por documento)
+    if primeiro and primeiro[1] not in vistos:
+        doc, link, texto = primeiro
+        vistos.add(link)
+        lido = ler_claude(texto, hoje.year)
+        if lido:
+            novo = {"lpa_min": lido["lpa_min"], "lpa_max": lido["lpa_max"], "periodo": str(lido["ano"]),
+                    "lucro_tipo": "LPA ajustado", "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {_data_br(doc['data'])} (SEC)",
+                    "data": _data_br(doc["data"]), "url": link, "documento": link, "ano": lido["ano"],
+                    "metodo": "API do Claude", "trecho": lido["trecho"]}
+            item.update(acao="pr", novo=novo, motivo=f"lido pela API do Claude (página {lido.get('pagina')}): precisa de revisão")
+            return item
+    item["motivo"] = "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior"
     return item
 
 
@@ -1267,6 +1341,10 @@ def planejar(hoje: dt.date | None = None) -> list[dict]:
         vistos_por_ticker[t] = sorted(vistos)[-50:]
         nivel = logging.ERROR if item["acao"] == "erro" else logging.INFO
         log.log(nivel, "  -> %s: %s", item["acao"], item["motivo"])
+        if item["acao"] in ("nada", "erro") and os.environ.get("GITHUB_ACTIONS"):
+            anterior = auto.get(t)
+            print(f"{t}: sem guidance novo; " + ("mantido o anterior de " + str(anterior.get("data")) if anterior else "nenhum guidance gravado"),
+                  flush=True)
         if item["acao"] == "erro" and os.environ.get("GITHUB_ACTIONS"):
             # aparece como aviso amarelo no resumo da execução, mesmo com o robô terminando "verde"
             print(f"::warning title=Guidance {t} não gravado::{item['motivo']}", flush=True)

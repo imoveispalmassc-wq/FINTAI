@@ -22,7 +22,10 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   A tela mostra o selo "GUIDANCE OFICIAL" com a data. Sem override, vale o consenso do Yahoo.
 - Guidance automático: `utils/fetch_guidance.py` roda sozinho todo dia às 8h de Brasília, e pelo botão Run workflow (`.github/workflows/update-guidance.yml`)
   para os tickers de `utils/guidance_tickers.json` e grava em `utils/guidance_auto.json`. Busca nos documentos
-  entregues à CVM (BR) e na SEC EDGAR (EUA: 8-K/6-K com o press release no Exhibit 99.1, faixa de LPA e dividendo); padrões de texto primeiro, API do Claude só se falharem (chave em GitHub Secrets).
+  entregues à CVM (BR) e na SEC EDGAR (EUA: 8-K/6-K com o press release no Exhibit 99.1, faixa de LPA e dividendo); padrões de texto primeiro, API do Claude só se falharem (chave só em secrets.ANTHROPIC_API_KEY, nunca no
+  código nem no log): regex sem confiança, ou regex sem faixa no documento de projeção mais novo (B3) / no comunicado
+  mais novo (EUA); uma chamada por documento; resposta só JSON (lucro_min, lucro_max, lpa_min, lpa_max, payout, trecho,
+  pagina). API falhou ou sem guidance: mantém o anterior e o log diz "sem guidance".
   A leitura da API só vale se a faixa estiver no documento (achada pelos padrões ou no trecho, sem
   contar espaços e separadores de tabela). Ticker não gravado vira aviso amarelo na execução do Actions.
   Primeira gravação de cada ticker: sempre pull request. Depois de aprovada, confiança alta e variação
@@ -30,7 +33,7 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Nunca usa documento mais antigo que o mais novo com faixa de lucro, nem mais antigo que o guidance já
   salvo (descarta). Documento com mais de 120 dias vai para PR. Cadastro manual em override.py ganha
   do automático. EUA: User-Agent "fintai/1.0 (contato: ...)" com o e-mail só do Secret SEC_CONTACT_EMAIL
-  (nunca no código); sem o Secret, os tickers dos EUA ficam de fora com aviso. EUA sem Claude: sem confiança, não grava.
+  (nunca no código); sem o Secret, os tickers dos EUA ficam de fora com aviso. Leitura pela API sempre vai para PR.
   Duas faixas de LPA no mesmo comunicado: ignora a perto de previously/prior/previous/earlier e fica com a perto de
   updated/revised/now expects/raising/lowering; se ainda sobrarem duas, não grava (aviso amarelo).
 - A página de exemplo (`docs/index.html`, gerada por `tools/gerar_demo.py`) não busca dados.

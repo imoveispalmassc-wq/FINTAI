@@ -547,3 +547,52 @@ def test_trimestre_sem_abrir_usa_a_coluna_da_tabela_do_release_seguinte():
     assert round(c["lucro_12m"] / 1e9, 2) == 14.34 and round(c["lpa_12m"], 2) == 2.51
     assert any("1T26: tabela=3.43 bi gravou=sim motivo=coluna 1T26 na tabela do release do 2T26" in l for l in linhas)
     assert next(t for t in c["trimestres"] if t["tri"] == "1T26")["leitura"] == "tabela do release do 2T26"
+
+
+# ------------------------------------------------------------ 2ª camada: API do Claude
+def _json_api(**k):
+    import json
+    base = {"tem_guidance": True, "ano": 2026, "lucro_min": None, "lucro_max": None, "lpa_min": None, "lpa_max": None,
+            "payout": None, "trecho": "", "pagina": 3}
+    return json.dumps({**base, **k})
+
+
+def test_api_br_le_faixa_de_lucro_e_confere_no_documento():
+    texto = "Guidance 2026: lucro líquido ajustado entre R$ 9 bilhões e R$ 11 bilhões, payout de 25%."
+    ex = fg.extrair_com_claude(b"", texto, 2026, chamar=lambda c: _json_api(
+        lucro_min=9e9, lucro_max=11e9, payout=0.25, trecho="lucro líquido ajustado entre R$ 9 bilhões e R$ 11 bilhões"))
+    assert ex.metodo == "API do Claude" and (ex.lucro_min, ex.lucro_max, ex.payout) == (9e9, 11e9, 0.25)
+    # trecho inventado: descartado
+    assert fg.extrair_com_claude(b"", texto, 2026, chamar=lambda c: _json_api(
+        lucro_min=20e9, lucro_max=22e9, trecho="lucro de 20 a 22 bilhões projetado pela diretoria")) is None
+
+
+def test_api_eua_le_lpa_e_sem_guidance_devolve_none():
+    texto = "For fiscal 2026, Apple expects revenue growth in the low single digits."
+    assert fg.extrair_eps_com_claude(texto, 2026, chamar=lambda c: _json_api(tem_guidance=False)) is None
+    txt2 = "The Company expects full-year adjusted EPS in the range of $5.50 to $5.80."
+    r = fg.extrair_eps_com_claude(txt2, 2026, chamar=lambda c: _json_api(
+        lpa_min=5.5, lpa_max=5.8, trecho="full-year adjusted EPS in the range of $5.50 to $5.80"))
+    assert (r["lpa_min"], r["lpa_max"], r["pagina"]) == (5.5, 5.8, 3)
+
+
+def test_api_falha_mantem_o_anterior_e_marca_sem_guidance():
+    anterior = {"lpa_min": 5.5, "lpa_max": 5.8, "data": "03/11/2026"}
+    doc = {"form": "8-K", "data": "2026-11-03", "acc": "a", "cik": "1"}
+    item = fg.planejar_ticker_eua("AAPL", HOJE, anterior, cabecalho=lambda: {"User-Agent": "x"},
+                                  buscar_cik=lambda t, c: ("1", "APPLE"), buscar_docs=lambda cik, c: [doc],
+                                  ler_anexo=lambda d, c: ("https://sec/x", "Apple reports results. Revenue grew 8%."),
+                                  ler_claude=lambda texto, ano: None)
+    assert item["acao"] == "nada" and item["novo"] is None and item["motivo"].startswith("sem guidance")
+    # e chamou a API uma vez só para o documento
+    vistos = set()
+    chamadas = []
+    fg.planejar_ticker_eua("AAPL", HOJE, None, cabecalho=lambda: {"User-Agent": "x"},
+                           buscar_cik=lambda t, c: ("1", "APPLE"), buscar_docs=lambda cik, c: [doc],
+                           ler_anexo=lambda d, c: ("https://sec/x", "sem faixa"),
+                           ler_claude=lambda texto, ano: chamadas.append(1), vistos=vistos)
+    fg.planejar_ticker_eua("AAPL", HOJE, None, cabecalho=lambda: {"User-Agent": "x"},
+                           buscar_cik=lambda t, c: ("1", "APPLE"), buscar_docs=lambda cik, c: [doc],
+                           ler_anexo=lambda d, c: ("https://sec/x", "sem faixa"),
+                           ler_claude=lambda texto, ano: chamadas.append(1), vistos=vistos)
+    assert len(chamadas) == 1
