@@ -254,3 +254,16 @@ def test_bbas3_contabil_do_release_e_pendente_sem_documento():
     pend = {"BBAS3": {"status": "pendente", "motivo": "só 2 trimestre(s) lidos dos releases"}}
     lpa, fonte, _ = contabil_12m("BBAS3.SA", 1.93, {}, pend)
     assert lpa == 1.93 and fonte.startswith("Yahoo - pendente")              # não inventa número
+
+
+def test_indicador_de_atualizacao_do_contabil_b3():
+    import datetime as dt
+    from tela.dados import atualizacao_contabil
+    br = dt.timezone(dt.timedelta(hours=-3))
+    c = {"status": "ok", "atualizado_em": "17/11 18:32", "trimestre_ref": "3T26", "trimestre_data": "set/26"}
+    a = atualizacao_contabil(c, dt.datetime(2026, 11, 17, 19, 0, tzinfo=br))
+    assert a == {"em": "17/11 18:32", "iso": "2026-11-17T18:32:00-03:00", "tri": "3T26", "triData": "set/26"}
+    # gravado em dezembro e lido em janeiro: ano anterior
+    c2 = {**c, "atualizado_em": "31/12 08:05"}
+    assert atualizacao_contabil(c2, dt.datetime(2027, 1, 1, 9, 0, tzinfo=br))["iso"].startswith("2026-12-31")
+    assert atualizacao_contabil({"status": "ok"}) is None and atualizacao_contabil(None) is None

@@ -694,3 +694,20 @@ def test_aviso_de_publicado_mostra_as_travas():
     item = _planejar([(NOV, FATO_BB_NOV_TABELA)], anterior=GUIDANCE_APROVADO)
     txt = fg.aviso_publicado([item])
     assert "## BBAS3: lucro R$ 9,0 a 11,0 bi (2026)" in txt and txt.count("✅") == 4
+
+
+def test_contabil_br_grava_indicador_de_atualizacao_no_fim(tmp_path, monkeypatch):
+    arq = tmp_path / "br.json"
+    monkeypatch.setattr(fg, "ARQ_CONTABIL_BR", arq)
+    ok = {"status": "ok", "lpa_12m": 2.51, "trimestres": [{"tri": "2T26"}, {"tri": "3T26"}]}
+    agora = dt.datetime(2026, 11, 17, 21, 32, tzinfo=dt.timezone.utc)          # 18:32 em Brasília
+    fg.aplicar_contabil_br([{"ticker": "BBAS3", "contabil_br": ok}], agora=agora)
+    dado = json.loads(arq.read_text(encoding="utf-8"))["BBAS3"]
+    assert list(dado)[-3:] == ["atualizado_em", "trimestre_ref", "trimestre_data"]
+    assert (dado["atualizado_em"], dado["trimestre_ref"], dado["trimestre_data"]) == ("17/11 18:32", "3T26", "set/26")
+    # leitura falhou no dia seguinte: mantém o valor e a hora da última leitura boa (o indicador envelhece)
+    fg.aplicar_contabil_br([{"ticker": "BBAS3", "contabil_br": {"status": "pendente", "motivo": "PDF não abriu"}}],
+                           agora=agora + dt.timedelta(days=1))
+    dado = json.loads(arq.read_text(encoding="utf-8"))["BBAS3"]
+    assert dado["atualizado_em"] == "17/11 18:32" and list(dado)[-1] == "trimestre_data"
+    assert dado["ultima_tentativa"] == "PDF não abriu"

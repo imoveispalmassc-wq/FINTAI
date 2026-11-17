@@ -86,6 +86,9 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   coluna dele na tabela de um release posterior; log "BBAS3 3T26: frase=... tabela=... divergência=... gravou=..."), soma 4 trimestres consecutivos e grava em utils/contabil_br.json:
   LPA = soma ÷ ações (Yahoo). Sem conseguir ler: "Yahoo - pendente", nunca número inventado; pendente não apaga valor
   bom já gravado. Demais tickers da B3: Yahoo.
+  No fim de cada ticker o robô grava atualizado_em ("17/11 18:32", Brasília; só muda com leitura boa), trimestre_ref
+  ("3T26") e trimestre_data ("set/26"). O card de P/L mostra no topo "🟢 Atualizado em 17/11 às 18:32" e
+  "Contábil 12m até 3T26 (set/26)": verde com menos de 2h, amarelo com menos de 24h, vermelho com 24h ou mais.
 - Projeção do início do ano: utils/guidance_inicial.json (ticker -> ano -> faixa, fonte, data, travado). O robô busca o
   primeiro documento do ano com projeção (release do 4T anterior, jan-abr; depois o 10-K) e grava uma única vez:
   nunca sobrescreve. Sem achar: {"status": "sem projeção inicial encontrada"}.

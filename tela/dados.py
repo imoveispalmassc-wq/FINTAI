@@ -119,6 +119,26 @@ def _contabil_b3(curto: str, lpa_yahoo: float | None, tabela_br: dict | None) ->
     return float(c["lpa_12m"]), c.get("fonte") or "Divulgação de Resultados", c
 
 
+def atualizacao_contabil(c: dict | None, agora=None) -> dict | None:
+    """Indicador de atualização do contábil gravado pelo robô ("17/11 18:32", Brasília).
+
+    Devolve o texto e a hora em ISO (com o ano) para a tela calcular a idade e a cor da bolinha."""
+    import datetime as dt
+
+    if not c or not c.get("atualizado_em"):
+        return None
+    brasilia = dt.timezone(dt.timedelta(hours=-3))
+    agora = agora or dt.datetime.now(brasilia)
+    try:
+        quando = dt.datetime.strptime(f"{c['atualizado_em']}/{agora.year}", "%d/%m %H:%M/%Y").replace(tzinfo=brasilia)
+    except ValueError:
+        return None
+    if quando > agora + dt.timedelta(days=1):           # gravado em dezembro, lido em janeiro
+        quando = quando.replace(year=agora.year - 1)
+    return {"em": c["atualizado_em"], "iso": quando.isoformat(),
+            "tri": c.get("trimestre_ref"), "triData": c.get("trimestre_data")}
+
+
 def contabil_12m(ticker: str | None, lpa_yahoo: float | None, tabela: dict | None = None,
                  tabela_br: dict | None = None) -> tuple[float | None, str, dict | None]:
     """LPA contábil de 12 meses: SEC (robô, soma dos 4 últimos trimestres de LPA diluído) se estiver completa;
@@ -448,6 +468,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "precoMedio12": _n(f["preco_medio"], 4), "mediaDesde": f["media_desde"], "mediaMeses": f["media_meses"], "plMetodo": f["metodo"],
         "lpa": _n(f["lpa"], 4), "lpaAgora": _n(f["lpa_agora"], 4), "lpa12Atras": _n(f["lpa_antes"], 4),
         "baseLpa": f["base_lpa"], "balanco": f["balanco"], "lpaFonte": f["lpa_fonte"], "lpaSec": f["lpa_sec"],
+        "atualizacao": atualizacao_contabil(f["lpa_sec"]),
         "receita": _n(f["receita"], 0), "receitaMedia": _n(f["receita_media"], 0),
         "receitaPrev": _n(f["receita_prev"], 0), "analistasReceitaAno": f["analistas_rec"],
         "dividendo": _n(f["div"], 4), "dividendo12Atras": _n(f["div_antes"], 4),

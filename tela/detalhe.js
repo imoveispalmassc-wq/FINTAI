@@ -662,6 +662,11 @@ function montar(root, d) {
       <details class="acord" open><summary>Fundamentos: os 3 critérios, um a um</summary><div class="dentro">
         <div class="card crit">
           <div class="topo-c"><span class="nome">Preço vs Lucro (P/L)</span><span class="st ${cPL}">${tPL}</span></div>
+          ${(() => { const A = d.atualizacao; if (!A || !A.em) return '';
+            // verde: menos de 2h; amarelo: menos de 24h; vermelho: 24h ou mais (o robô roda todo dia às 8h)
+            const h = (Date.now() - Date.parse(A.iso)) / 36e5, bola = h < 2 ? '🟢' : h < 24 ? '🟡' : '🔴';
+            const [dia, hora] = A.em.split(' ');
+            return `<div class="atualiz" title="Verde: atualizado há menos de 2h. Amarelo: menos de 24h. Vermelho: 24h ou mais sem atualizar.">${bola} Atualizado em ${dia} às ${hora}${A.tri ? `<br><span class="i">Contábil 12m até ${A.tri}${A.triData ? ` (${A.triData})` : ''}</span>` : ''}</div>`; })()}
           <div class="tab-pl num">
             <span></span><div class="cab"><div>Início do ano</div><div class="i">${GI.ano || anoPrev || ''} · congelado</div></div><div class="cab"><div>Contábil</div><div class="i">12 meses · ${d.lpaSec && d.lpaSec.status === 'ok' && d.lpaSec.base === 'ajustado' ? 'ajustado' : 'real'}</div></div><div class="cab"><div>Previsão atual</div><div class="i">${lpaGuia ? 'guidance' : tem(lpaCons) ? 'analistas' : ''}</div></div>
             <span class="rot">P/L</span><b class="gr">${tem(plIni) ? f(plIni) : '—'}</b><b class="gr">${f(d.pl)}</b><b class="gr">${tem(plPrev) ? f(plPrev) : '—'}</b>

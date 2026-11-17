@@ -1056,15 +1056,38 @@ def contabil_eua(ticker: str, hoje: dt.date, *, cabecalho=cabecalho_sec, buscar_
     return contabil_ajustado(gaap, ajustados_sec(empresa[0], cab, [t["fim"] for t in gaap["trimestres"]]))
 
 
-def aplicar_contabil_br(plano: list[dict]) -> int:
-    """Grava o contábil da B3. Pendente não apaga um valor bom já gravado: só registra o motivo."""
+BRASILIA = dt.timezone(dt.timedelta(hours=-3))       # Brasília não tem horário de verão
+MESES = ("jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez")
+CAMPOS_ATUALIZACAO = ("atualizado_em", "trimestre_ref", "trimestre_data")
+
+
+def carimbo_atualizacao(c: dict, agora: dt.datetime) -> dict:
+    """Indicador de atualização no fim do JSON: "17/11 18:32" (Brasília), "3T26" e "set/26"."""
+    base = {k: v for k, v in c.items() if k not in CAMPOS_ATUALIZACAO}
+    ult = (c.get("trimestres") or [{}])[-1].get("tri")
+    fim = fim_do_trimestre(ult) if ult else None
+    return {**base, "atualizado_em": agora.astimezone(BRASILIA).strftime("%d/%m %H:%M"),
+            "trimestre_ref": ult, "trimestre_data": f"{MESES[fim.month - 1]}/{fim:%y}" if fim else None}
+
+
+def aplicar_contabil_br(plano: list[dict], agora: dt.datetime | None = None) -> int:
+    """Grava o contábil da B3. Pendente não apaga um valor bom já gravado: só registra o motivo.
+
+    atualizado_em só muda quando a leitura dá certo: pendente mantém a hora da última leitura boa."""
+    agora = agora or dt.datetime.now(BRASILIA)
     tab, n = _ler_json(ARQ_CONTABIL_BR, {}), 0
     for i in plano:
         c = i.get("contabil_br")
         if not c:
             continue
         atual = tab.get(i["ticker"]) or {}
-        novo = c if c.get("status") == "ok" or atual.get("status") != "ok" else {**atual, "ultima_tentativa": c.get("motivo")}
+        if c.get("status") == "ok":
+            novo = carimbo_atualizacao(c, agora)
+        elif atual.get("status") != "ok":
+            novo = c
+        else:
+            base = {k: v for k, v in atual.items() if k not in CAMPOS_ATUALIZACAO}
+            novo = {**base, "ultima_tentativa": c.get("motivo"), **{k: atual[k] for k in CAMPOS_ATUALIZACAO if k in atual}}
         if novo != atual:
             tab[i["ticker"]] = novo
             n += 1
