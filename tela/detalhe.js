@@ -419,7 +419,6 @@ function montar(root, d) {
         <div class="zona" style="--c:var(--ardosia)"><span class="rot">Zona neutra</span><b class="num">${f(zOport)} a ${f(zCara)}</b></div>
         <div class="zona" style="--c:var(--ambar)"><span class="rot">Zona cara</span><b class="num">acima de ${din(zCara)}</b></div>
         <div class="card">
-          <span class="rot" style="color:var(--azul);font-weight:700">Você está aqui</span>
           <div class="zonas-rot" style="grid-template-columns:${a}fr ${b - a}fr ${100 - b}fr">
             <span style="color:var(--verde)"><b>Oportunidade</b></span>
             <span style="color:#aab4c6"><b>Neutra</b></span>
@@ -433,8 +432,8 @@ function montar(root, d) {
             <span class="traco" style="left:${a}%"></span><span class="traco" style="left:${b}%"></span>
             <span class="bola" style="left:${p}%"></span>
           </div>
-          <div class="marca-baixo so-valor num"><span style="${ancora(p)}">${f(d.preco)}</span></div>
-          <div class="nota" style="margin-top:2px">Mínima e máxima ${fx.curto === '52 semanas' ? 'das últimas 52 semanas' : fx.curto === 'todo o histórico' ? 'de todo o histórico' : `dos últimos ${fx.curto}`} nas pontas da barra. A faixa acompanha o período do gráfico (1A, 5A ou Máx.).</div>
+          <div class="marca-baixo num"><span class="aqui-rot" style="${ancora(p)}"><b>${f(d.preco)}</b>Você está aqui</span></div>
+          <div class="nota" style="margin-top:6px">Mínima e máxima ${fx.curto === '52 semanas' ? 'das últimas 52 semanas' : fx.curto === 'todo o histórico' ? 'de todo o histórico' : `dos últimos ${fx.curto}`} nas pontas da barra. A faixa acompanha o período do gráfico (1A, 5A ou Máx.).</div>
         </div>
       </div>`;
   }
