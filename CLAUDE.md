@@ -20,7 +20,7 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   (só com a tabela citada na fonte). Com override, o guidance ganha
   do Yahoo: LPA projetado = (lucro_min + lucro_max) / 2 / acoes; dividendo projetado = LPA × payout.
   A tela mostra o selo "GUIDANCE OFICIAL" com a data. Sem override, vale o consenso do Yahoo.
-- Guidance automático: `utils/fetch_guidance.py` roda todo dia às 9h (`.github/workflows/update-guidance.yml`)
+- Guidance automático: `utils/fetch_guidance.py` roda sozinho todo dia às 8h de Brasília, e pelo botão Run workflow (`.github/workflows/update-guidance.yml`)
   para os tickers de `utils/guidance_tickers.json` e grava em `utils/guidance_auto.json`. Busca nos documentos
   entregues à CVM (BR) e na SEC EDGAR (EUA: 8-K/6-K com o press release no Exhibit 99.1, faixa de LPA e dividendo); padrões de texto primeiro, API do Claude só se falharem (chave em GitHub Secrets).
   A leitura da API só vale se a faixa estiver no documento (achada pelos padrões ou no trecho, sem

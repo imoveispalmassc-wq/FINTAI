@@ -2,7 +2,7 @@ name: Atualizar guidance oficial
 
 on:
   schedule:
-    - cron: "0 12 * * *"   # todo dia às 9h de Brasília (12h UTC)
+    - cron: "0 11 * * *"   # todo dia às 8h de Brasília (11h UTC; Brasília não tem horário de verão)
   workflow_dispatch: {}    # botão "Run workflow" para rodar na hora
 
 permissions:
