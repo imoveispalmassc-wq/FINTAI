@@ -128,5 +128,7 @@ def test_cadastro_inicial_adm_backfill_e_vazios():
     adm = guidance_inicial("ADM", "2026")
     assert (adm["lpaMin"], adm["lpaMax"], adm["data"]) == (3.60, 4.25, "03/02/2026") and adm["travado"]
     assert guidance("ADM")["lpa"] == pytest.approx(5.65)            # guidance atual intacto
+    # HSIC, ACM e XP começam vazios; o robô pode preencher uma vez (travado, com fonte e data)
     for t, ano in (("HSIC", "2026"), ("ACM", "FY2027"), ("XP", "2026")):
-        assert guidance_inicial(t, ano)["status"] == "sem projeção inicial encontrada"
+        g = guidance_inicial(t, ano)
+        assert g.get("status") == "sem projeção inicial encontrada" or (g["travado"] and g["fonte"] and g["data"])
