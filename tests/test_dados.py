@@ -229,7 +229,7 @@ def test_contabil_volta_para_o_yahoo_se_a_sec_estiver_incompleta():
     inc = {"ADM": {"status": "incompleto", "motivo": "só 3 trimestre(s) na SEC"}}
     assert contabil_12m("ADM", 5.10, inc)[:2] == (5.10, "Yahoo - SEC incompleto")
     assert contabil_12m("ADM", 5.10, {})[:2] == (5.10, "Yahoo - SEC ainda não lida pelo robô")
-    assert contabil_12m("PETR4.SA", 6.1, ok)[:2] == (6.1, "Yahoo Finance")          # B3 fora da lista: Yahoo
+    assert contabil_12m("VALE3.SA", 6.1, ok)[:2] == (6.1, "Yahoo Finance")          # B3 fora da lista: Yahoo
 
 
 def test_card_pl_na_ordem_inicio_contabil_previsao():

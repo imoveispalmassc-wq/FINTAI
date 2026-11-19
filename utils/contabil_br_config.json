@@ -2,5 +2,9 @@
   "BBAS3": {
     "linha": "Lucro Líquido Ajustado",
     "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado"
+  },
+  "PETR4": {
+    "linha": "Lucro Líquido sem Eventos Exclusivos",
+    "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos"
   }
 }
