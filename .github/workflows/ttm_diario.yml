@@ -1,0 +1,61 @@
+name: TTM diário (catch-up automático)
+
+on:
+  schedule:
+    - cron: "0 10 * * *"   # 10:00 UTC = 07:00 Brasília, todos os dias
+  workflow_dispatch:
+    inputs:
+      hoje:
+        description: "Forçar data de hoje (YYYY-MM-DD) — opcional, para reprocessar"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ttm-diario
+  cancel-in-progress: false
+
+jobs:
+  ttm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Dependências
+        run: pip install requests
+
+      - name: Testes do catch-up (offline)
+        run: python -m unittest discover -s tests -v
+
+      # Se este passo falhar, os passos seguintes não rodam:
+      # last_run.json NÃO é atualizado e o próximo dia reprocessa os dias perdidos.
+      - name: Calcular TTM
+        env:
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          BRAPI_TOKEN: ${{ secrets.BRAPI_TOKEN }}
+          FINTAI_HOJE: ${{ github.event.inputs.hoje }}
+        run: python utils/ttm_auto.py
+
+      - name: Commit automático
+        if: success()
+        run: |
+          git config user.name  "fintai-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add utils/ttm_diario.json utils/last_run.json
+          if git diff --cached --quiet; then
+            echo "Sem mudanças para commitar."
+            exit 0
+          fi
+          git commit -m "TTM diário $(date -u +%F) [automático]"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
