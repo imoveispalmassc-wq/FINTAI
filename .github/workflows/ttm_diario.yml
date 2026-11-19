@@ -57,5 +57,8 @@ jobs:
             exit 0
           fi
           git commit -m "TTM diário $(date -u +%F) [automático]"
-          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git fetch origin "${GITHUB_REF_NAME}"
+          git reset --soft "origin/${GITHUB_REF_NAME}"
+          git add utils/ttm_diario.json utils/last_run.json
+          git commit -m "TTM diário $(date -u +%F) [automático]" || echo "Nada novo após sync"
           git push origin "HEAD:${GITHUB_REF_NAME}"
