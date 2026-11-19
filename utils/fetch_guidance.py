@@ -65,6 +65,8 @@ LIMITE_AUTO = 0.20           # trava 3: publica sozinho só com variação do LP
 PL_MAXIMO = 100              # trava 4: P/L acima disso é absurdo
 PL_FATOR = 3                 # trava 4: P/L novo fora de 1/3 a 3x o P/L de 12 meses do Yahoo é absurdo
 ARQ_LOG = RAIZ / "utils" / "guidance_log.json"
+ARQ_NAO_VALIDADO = RAIZ / "utils" / "queue_nao_validado.json"   # tickers da fila pública que não validaram
+FILA_MAX_POR_RUN = 15    # tickers novos processados por execução, para não estourar o tempo do Actions
 IDADE_MAXIMA_DIAS = 120      # documento mais velho que isso (mais de um trimestre) vai para revisão
 MAX_DOCUMENTOS = 6           # documentos lidos por ticker, do mais novo para o mais antigo
 MODELO = "claude-opus-5-5"
@@ -1432,6 +1434,76 @@ def _ler_json(caminho: Path, padrao):
         return padrao
 
 
+
+# ------------------------------------------------------------ fila pública de tickers novos (Issues do GitHub)
+def processar_fila(hoje: dt.date | None = None, *, token: str | None = None, max_por_run: int = FILA_MAX_POR_RUN,
+                   listar=None, fechar=None, planejar_br=planejar_ticker, planejar_us=planejar_ticker_eua) -> list[dict]:
+    """Processa a fila pública (Issues "fila-ticker", ver utils/fila_github.py): tenta validar o
+    guidance de cada ticker novo com as MESMAS travas de "Fonte oficial" e "Número em 2 lugares"
+    usadas no AUTOMÁTICO COM PROTEÇÃO. Validado -> entra em guidance_tickers.json (o robô diário
+    passa a acompanhar; o primeiro guidance ainda precisa da sua aprovação no PR, igual qualquer
+    ticker novo). Não validado -> fica registrado para sempre em queue_nao_validado.json, e o app
+    para de mostrar "ainda não verificado" para ele. Nunca inventa número: na dúvida, não cadastra.
+
+    Processa no máximo `max_por_run` por execução (a mais pedida primeiro); o resto fica na fila
+    para a próxima execução do workflow."""
+    hoje = hoje or dt.date.today()
+    token = token or os.environ.get("GITHUB_QUEUE_TOKEN")
+    if not token:
+        log.warning("fila: sem GITHUB_QUEUE_TOKEN (Secret do GitHub): não processei a fila pública")
+        return []
+    import utils.fila_github as fgh
+    listar = listar or (lambda tok: fgh.listar_fila(tok))
+    fechar = fechar or (lambda n, tok, c: fgh.fechar_issue(n, tok, c))
+
+    registrados = set(t.upper() for t in _ler_json(ARQ_TICKERS, []))
+    nao_validados = _ler_json(ARQ_NAO_VALIDADO, {})
+    try:
+        fila = listar(token)
+    except Exception as e:  # noqa: BLE001
+        log.warning("fila: não consegui ler a fila (%s: %s)", e.__class__.__name__, e)
+        return []
+    candidatos = [f for f in fila if f["ticker"].upper() not in registrados and f["ticker"].upper() not in nao_validados]
+    resultados = []
+    for item in candidatos[:max_por_run]:
+        ticker = item["ticker"].strip().upper()
+        log.info("fila: %s (%d pedido(s))", ticker, item["pedidos"])
+        if not re.fullmatch(r"[A-Z0-9.]{1,10}", ticker):
+            fechar(item["numero"], token, "Ticker com formato inválido: ignorado, não processado.")
+            continue
+        try:
+            plano = (planejar_br(ticker, hoje, None, set()) if re.fullmatch(r"[A-Z]{4}\d{1,2}", ticker)
+                     else planejar_us(ticker, hoje, None))
+        except Exception as e:  # noqa: BLE001
+            plano = {"acao": "erro", "motivo": f"{e.__class__.__name__}: {e}", "travas": []}
+        motivo = plano.get("motivo", "")
+        if "SEC_CONTACT_EMAIL" in motivo:
+            log.warning("fila: %s pulado (%s) — problema de configuração, não do ticker; tenta de novo na próxima execução", ticker, motivo)
+            continue
+        travas = {t["nome"]: t["ok"] for t in plano.get("travas", [])}
+        validado = bool(travas.get("Fonte oficial") and travas.get("Número em 2 lugares"))
+        data_txt = f"{hoje:%d/%m/%Y}"
+        resultados.append({"ticker": ticker, "pedidos": item["pedidos"], "data": data_txt, "motivo": motivo, "validado": validado})
+        if validado:
+            registrados.add(ticker)
+            fechar(item["numero"], token,
+                  "✅ Validado: a fonte é o documento oficial e o número aparece confirmado nele. "
+                  f"**{ticker}** foi adicionado a `utils/guidance_tickers.json` — o robô diário passa a "
+                  "acompanhar. O guidance em si ainda precisa da sua aprovação no pull request (mesma regra "
+                  "de qualquer ticker novo: a primeira leitura nunca publica sozinha).")
+        else:
+            nao_validados[ticker] = {"motivo": motivo or "guidance não encontrado com segurança", "data": data_txt}
+            fechar(item["numero"], token,
+                  f"🔒 Não validado: {motivo or 'não encontrei um guidance confirmado com segurança no documento oficial'}. "
+                  f"**{ticker}** não foi cadastrado — nenhum número é mostrado sem confirmação. "
+                  "O app passa a mostrar só os dados do Yahoo Finance para este ticker.")
+    if any(r["validado"] for r in resultados):
+        ARQ_TICKERS.write_text(json.dumps(sorted(registrados), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    if any(not r["validado"] for r in resultados):
+        ARQ_NAO_VALIDADO.write_text(json.dumps(dict(sorted(nao_validados.items())), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return resultados
+
+
 def planejar(hoje: dt.date | None = None) -> list[dict]:
     hoje = hoje or dt.date.today()
     tickers = [t.strip().upper() for t in _ler_json(ARQ_TICKERS, [])]
@@ -1636,9 +1708,17 @@ def main(argv: list[str] | None = None) -> int:
     pr = sub.add_parser("resumo", help="resumo da semana: publicados e travados")
     pr.add_argument("--dias", type=int, default=7)
     pr.add_argument("--saida", default="resumo.md")
+    pf = sub.add_parser("fila", help="processa a fila pública de tickers novos (Issues do GitHub)")
+    pf.add_argument("--max", type=int, default=FILA_MAX_POR_RUN)
     args = p.parse_args(argv)
     if args.cmd == "resumo":
         Path(args.saida).write_text(resumo_semana(_ler_json(ARQ_LOG, []), dt.date.today(), args.dias), encoding="utf-8")
+        return 0
+    if args.cmd == "fila":
+        resultados = processar_fila(max_por_run=args.max)
+        validados = sum(r["validado"] for r in resultados)
+        log.info("fila: %d ticker(s) processado(s), %d validado(s), %d travado(s)",
+                 len(resultados), validados, len(resultados) - validados)
         return 0
     if args.cmd == "planejar":
         plano = planejar()

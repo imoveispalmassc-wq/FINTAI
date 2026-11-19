@@ -8,6 +8,7 @@ import base64
 import concurrent.futures as cf
 import hashlib
 import importlib
+import json
 import time
 from pathlib import Path
 from urllib.parse import quote
@@ -282,6 +283,47 @@ def pacote(ticker: str, versao: str = "") -> dict:
     return montar(ticker, d, r, comps, padrao)
 
 
+# ------------------------------------------------------------ fila pública de tickers novos
+ARQ_GUIDANCE_TICKERS = Path(__file__).parent / "utils" / "guidance_tickers.json"
+ARQ_NAO_VALIDADO = Path(__file__).parent / "utils" / "queue_nao_validado.json"
+
+
+@st.cache_data(ttl=900, show_spinner=False)   # mesmo ritmo do robô: recarrega a cada deploy/restart
+def _estado_fila() -> tuple[set[str], set[str]]:
+    """(tickers já cadastrados, tickers já tentados e não validados) — os dois arquivos são gravados
+    só pelo robô via GitHub Actions; o app só lê."""
+    def ler(caminho, padrao):
+        try:
+            return json.loads(caminho.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError):
+            return padrao
+    registrados = {t.upper() for t in ler(ARQ_GUIDANCE_TICKERS, [])}
+    nao_validados = {t.upper() for t in ler(ARQ_NAO_VALIDADO, {})}
+    return registrados, nao_validados
+
+
+@st.cache_data(ttl=3600, show_spinner=False)   # 1 pedido por ticker novo por hora (por instância do app)
+def _pedir_na_fila(ticker_curto: str) -> bool:
+    import utils.fila_github as fila
+    token = st.secrets.get("GITHUB_QUEUE_TOKEN") if hasattr(st, "secrets") else None
+    return fila.pedir_ticker(ticker_curto, token)
+
+
+def aviso_guidance_pendente(ticker: str) -> None:
+    """Ticker com preço válido do Yahoo, mas ainda fora de guidance_tickers.json e de
+    queue_nao_validado.json: mostra o aviso e registra o pedido na fila (Issues do GitHub) — uma
+    vez só por ticker por sessão, e no máximo uma chamada à API por hora por instância do app."""
+    curto_t = curto(ticker)
+    registrados, nao_validados = _estado_fila()
+    if curto_t in registrados or curto_t in nao_validados:
+        return
+    st.info(f"🕒 Guidance de {curto_t} ainda não verificado — vamos checar hoje à noite.", icon="🕒")
+    pedidos = st.session_state.setdefault("_fila_pedidos", set())
+    if curto_t not in pedidos:
+        pedidos.add(curto_t)
+        _pedir_na_fila(curto_t)
+
+
 # ------------------------------------------------------------ lista e compartilhar
 def alternar_lista(ticker: str):
     lista = st.session_state["lista"]
@@ -330,6 +372,7 @@ def painel(ticker: str):
     with st.spinner(f"Buscando {ticker}..."):
         dados = pacote(ticker, VERSAO_CALCULO)
     barra_de_acoes(ticker)
+    aviso_guidance_pendente(ticker)       # ticker novo (fora da lista do robô): avisa e entra na fila
     tela_detalhe(data={"dados": dados}, key=f"tela_{ticker}")
 
 

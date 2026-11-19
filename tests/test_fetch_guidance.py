@@ -711,3 +711,86 @@ def test_contabil_br_grava_indicador_de_atualizacao_no_fim(tmp_path, monkeypatch
     dado = json.loads(arq.read_text(encoding="utf-8"))["BBAS3"]
     assert dado["atualizado_em"] == "17/11 18:32" and list(dado)[-1] == "trimestre_data"
     assert dado["ultima_tentativa"] == "PDF não abriu"
+
+
+# ------------------------------------------------------------ fila pública de tickers novos
+def test_fila_sem_token_nao_processa_nada(monkeypatch):
+    monkeypatch.delenv("GITHUB_QUEUE_TOKEN", raising=False)
+    assert fg.processar_fila(HOJE, token=None) == []
+
+
+def test_fila_valida_e_registra_em_guidance_tickers(tmp_path, monkeypatch):
+    monkeypatch.setattr(fg, "ARQ_TICKERS", tmp_path / "tickers.json")
+    monkeypatch.setattr(fg, "ARQ_NAO_VALIDADO", tmp_path / "nv.json")
+    (tmp_path / "tickers.json").write_text('["BBAS3"]', encoding="utf-8")
+    validado = {"ticker": "VALE3", "acao": "pr", "novo": {"lucro_min": 1, "lucro_max": 2},
+               "motivo": "passou nas 4 travas",
+               "travas": [{"nome": "Fonte oficial", "ok": True}, {"nome": "Número em 2 lugares", "ok": True},
+                         {"nome": "Variação até 20%", "ok": False}, {"nome": "P/L plausível", "ok": True}]}
+    fechadas = []
+    fg.processar_fila(HOJE, token="tok",
+                      listar=lambda tok: [{"ticker": "VALE3", "numero": 10, "pedidos": 7, "criada_em": "x"}],
+                      fechar=lambda n, tok, c: fechadas.append((n, c)),
+                      planejar_br=lambda t, h, a, v: validado)
+    tickers = json.loads((tmp_path / "tickers.json").read_text())
+    assert tickers == ["BBAS3", "VALE3"]
+    assert fechadas and fechadas[0][0] == 10 and "Validado" in fechadas[0][1]
+    assert not (tmp_path / "nv.json").exists()
+
+
+def test_fila_nao_valida_nao_cadastra_e_fica_travado(tmp_path, monkeypatch):
+    monkeypatch.setattr(fg, "ARQ_TICKERS", tmp_path / "tickers.json")
+    monkeypatch.setattr(fg, "ARQ_NAO_VALIDADO", tmp_path / "nv.json")
+    nao_validado = {"ticker": "ABCD3", "acao": "pr", "novo": None, "motivo": "sem guidance confirmado",
+                    "travas": [{"nome": "Fonte oficial", "ok": True}, {"nome": "Número em 2 lugares", "ok": False}]}
+    fechadas = []
+    fg.processar_fila(HOJE, token="tok",
+                      listar=lambda tok: [{"ticker": "ABCD3", "numero": 11, "pedidos": 2, "criada_em": "x"}],
+                      fechar=lambda n, tok, c: fechadas.append((n, c)),
+                      planejar_br=lambda t, h, a, v: nao_validado)
+    assert not (tmp_path / "tickers.json").exists()
+    nv = json.loads((tmp_path / "nv.json").read_text())
+    assert nv == {"ABCD3": {"motivo": "sem guidance confirmado", "data": f"{HOJE:%d/%m/%Y}"}}
+    assert fechadas and "Não validado" in fechadas[0][1]
+
+
+def test_fila_pula_ticker_ja_registrado_ou_ja_nao_validado(tmp_path, monkeypatch):
+    monkeypatch.setattr(fg, "ARQ_TICKERS", tmp_path / "tickers.json")
+    monkeypatch.setattr(fg, "ARQ_NAO_VALIDADO", tmp_path / "nv.json")
+    (tmp_path / "tickers.json").write_text('["BBAS3"]', encoding="utf-8")
+    (tmp_path / "nv.json").write_text('{"ZZZZ": {"motivo": "x", "data": "x"}}', encoding="utf-8")
+    chamadas = []
+    resultados = fg.processar_fila(
+        HOJE, token="tok",
+        listar=lambda tok: [{"ticker": "BBAS3", "numero": 1, "pedidos": 5}, {"ticker": "ZZZZ", "numero": 2, "pedidos": 3}],
+        fechar=lambda n, tok, c: None, planejar_br=lambda t, h, a, v: chamadas.append(t))
+    assert resultados == [] and not chamadas
+
+
+def test_fila_limita_quantidade_por_execucao(tmp_path, monkeypatch):
+    monkeypatch.setattr(fg, "ARQ_TICKERS", tmp_path / "tickers.json")
+    monkeypatch.setattr(fg, "ARQ_NAO_VALIDADO", tmp_path / "nv.json")
+    fila = [{"ticker": f"T{i}", "numero": i, "pedidos": 1} for i in range(5)]
+    chamados = []
+    fg.processar_fila(HOJE, token="tok", max_por_run=2, listar=lambda tok: fila, fechar=lambda n, tok, c: None,
+                      planejar_us=lambda t, h, a: chamados.append(t) or {"acao": "nada", "motivo": "x", "travas": []})
+    assert len(chamados) == 2
+
+
+def test_fila_formato_invalido_fecha_sem_processar(tmp_path, monkeypatch):
+    monkeypatch.setattr(fg, "ARQ_TICKERS", tmp_path / "tickers.json")
+    monkeypatch.setattr(fg, "ARQ_NAO_VALIDADO", tmp_path / "nv.json")
+    fechadas = []
+    fg.processar_fila(HOJE, token="tok", listar=lambda tok: [{"ticker": "'; DROP TABLE x", "numero": 9, "pedidos": 1}],
+                      fechar=lambda n, tok, c: fechadas.append(c))
+    assert fechadas and "inválido" in fechadas[0]
+
+
+def test_fila_pula_erro_de_configuracao_sem_bloquear_o_ticker(tmp_path, monkeypatch):
+    monkeypatch.setattr(fg, "ARQ_TICKERS", tmp_path / "tickers.json")
+    monkeypatch.setattr(fg, "ARQ_NAO_VALIDADO", tmp_path / "nv.json")
+    fechadas = []
+    erro = {"acao": "erro", "motivo": "sem SEC_CONTACT_EMAIL (Secret do GitHub): a SEC exige e-mail de contato", "travas": []}
+    fg.processar_fila(HOJE, token="tok", listar=lambda tok: [{"ticker": "MSFT", "numero": 1, "pedidos": 1}],
+                      fechar=lambda n, tok, c: fechadas.append(c), planejar_us=lambda t, h, a: erro)
+    assert not fechadas and not (tmp_path / "nv.json").exists()

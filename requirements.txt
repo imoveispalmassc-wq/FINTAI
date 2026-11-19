@@ -3,3 +3,4 @@ yfinance>=0.2.40
 plotly>=5.18
 pandas>=2.0
 lxml>=5.0
+requests>=2.31   # fila pública de tickers novos (utils/fila_github.py)

@@ -42,6 +42,21 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   (nunca no código); sem o Secret, os tickers dos EUA ficam de fora com aviso. Leitura pela API passa pelas mesmas 4 travas.
   Duas faixas de LPA no mesmo comunicado: ignora a perto de previously/prior/previous/earlier e fica com a perto de
   updated/revised/now expects/raising/lowering; se ainda sobrarem duas, não grava (aviso amarelo).
+- Fila pública de tickers novos (app com muitos usuários, não só o dono): digitar um ticker fora de
+  `utils/guidance_tickers.json` mostra na hora o TTM/P/L do Yahoo normalmente, mais o aviso "Guidance ainda não
+  verificado - vamos verificar hoje à noite", e registra o pedido como uma Issue do GitHub ("Fila: TICKER", label
+  `fila-ticker`) pelo `utils/fila_github.py`, usando o Secret `GITHUB_QUEUE_TOKEN` (permissão só de Issues, nunca de
+  conteúdo do repositório - o app nunca grava arquivo). Pedidos repetidos do mesmo ticker só comentam na issue já
+  aberta (dedup; "pedidos" = 1 + comentários), e o aviso só aparece 1x por ticker por sessão do navegador.
+  `.github/workflows/fila-tickers.yml` roda a cada 6 horas (ou pelo Run workflow) e processa até
+  `FILA_MAX_POR_RUN` (15) tickers por execução, do mais pedido para o menos pedido (`processar_fila` em
+  `utils/fetch_guidance.py`): tenta achar o guidance com as mesmas travas de "Fonte oficial" e "Número em 2
+  lugares" do AUTOMÁTICO COM PROTEÇÃO. Validado: entra em `guidance_tickers.json` (o robô diário passa a
+  acompanhar; o guidance em si só aparece depois que o dono aprovar o primeiro PR, igual qualquer ticker novo -
+  a fila nunca pula essa aprovação). Não validado: grava para sempre em `utils/queue_nao_validado.json` com o
+  motivo, fecha a issue explicando, e o app para de mostrar o aviso "ainda não verificado" para esse ticker (ele
+  passa a mostrar só TTM/P/L do Yahoo, igual qualquer ticker sem guidance - nunca número inventado). Erro de
+  configuração (ex.: falta `SEC_CONTACT_EMAIL`) não trava o ticker: ele continua na fila para a próxima execução.
 - A página de exemplo (`docs/index.html`, gerada por `tools/gerar_demo.py`) não busca dados.
   Qualquer valor nela sem fonte real fica vazio ou marcado como EXEMPLO.
 
