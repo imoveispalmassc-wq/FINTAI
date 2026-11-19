@@ -32,7 +32,7 @@ jobs:
           python-version: "3.11"
 
       - name: Dependências
-        run: pip install requests
+        run: pip install requests numpy pandas yfinance
 
       - name: Testes do catch-up (offline)
         run: python -m unittest discover -s tests -v
