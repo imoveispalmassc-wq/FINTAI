@@ -10,7 +10,7 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "utils"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # .../utils (continha "/utils" a mais e não existia)
 import ttm_auto as t  # noqa: E402
 
 SEC = "https://www.sec.gov/Archives/edgar/data/1/000000000000000001/"
