@@ -1,1 +1,35 @@
-[]
+[
+  {
+    "data": "2026-11-19",
+    "ticker": "TGT",
+    "decisao": "travado",
+    "faixa": "LPA 10.65 a 11.40 (2026)",
+    "fonte": "TARGET CORP, Form 8-K Exhibit 99.1 de 18/11/2026 (SEC)",
+    "url": "https://www.sec.gov/Archives/edgar/data/27419/000002741926000051/a2026q3ex-99.htm",
+    "documento": "https://www.sec.gov/Archives/edgar/data/27419/000002741926000051/a2026q3ex-99.htm",
+    "travas": [
+      {
+        "nome": "Fonte oficial",
+        "ok": true,
+        "detalhe": "comunicado da empresa em www.sec.gov"
+      },
+      {
+        "nome": "Número em 2 lugares",
+        "ok": true,
+        "detalhe": "a faixa aparece 3 vez(es) no documento"
+      },
+      {
+        "nome": "Variação até 20%",
+        "ok": false,
+        "detalhe": "sem guidance anterior no app para comparar"
+      },
+      {
+        "nome": "P/L plausível",
+        "ok": true,
+        "detalhe": "P/L 15.2 (cotação 168.04 ÷ LPA 11.03) contra 15.6 de 12 meses"
+      }
+    ],
+    "duvidas": [],
+    "motivo": "TRAVADO - Variação até 20%: sem guidance anterior no app para comparar"
+  }
+]

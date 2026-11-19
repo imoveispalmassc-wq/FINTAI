@@ -171,6 +171,135 @@
     "data": "03/11/2026",
     "atualizado": "19/11/2026"
   },
+  "NVDA": {
+    "status": "ok",
+    "base": "GAAP",
+    "lpa_12m": 7.91,
+    "trimestres": [
+      {
+        "fim": "26/10/2025",
+        "lpa": 1.3,
+        "tipo": "GAAP",
+        "fonte": "SEC 10-Q (GAAP)",
+        "data": "26/08/2026",
+        "url": ""
+      },
+      {
+        "fim": "25/01/2026",
+        "lpa": 1.76,
+        "tipo": "GAAP",
+        "fonte": "SEC 10-K (GAAP)",
+        "data": "26/08/2026",
+        "url": ""
+      },
+      {
+        "fim": "26/04/2026",
+        "lpa": 2.39,
+        "tipo": "GAAP",
+        "fonte": "SEC 10-Q (GAAP)",
+        "data": "26/08/2026",
+        "url": ""
+      },
+      {
+        "fim": "26/07/2026",
+        "lpa": 2.46,
+        "tipo": "GAAP",
+        "fonte": "SEC 10-Q (GAAP)",
+        "data": "26/08/2026",
+        "url": ""
+      }
+    ],
+    "trimestres_gaap": 4,
+    "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
+    "data": "26/08/2026",
+    "atualizado": "19/11/2026"
+  },
+  "PANW": {
+    "status": "ok",
+    "base": "GAAP",
+    "lpa_12m": 0.57,
+    "trimestres": [
+      {
+        "fim": "31/01/2026",
+        "lpa": 0.61,
+        "tipo": "GAAP",
+        "fonte": "SEC 10-Q (GAAP)",
+        "data": "19/11/2026",
+        "url": ""
+      },
+      {
+        "fim": "30/04/2026",
+        "lpa": -0.22,
+        "tipo": "GAAP",
+        "fonte": "SEC 10-Q (GAAP)",
+        "data": "19/11/2026",
+        "url": ""
+      },
+      {
+        "fim": "31/07/2026",
+        "lpa": -0.39,
+        "tipo": "GAAP",
+        "fonte": "SEC 10-K (GAAP)",
+        "data": "19/11/2026",
+        "url": ""
+      },
+      {
+        "fim": "31/10/2026",
+        "lpa": 0.57,
+        "tipo": "GAAP",
+        "fonte": "SEC 10-Q (GAAP)",
+        "data": "19/11/2026",
+        "url": ""
+      }
+    ],
+    "trimestres_gaap": 4,
+    "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
+    "data": "19/11/2026",
+    "atualizado": "19/11/2026"
+  },
+  "TGT": {
+    "status": "ok",
+    "base": "ajustado",
+    "lpa_12m": 10.04,
+    "trimestres": [
+      {
+        "fim": "01/11/2025",
+        "lpa": 1.78,
+        "tipo": "ajustado",
+        "fonte": "SEC Form 8-K Exhibit 99.1 de 19/11/2025, LPA Ajustado",
+        "data": "19/11/2025",
+        "url": "https://www.sec.gov/Archives/edgar/data/27419/000002741925000123/a2025q3ex-99.htm"
+      },
+      {
+        "fim": "31/01/2026",
+        "lpa": 2.44,
+        "tipo": "ajustado",
+        "fonte": "SEC Form 8-K Exhibit 99.1 de 03/03/2026, LPA Ajustado",
+        "data": "03/03/2026",
+        "url": "https://www.sec.gov/Archives/edgar/data/27419/000002741926000012/a2025q4ex-99.htm"
+      },
+      {
+        "fim": "02/05/2026",
+        "lpa": 1.71,
+        "tipo": "ajustado",
+        "fonte": "SEC Form 8-K Exhibit 99.1 de 20/05/2026, LPA Ajustado",
+        "data": "20/05/2026",
+        "url": "https://www.sec.gov/Archives/edgar/data/27419/000002741926000020/a2026q1ex-99.htm"
+      },
+      {
+        "fim": "01/08/2026",
+        "lpa": 4.11,
+        "tipo": "ajustado",
+        "fonte": "SEC Form 8-K Exhibit 99.1 de 19/08/2026, LPA Ajustado",
+        "data": "19/08/2026",
+        "url": "https://www.sec.gov/Archives/edgar/data/27419/000002741926000034/a2026q2ex-99.htm"
+      }
+    ],
+    "trimestres_gaap": 0,
+    "fonte": "SEC 8-K Exhibit 99.1, LPA Ajustado",
+    "data": "20/05/2026",
+    "atualizado": "19/11/2026"
+  },
   "XP": {
     "status": "incompleto",
     "motivo": "SEC sem EarningsPerShareDiluted"

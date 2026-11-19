@@ -55,9 +55,32 @@
       "travado": true
     }
   },
+  "NVDA": {
+    "2026": {
+      "status": "sem projeção inicial encontrada"
+    }
+  },
+  "PANW": {
+    "2026": {
+      "status": "sem projeção inicial encontrada"
+    }
+  },
   "PETR4": {
     "2026": {
       "status": "sem projeção inicial encontrada"
+    }
+  },
+  "TGT": {
+    "2026": {
+      "lpa_min": 7.5,
+      "lpa_max": 8.5,
+      "lucro_tipo": "LPA ajustado",
+      "fonte": "TARGET CORP, Form 8-K Exhibit 99.1 de 03/03/2026 (SEC)",
+      "data": "03/03/2026",
+      "url": "https://www.sec.gov/Archives/edgar/data/27419/000002741926000012/a2025q4ex-99.htm",
+      "metodo": "robô (primeiro documento do ano)",
+      "trecho": "ate approximately 20 basis points higher than the 4.6 percent Adjusted operating income margin rate in 2025. • GAAP and Adjusted EPS of $7.50 to $8.50. Based on the expected timing of certai",
+      "travado": true
     }
   },
   "XP": {
