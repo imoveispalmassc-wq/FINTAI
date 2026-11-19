@@ -4,6 +4,7 @@ Rodar:  streamlit run app.py
 """
 from __future__ import annotations
 
+import base64
 import concurrent.futures as cf
 import hashlib
 import importlib
@@ -36,7 +37,8 @@ from tela.dados import montar
 from utils.benchmarks import retornos_brasil
 from utils.percentile import zonas
 
-st.set_page_config(page_title="FINTAI", page_icon="📈", layout="wide")
+LOGO = Path(__file__).parent / "assets" / "logo.png"
+st.set_page_config(page_title="FINTAI", page_icon=str(LOGO), layout="wide")
 
 MAX_TICKERS = 20          # limite de ações no comparativo, para manter a busca rápida
 COTACOES_TTL = 60         # segundos de cache da cotação em lote (session_state)
@@ -48,9 +50,8 @@ CSS = """
 .block-container { padding-top: 2.2rem; max-width: 1150px; }
 #MainMenu, footer { visibility: hidden; }
 [data-testid='stToolbarActions'], [data-testid='stMainMenu'], [data-testid='stAppDeployButton'] { display:none !important; }
-.marca { display:flex; align-items:baseline; gap:.7rem; flex-wrap:wrap; margin-bottom:.4rem; }
-.marca b { font-family:'Space Grotesk',sans-serif; font-size:2rem; letter-spacing:.04em; color:#e8edf5; }
-.marca b i { font-style:normal; color:#5b8def; }
+.marca { display:flex; align-items:center; gap:.7rem; flex-wrap:wrap; margin-bottom:.4rem; }
+.marca img { height:2.8rem; width:2.8rem; border-radius:22%; }
 .marca span { color:#8c99b0; font-size:.95rem; }
 .rodape { color:#8c99b0; font-size:.76rem; margin-top:1.5rem; text-align:center; }
 </style>
@@ -363,8 +364,10 @@ def resumo(tickers: list[str]):
 
 # ------------------------------------------------------------ página
 st.markdown(CSS, unsafe_allow_html=True)
+_logo_b64 = base64.b64encode(LOGO.read_bytes()).decode() if LOGO.exists() else ""
 st.markdown(
-    "<div class='marca'><b>FINT<i>AI</i></b><span>Ações do Brasil e dos EUA em um só painel</span></div>",
+    f"<div class='marca'>{f'<img src=\"data:image/png;base64,{_logo_b64}\" alt=\"FINTAI\">' if _logo_b64 else ''}"
+    "<span>Ações do Brasil e dos EUA em um só painel</span></div>",
     unsafe_allow_html=True,
 )
 
