@@ -4,8 +4,10 @@ Rodar:  streamlit run app.py
 """
 from __future__ import annotations
 
+import concurrent.futures as cf
 import hashlib
 import importlib
+import time
 from pathlib import Path
 from urllib.parse import quote
 
@@ -35,6 +37,9 @@ from utils.benchmarks import retornos_brasil
 from utils.percentile import zonas
 
 st.set_page_config(page_title="FINTAI", page_icon="📈", layout="wide")
+
+MAX_TICKERS = 20          # limite de ações no comparativo, para manter a busca rápida
+COTACOES_TTL = 60         # segundos de cache da cotação em lote (session_state)
 
 CSS = """
 <style>
@@ -124,6 +129,56 @@ def baixar_indice(simbolos: tuple[str, ...]):
         except Exception:
             continue
     return None, None
+
+
+def _extrair_precos(bruto: pd.DataFrame | None, tickers: list[str]) -> dict[str, dict]:
+    """Preço e variação % do dia de cada ticker a partir de um só DataFrame do yf.download.
+
+    Função pura (sem rede, sem Streamlit): fácil de testar e reaproveitar. Um ticker que não
+    aparece no resultado, ou vem com histórico vazio, fica com erro=True — nunca derruba os outros."""
+    dados = {t: {"preco": None, "variacao": None, "erro": True} for t in tickers}
+    if bruto is None or bruto.empty:
+        return dados
+    multi = isinstance(bruto.columns, pd.MultiIndex)
+    for t in tickers:
+        try:
+            fechamentos = (bruto[t]["Close"] if multi else bruto["Close"]).dropna()
+            if fechamentos.empty:
+                continue
+            preco = float(fechamentos.iloc[-1])
+            variacao = round((preco / float(fechamentos.iloc[-2]) - 1) * 100, 2) if len(fechamentos) >= 2 else None
+            dados[t] = {"preco": preco, "variacao": variacao, "erro": False}
+        except (KeyError, IndexError, ValueError, TypeError):
+            continue   # este ticker fica "Cotação indisponível"; os demais seguem normalmente
+    return dados
+
+
+def get_cotacoes(tickers: list[str]) -> dict[str, dict]:
+    """Preço e variação % do dia de vários tickers num ÚNICO request em lote ao Yahoo Finance
+    (yf.download com threads=True — nunca um loop de 1 request por ticker), com timeout curto,
+    cache de 60s em st.session_state (não rebusca a cada clique) e spinner enquanto carrega.
+
+    Devolve {ticker: {"preco": float|None, "variacao": float|None, "erro": bool}}. Se o Yahoo
+    falhar ou demorar, os tickers afetados voltam com erro=True ("Cotação indisponível") em vez
+    de travar a tela."""
+    tickers = list(dict.fromkeys(tickers))[:MAX_TICKERS]
+    if not tickers:
+        return {}
+    cache = st.session_state.setdefault("_cotacoes_cache", {})
+    chave = ",".join(sorted(tickers))
+    agora = time.monotonic()
+    guardado = cache.get(chave)
+    if guardado and agora - guardado["quando"] < COTACOES_TTL:
+        return guardado["dados"]
+    with st.spinner("Buscando cotações..."):
+        try:
+            bruto = yf.download(tickers=tickers, period="5d", interval="1d", group_by="ticker",
+                                threads=True, timeout=8, progress=False, auto_adjust=False)
+        except Exception:
+            bruto = None
+        dados = _extrair_precos(bruto, tickers)
+    cache[chave] = {"quando": agora, "dados": dados}
+    return dados
 
 
 # muda quando o código dos cálculos muda: um deploy novo não reaproveita resultado antigo do cache
@@ -278,20 +333,30 @@ def painel(ticker: str):
 
 
 def resumo(tickers: list[str]):
-    linhas = []
-    for t in tickers:
+    if not tickers:
+        return
+    cotacoes = get_cotacoes(tickers)      # preço rápido, em lote; cada ticker ainda confere no pacote()
+
+    def calcular_linha(t: str) -> dict:
         try:
             p = pacote(t, VERSAO_CALCULO)
             z = zonas(p["min52"], p["max52"])
-            dy = p["dividendo"] / p["preco"] * 100 if p["dividendo"] is not None and p["preco"] else None
-            linhas.append({
-                "Ticker": t, "Preço": p["preco"], "Estado": p["decisao"]["codigo"], "Zona": p["decisao"]["zona"],
+            cot = cotacoes.get(t, {})
+            preco = cot["preco"] if not cot.get("erro", True) and cot.get("preco") is not None else p["preco"]
+            dy = p["dividendo"] / preco * 100 if p["dividendo"] is not None and preco else None
+            return {
+                "Ticker": t, "Preço": preco, "Estado": p["decisao"]["codigo"], "Zona": p["decisao"]["zona"],
                 "Oportunidade até": z.oportunidade_ate, "Cara acima de": z.cara_acima,
                 "P/L": p["pl"], "DY %": dy, "Ret. 1a %": p["retorno"]["total"][0],
                 "Ret. 3a %": p["retorno"]["total"][1], "Ret. 5a %": p["retorno"]["total"][2],
-            })
+            }
         except Exception as e:
-            linhas.append({"Ticker": t, "Estado": f"Erro: {e}"})
+            return {"Ticker": t, "Estado": f"Erro: {e}"}
+
+    # cada pacote(ticker) é I/O (Yahoo Finance) e independente dos outros: paralelo em vez de 1 por vez
+    with st.spinner("Calculando o comparativo..."):
+        with cf.ThreadPoolExecutor(max_workers=min(8, len(tickers))) as executor:
+            linhas = list(executor.map(calcular_linha, tickers))
     df = pd.DataFrame(linhas).set_index("Ticker")
     st.dataframe(df.style.format(precision=2, na_rep="—"), width="stretch")
 
@@ -316,6 +381,9 @@ entrada = st.text_input(
     placeholder="PETR4, AAPL, MSFT",
 )
 tickers = list(dict.fromkeys(normalizar_ticker(t) for t in entrada.split(",") if t.strip()))
+if len(tickers) > MAX_TICKERS:
+    st.warning(f"Limite de {MAX_TICKERS} ações para manter rápido")
+    tickers = tickers[:MAX_TICKERS]
 
 if st.session_state["lista"]:
     st.button("Abrir minha lista: " + ", ".join(curto(t) for t in st.session_state["lista"]),
