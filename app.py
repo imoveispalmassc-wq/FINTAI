@@ -309,6 +309,45 @@ def lpa_anual_eua(ticker: str) -> list[dict]:
         return []
 
 
+@st.cache_data(ttl=86400, show_spinner=False)   # earnings release não muda mais que 1x por trimestre
+def outlook_trimestral_eua(ticker: str, max_docs: int = 3) -> dict | None:
+    """Guidance TRIMESTRAL (receita, margem, LPA do próximo trimestre) na hora, direto da SEC —
+    qualquer ticker dos EUA, sem depender do robô noturno nem de estar cadastrado em
+    guidance_tickers.json/queue_nao_validado.json (esses continuam existindo para o robô, que tem
+    mais tempo e API do Claude para o guidance ANUAL). Essa busca é só regex (mesma função do robô,
+    extrair_outlook_trimestral_eua), sem API do Claude e sem as 4 travas - não precisa, é informativo
+    e nunca inventa: sem achar um formato reconhecido no documento, devolve None e o card não
+    aparece. None também sem o Secret SEC_CONTACT_EMAIL, ticker não encontrado ou B3."""
+    if ticker.endswith(".SA"):
+        return None
+    email = (st.secrets.get("SEC_CONTACT_EMAIL") or "").strip() if hasattr(st, "secrets") else ""
+    if not email or "@" not in email:
+        return None
+    import utils.fetch_guidance as fg
+
+    cab = {"User-Agent": f"fintai/1.0 (contato: {email})", "Accept-Encoding": "gzip, deflate"}
+    try:
+        mapa = _tickers_sec_cache(cab)
+        if not mapa:
+            return None
+        empresa = fg.cik_do_ticker(ticker, cab, mapa=mapa)
+        if not empresa:
+            return None
+        cik, nome = empresa
+        for doc in fg.documentos_sec(cik, cab)[:max_docs]:
+            anexo = fg.anexo_sec(doc, cab)
+            if not anexo:
+                continue
+            link, texto = anexo
+            dados = fg.extrair_outlook_trimestral_eua(texto)
+            if dados:
+                return {**dados, "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {fg._data_br(doc['data'])} (SEC)",
+                        "data": fg._data_br(doc["data"]), "url": link}
+        return None
+    except Exception:
+        return None
+
+
 @st.cache_data(ttl=60, show_spinner=False)   # mesmo ritmo de baixar() e do fragment: cotação mais dinâmica
 def pacote(ticker: str, versao: str = "") -> dict:
     """Tudo o que a tela de um ticker precisa, calculado uma única vez."""
@@ -323,7 +362,17 @@ def pacote(ticker: str, versao: str = "") -> dict:
     proventos = hist["Dividends"][hist["Dividends"] > 0] if "Dividends" in hist else None
     r = calcular(hist, proventos)
     comps, padrao = comparadores(ticker, r.data_ultimo, d["info"])
-    return montar(ticker, d, r, comps, padrao)
+    dados = montar(ticker, d, r, comps, padrao)
+    if not dados.get("outlookTrimestral"):
+        # o robô ainda não gravou (ticker novo, ou travado no anual e ainda não reprocessado):
+        # busca na hora, pra não depender do próximo ciclo do workflow noturno
+        ao_vivo = outlook_trimestral_eua(ticker)
+        if ao_vivo:
+            dados = {**dados, "outlookTrimestral": {
+                "periodo": ao_vivo.get("periodo"), "receitaMin": ao_vivo.get("receita_min"), "receitaMax": ao_vivo.get("receita_max"),
+                "margemBruta": ao_vivo.get("margem_bruta"), "lpaMin": ao_vivo.get("lpa_min"), "lpaMax": ao_vivo.get("lpa_max"),
+                "fonte": ao_vivo.get("fonte") or "", "data": ao_vivo.get("data") or "", "url": ao_vivo.get("url") or ""}}
+    return dados
 
 
 # ------------------------------------------------------------ fila pública de tickers novos

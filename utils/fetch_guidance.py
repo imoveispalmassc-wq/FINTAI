@@ -855,32 +855,40 @@ def documentos_sec(cik: str, cab: dict) -> list[dict]:
     return docs
 
 
-def _exhibit_99_pela_pagina_indice(pasta: str, acc: str, cab: dict) -> str | None:
+def _exhibit_99_pela_pagina_indice(pasta: str, acc: str, cab: dict, form: str = "") -> str | None:
     """Nome do arquivo marcado como Exhibit 99.x na página de índice da SEC (coluna "Type"), não só
     pelo nome do arquivo: várias empresas (ex. NVIDIA: "q3fy27pr.htm") nomeiam o press release de um
-    jeito que não bate com o padrão "ex99", e aí a leitura por nome falha silenciosamente."""
+    jeito que não bate com o padrão "ex99", e aí a leitura por nome falha silenciosamente.
+
+    Emissores estrangeiros em 6-K (ex. Novo Nordisk/NVO) às vezes não têm Exhibit 99 nenhum: o
+    comunicado vem direto no corpo do próprio formulário. Nesse caso (só pra 6-K - o 8-K sempre tem
+    um exhibit separado, então não vale o mesmo risco lá) aceita o documento do tipo "6-K" como
+    alternativa, se não achar nenhum Exhibit 99."""
     html = _get_sec(f"{pasta}/{acc}-index.htm", cab).text
-    candidatos = []
+    candidatos, alternativa_6k = [], None
     for m in re.finditer(r"<tr[^>]*>(.*?)</tr>", html, re.S | re.I):
         celulas = re.findall(r"<td[^>]*>(.*?)</td>", m.group(1), re.S | re.I)
         if len(celulas) < 4:
             continue
         tipo = re.sub(r"<[^>]+>", "", celulas[3]).strip().upper()
-        if not re.match(r"EX-?99", tipo, re.I):
-            continue
         link = re.search(r'href="([^"]+)"', celulas[2])
-        if link:
+        if not link:
+            continue
+        if re.match(r"EX-?99", tipo, re.I):
             candidatos.append((tipo, link.group(1).rsplit("/", 1)[-1]))
-    if not candidatos:
-        return None
-    return next((n for t, n in candidatos if t in ("EX-99.1", "EX-99")), candidatos[0][1])
+        elif form == "6-K" and tipo == "6-K" and alternativa_6k is None:
+            alternativa_6k = link.group(1).rsplit("/", 1)[-1]
+    if candidatos:
+        return next((n for t, n in candidatos if t in ("EX-99.1", "EX-99")), candidatos[0][1])
+    return alternativa_6k
 
 
 def anexo_sec(doc: dict, cab: dict) -> tuple[str, str] | None:
-    """Link e texto do Exhibit 99.1 (press release) de um 8-K/6-K."""
+    """Link e texto do Exhibit 99.1 (press release) de um 8-K/6-K - ou do próprio corpo do 6-K,
+    quando o emissor estrangeiro não usa um exhibit separado (ver _exhibit_99_pela_pagina_indice)."""
     pasta = f"{SEC_ARQUIVOS}/Archives/edgar/data/{int(doc['cik'])}/{doc['acc'].replace('-', '')}"
     try:
-        alvo = _exhibit_99_pela_pagina_indice(pasta, doc["acc"], cab)
+        alvo = _exhibit_99_pela_pagina_indice(pasta, doc["acc"], cab, doc.get("form", ""))
     except Exception as e:  # noqa: BLE001
         log.info("  não consegui ler a página de índice (%s): tento pelo nome do arquivo", e.__class__.__name__)
         alvo = None

@@ -1145,3 +1145,59 @@ def test_anexo_sec_identifica_exhibit_pelo_type_da_pagina_indice(monkeypatch):
     link, texto = fg.anexo_sec(doc, cab={"User-Agent": "x"})
     assert link.endswith("q3fy27pr.htm")
     assert "guidance for the fourth quarter" in texto
+
+
+def test_anexo_sec_6k_sem_exhibit_99_usa_o_corpo_do_formulario(monkeypatch):
+    """Emissores estrangeiros (ex. Novo Nordisk/NVO) às vezes não têm Exhibit 99 separado no 6-K -
+    o comunicado vem direto no corpo do formulário. Sem esse fallback, anexo_sec devolvia None e a
+    leitura falhava silenciosamente, igual ao caso da NVIDIA antes da correção por nome de arquivo."""
+    index_html = """
+    <tr class="evenRow">
+        <td scope="row">1</td>
+        <td scope="row">FORM 6-K</td>
+        <td scope="row"><a href="/Archives/edgar/data/353278/000117184326007156/f6k_110526.htm">f6k_110526.htm</a></td>
+        <td scope="row">6-K</td>
+        <td scope="row">28026</td>
+    </tr>
+    """
+
+    class FakeResp:
+        def __init__(self, text):
+            self.text = text
+
+    def fake_get_sec(url, cab):
+        if url.endswith("-index.htm"):
+            return FakeResp(index_html)
+        assert url.endswith("f6k_110526.htm")
+        return FakeResp("<html><body>Q3 2026 financial results</body></html>")
+
+    monkeypatch.setattr(fg, "_get_sec", fake_get_sec)
+    doc = {"form": "6-K", "data": "2026-11-05", "acc": "0001171843-26-007156", "cik": "0000353278"}
+    link, texto = fg.anexo_sec(doc, cab={"User-Agent": "x"})
+    assert link.endswith("f6k_110526.htm")
+    assert "Q3 2026 financial results" in texto
+
+
+def test_anexo_sec_8k_sem_exhibit_99_nao_usa_o_corpo_como_fallback(monkeypatch):
+    """O fallback pro corpo do formulário só vale pra 6-K: um 8-K sem Exhibit 99 não deve cair pro
+    corpo do próprio 8-K (que normalmente é só o texto-padrão do item, não o press release)."""
+    index_html = """
+    <tr class="evenRow">
+        <td scope="row">1</td>
+        <td scope="row">FORM 8-K</td>
+        <td scope="row"><a href="/Archives/edgar/data/1/000000000000001/form8k.htm">form8k.htm</a></td>
+        <td scope="row">8-K</td>
+        <td scope="row">1000</td>
+    </tr>
+    """
+
+    class FakeResp:
+        def __init__(self, text):
+            self.text = text
+
+        def json(self):
+            return {"directory": {"item": [{"name": "form8k.htm"}]}}
+
+    monkeypatch.setattr(fg, "_get_sec", lambda url, cab: FakeResp(index_html))
+    doc = {"form": "8-K", "data": "2026-11-05", "acc": "0000000000-00-000001", "cik": "1"}
+    assert fg.anexo_sec(doc, cab={"User-Agent": "x"}) is None

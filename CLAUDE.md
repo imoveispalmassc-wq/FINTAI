@@ -136,10 +136,18 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   LPA × ações do Yahoo ÷ receita) mesmo quando dá para estimar: o LPA de guidance costuma ser non-GAAP e as
   ações do Yahoo podem não bater com a base da empresa - mostra só o que a empresa realmente divulgou. Grava
   em utils/guidance_trimestral_eua.json; uma tentativa sem sucesso nunca apaga um valor bom já gravado.
+  O app (não só o robô) também busca ao vivo (`app.outlook_trimestral_eua(ticker)`, cache de 1 dia) quando o
+  robô ainda não gravou nada pro ticker - mesmos padrões de texto, sem API do Claude, pra não depender do
+  próximo ciclo do robô (6 em 6 horas) nem de intervenção manual toda vez que um ticker novo cai nessa mesma
+  situação (sem guidance anual, com trimestral).
   `anexo_sec` (abre o Exhibit 99.1 de um 8-K/6-K) identifica o arquivo certo pela coluna "Type" da página de
   índice da SEC, não só pelo nome do arquivo - correção necessária porque empresas como a NVIDIA nomeiam o
   press release sem o padrão "ex99" (ex.: "q3fy27pr.htm"), e a leitura por nome falhava silenciosamente para
-  elas (isso também melhora a leitura do guidance ANUAL e do contábil, que usam a mesma função).
+  elas (isso também melhora a leitura do guidance ANUAL e do contábil, que usam a mesma função). Emissores
+  estrangeiros em 6-K (ex. Novo Nordisk/NVO) às vezes não têm Exhibit 99 nenhum - o comunicado vem direto no
+  corpo do próprio formulário; nesse caso (só pra 6-K, nunca pra 8-K) aceita o documento do tipo "6-K" como
+  alternativa. Mesmo assim, nem toda empresa dá guidance trimestral (a NVO, por exemplo, só dá guidance
+  ANUAL) - sem achar, o card simplesmente não aparece, como qualquer outro caso sem dado.
   O aviso da fila pública ("ainda não verificado") deixa claro que é do guidance ANUAL ("Guidance ANUAL de
   TICKER ainda não verificado"), para não confundir com o trimestral. Ticker já travado no guidance anual (em
   queue_nao_validado.json) mas com guidance trimestral verificado: em vez do aviso de pendente, mostra uma nota
