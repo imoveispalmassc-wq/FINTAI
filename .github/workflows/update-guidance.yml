@@ -54,6 +54,9 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add $arquivos
             git commit -m "Guidance oficial atualizado automaticamente (CVM/SEC)"
+            # o job pode levar minutos; busca o que entrou no main nesse tempo antes de empurrar
+            git fetch origin main
+            git rebase origin/main
             git push origin HEAD:main
           else
             echo "Nada passou nas 4 travas hoje."
