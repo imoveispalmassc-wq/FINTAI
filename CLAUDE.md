@@ -122,14 +122,19 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Por isso é só informativo, num card separado, sem entrar no P/L nem nas 4 travas do AUTOMÁTICO COM PROTEÇÃO
   (não precisa: não é o número que a tela usa para decidir nada). O robô (`atualizar_outlook_trimestral_eua`,
   rodado pelo workflow todo dia junto com o guidance anual) olha os earnings releases mais recentes de cada
-  ticker dos EUA já em guidance_tickers.json e tenta achar a tabela/lista de "Business Outlook"/"Financial
+  ticker dos EUA já em guidance_tickers.json OU já travado em queue_nao_validado.json (os dois arquivos juntos -
+  é exatamente o caso de empresas como MU e AMD, que não têm guidance anual mas dão trimestral; sem incluir os
+  travados, o card delas nunca apareceria sozinho) e tenta achar a tabela/lista de "Business Outlook"/"Financial
   Outlook" só por padrões de texto (sem API do Claude, sem travas - a faixa extraída é usada tal como está no
   documento, nunca inventada). Reconhece hoje: "guidance for the Nth quarter of year", "'s outlook for the Nth
-  quarter of fiscal year" e "for the fiscal Nth quarter year, we expect"; faixas em "X ± Y", "X to Y" e "X, plus
-  or minus Z%"; margem em "Approximately X%" ou "between X% and Y%" (nesse caso o ponto médio). Nem toda empresa
-  dá guidance de LPA (ex. NVIDIA só dá receita/margem) nem usa um desses formatos (ex. Apple não dá guidance
-  numérico formal) - sem achar um formato reconhecido, o campo correspondente fica "Sem dado" e, sem nada achado,
-  o card simplesmente não aparece (nunca trava o ticker como "não validado": isso é só do guidance ANUAL). Grava
+  quarter of fiscal year", "for the fiscal Nth quarter year, we expect" e "for the Nth quarter of year, EMPRESA
+  expects" (ex.: AMD); faixas em "X ± Y", "X to Y" e "X, plus or minus Z%"; margem em "Approximately X%" ou
+  "between X% and Y%" (nesse caso o ponto médio). Nem toda empresa dá guidance de LPA (ex. NVIDIA e AMD só dão
+  receita/margem) nem usa um desses formatos (ex. Apple não dá guidance numérico formal) - sem achar um formato
+  reconhecido, o campo correspondente fica "Sem dado" e, sem nada achado, o card simplesmente não aparece (nunca
+  trava o ticker como "não validado": isso é só do guidance ANUAL). Não calcula margem líquida por fora (ex.:
+  LPA × ações do Yahoo ÷ receita) mesmo quando dá para estimar: o LPA de guidance costuma ser non-GAAP e as
+  ações do Yahoo podem não bater com a base da empresa - mostra só o que a empresa realmente divulgou. Grava
   em utils/guidance_trimestral_eua.json; uma tentativa sem sucesso nunca apaga um valor bom já gravado.
   `anexo_sec` (abre o Exhibit 99.1 de um 8-K/6-K) identifica o arquivo certo pela coluna "Type" da página de
   índice da SEC, não só pelo nome do arquivo - correção necessária porque empresas como a NVIDIA nomeiam o

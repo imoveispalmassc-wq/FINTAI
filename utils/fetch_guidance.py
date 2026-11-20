@@ -979,7 +979,9 @@ def extrair_eps_eua(texto: str, ano_minimo: int) -> dict | None:
 RE_OUTLOOK_TRI = re.compile(
     r"(?:(?:guidance\s+for\s+the|(?:’s|'s)\s+outlook\s+for\s+the)\s+(first|second|third|fourth)\s+quarter"
     r"\s+of\s+(?:fiscal\s+)?(\d{4}))"
-    r"|(?:for\s+the\s+fiscal\s+(first|second|third|fourth)\s+quarter\s+(\d{4}),?\s+we\s+expect)", re.I)
+    r"|(?:for\s+the\s+fiscal\s+(first|second|third|fourth)\s+quarter\s+(\d{4}),?\s+we\s+expect)"
+    r"|(?:for\s+the\s+(first|second|third|fourth)\s+quarter\s+of\s+(?:fiscal\s+)?(\d{4}),?\s+[A-Z][\w.&]*\s+expects)",
+    re.I)
 _ORDINAL_TRI = {"first": 1, "second": 2, "third": 3, "fourth": 4}
 _NUM_TRI = r"\$?\s*([\d][\d,]*\.?\d*)"
 _ESCALA_TRI = {"billion": 1e9, "million": 1e6}
@@ -1017,10 +1019,10 @@ def _faixa_tri(rotulo: str, texto: str, unidade: bool = False) -> tuple[float, f
 def _margem_tri(texto: str) -> float | None:
     """Margem bruta guiada: um valor único (ex. 'Approximately 86%') ou uma faixa ('between 71% and
     72%'); nesse caso devolve o ponto médio (o card mostra o trecho original para conferência)."""
-    m = re.search(r"[Gg]ross margins?\D{0,30}between\s+([\d.]+)\s*%\s+and\s+([\d.]+)\s*%", texto, re.I)
+    m = re.search(r"[Gg]ross margins?\D{0,45}between\s+([\d.]+)\s*%\s+and\s+([\d.]+)\s*%", texto, re.I)
     if m:
         return round((float(m.group(1)) + float(m.group(2))) / 2, 2)
-    m = re.search(r"[Gg]ross margins?\D{0,30}([\d.]+)\s*%", texto, re.I)
+    m = re.search(r"[Gg]ross margins?\D{0,45}([\d.]+)\s*%", texto, re.I)
     return float(m.group(1)) if m else None
 
 
@@ -1039,7 +1041,7 @@ def extrair_outlook_trimestral_eua(texto: str) -> dict | None:
     m = RE_OUTLOOK_TRI.search(texto)
     if not m:
         return None
-    ordinal, ano_txt = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+    ordinal, ano_txt = next((m.group(i), m.group(i + 1)) for i in (1, 3, 5) if m.group(i))
     tri, ano = _ORDINAL_TRI[ordinal.lower()], int(ano_txt)
     janela = texto[m.end(): m.end() + 2000]   # a tabela/lista de outlook vem logo depois do título
     receita = _faixa_tri(r"Revenue", janela, unidade=True)
@@ -1057,13 +1059,17 @@ def atualizar_outlook_trimestral_eua(tickers: list[str] | None = None, *, cabeca
                                      buscar_cik=cik_do_ticker, buscar_docs=documentos_sec,
                                      ler_anexo=anexo_sec, max_docs: int = 3) -> dict[str, dict]:
     """Guidance TRIMESTRAL (receita, margem, LPA do próximo trimestre) de cada ticker dos EUA já
-    cadastrado em guidance_tickers.json - só informativo (ver extrair_outlook_trimestral_eua: não
-    participa do P/L nem do selo GUIDANCE OFICIAL). Olha os `max_docs` earnings releases mais
-    recentes de cada ticker até achar um com a tabela de outlook; sem achar em nenhum, mantém o que
-    já estava gravado (uma tentativa sem sucesso nunca apaga um valor bom). Grava em
+    cadastrado em guidance_tickers.json OU já travado em queue_nao_validado.json (sem guidance ANUAL
+    confirmado) - só informativo (ver extrair_outlook_trimestral_eua: não participa do P/L nem do
+    selo GUIDANCE OFICIAL). Inclui os travados de propósito: é exatamente o caso de empresas como a
+    MU e a AMD, que não têm guidance anual mas dão guidance trimestral a cada earnings release -
+    sem isso, o card trimestral delas nunca apareceria sozinho. Olha os `max_docs` earnings releases
+    mais recentes de cada ticker até achar um com a tabela de outlook; sem achar em nenhum, mantém o
+    que já estava gravado (uma tentativa sem sucesso nunca apaga um valor bom). Grava em
     utils/guidance_trimestral_eua.json e devolve a tabela completa (gravada ou não)."""
     if tickers is None:
-        tickers = [t.strip().upper() for t in _ler_json(ARQ_TICKERS, [])
+        candidatos = set(_ler_json(ARQ_TICKERS, [])) | set(_ler_json(ARQ_NAO_VALIDADO, {}))
+        tickers = [t.strip().upper() for t in candidatos
                    if not re.fullmatch(r"(?=.*[A-Z])[A-Z0-9]{4}\d{1,2}", t.strip().upper())]
     tab = _ler_json(ARQ_OUTLOOK_TRI, {})
     cab = cabecalho()

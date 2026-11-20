@@ -1,4 +1,16 @@
 {
+  "AMD": {
+    "periodo": "4T FY2026",
+    "receita_min": 16489999999.999998,
+    "receita_max": 17510000000.0,
+    "margem_bruta": 55.0,
+    "lpa_min": null,
+    "lpa_max": null,
+    "trecho": "For the fourth quarter of 2026, AMD expects revenue to be approximately $17 billion, plus or minus 3%. The mid-point of the revenue range represents year-over-year growth of approximately 66% and a sequential increase of approximately 27%. Non-GAAP gross margin is expected to be approximately 55%. AMD Teleconference AMD will hold a conferenc",
+    "fonte": "ADVANCED MICRO DEVICES INC, Form 8-K Exhibit 99.1 de 03/11/2026 (SEC)",
+    "data": "03/11/2026",
+    "url": "https://www.sec.gov/Archives/edgar/data/2488/000000248826000188/q32026991.htm"
+  },
   "MU": {
     "periodo": "1T FY2027",
     "receita_min": 60000000000.0,

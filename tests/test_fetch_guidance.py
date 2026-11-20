@@ -1037,6 +1037,28 @@ def test_outlook_trimestral_panw_faixa_com_to_e_rotulo_non_gaap():
     assert r["lpa_min"] == 1.01 and r["lpa_max"] == 1.03
 
 
+TEXTO_OUTLOOK_AMD = (
+    "Current Outlook AMD's outlook statements are based on current expectations. The following "
+    "statements are forward-looking and actual results could differ materially depending on market "
+    "conditions and the factors set forth under “Cautionary Statement” below. For the fourth "
+    "quarter of 2026, AMD expects revenue to be approximately $17 billion, plus or minus 3%. The "
+    "mid-point of the revenue range represents year-over-year growth of approximately 66% and a "
+    "sequential increase of approximately 27%. Non-GAAP gross margin is expected to be approximately "
+    "55%. AMD Teleconference AMD will hold a conference call"
+)
+
+
+def test_outlook_trimestral_amd_rotulo_empresa_expects_sem_fiscal():
+    """AMD usa 'For the Nth quarter of YEAR, AMD expects' - sem a palavra 'fiscal' e sem 'we expect',
+    diferente de MU/NVDA/PANW; e a margem vem mais longe do rótulo ('is expected to be approximately')."""
+    r = fg.extrair_outlook_trimestral_eua(TEXTO_OUTLOOK_AMD)
+    assert r["periodo"] == "4T FY2026"
+    assert r["receita_min"] == pytest.approx(16_490_000_000.0, rel=1e-6)
+    assert r["receita_max"] == pytest.approx(17_510_000_000.0, rel=1e-6)
+    assert r["margem_bruta"] == 55.0
+    assert r["lpa_min"] is None and r["lpa_max"] is None
+
+
 def test_outlook_trimestral_sem_guidance_devolve_none():
     assert fg.extrair_outlook_trimestral_eua("Nada de guidance aqui, só resultados do trimestre passado.") is None
 
@@ -1063,6 +1085,32 @@ def test_atualizar_outlook_trimestral_eua_grava_quando_acha(tmp_path, monkeypatc
         ler_anexo=lambda doc, cab: ("http://x", TEXTO_OUTLOOK_MU))
     assert tab["MU"]["periodo"] == "1T FY2027"
     assert json.loads(arq.read_text(encoding="utf-8"))["MU"]["periodo"] == "1T FY2027"
+
+
+def test_atualizar_outlook_trimestral_eua_inclui_travados_sem_guidance_anual(tmp_path, monkeypatch):
+    """MU e AMD não têm guidance anual (ficam em queue_nao_validado.json) mas dão guidance
+    trimestral - o robô precisa olhar os dois arquivos (cadastrados + travados), não só
+    guidance_tickers.json, senão o card trimestral deles nunca apareceria sozinho."""
+    arq_tickers = tmp_path / "guidance_tickers.json"
+    arq_tickers.write_text('["AAPL"]', encoding="utf-8")
+    arq_nao_validado = tmp_path / "queue_nao_validado.json"
+    arq_nao_validado.write_text('{"MU": {"motivo": "sem guidance", "data": "20/11/2026"}}', encoding="utf-8")
+    arq_outlook = tmp_path / "guidance_trimestral_eua.json"
+    monkeypatch.setattr(fg, "ARQ_TICKERS", arq_tickers)
+    monkeypatch.setattr(fg, "ARQ_NAO_VALIDADO", arq_nao_validado)
+    monkeypatch.setattr(fg, "ARQ_OUTLOOK_TRI", arq_outlook)
+    vistos = []
+
+    def fake_buscar_cik(t, cab):
+        vistos.append(t)
+        return ("0000723125", "Micron Technology, Inc.") if t == "MU" else None
+
+    tab = fg.atualizar_outlook_trimestral_eua(
+        cabecalho=lambda: {"User-Agent": "x"}, buscar_cik=fake_buscar_cik,
+        buscar_docs=lambda cik, cab: [{"form": "8-K", "data": "2026-09-30", "acc": "1", "cik": cik}],
+        ler_anexo=lambda doc, cab: ("http://x", TEXTO_OUTLOOK_MU))
+    assert set(vistos) == {"AAPL", "MU"}   # os dois arquivos foram combinados
+    assert tab["MU"]["periodo"] == "1T FY2027"
 
 
 def test_anexo_sec_identifica_exhibit_pelo_type_da_pagina_indice(monkeypatch):
