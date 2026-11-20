@@ -237,6 +237,14 @@ def _pontos_anuais(serie) -> list[tuple[int, float]]:
     return [(int(ts.year), float(v)) for ts, v in s.items()][-4:]
 
 
+def _media_n_anos(pontos: list[tuple[int, float]], n: int) -> float | None:
+    """Média simples do LPA dos últimos n anos; None se o Yahoo não tiver os n anos (nunca estende
+    com menos anos do que o pedido, nem mistura com dado trimestral)."""
+    if len(pontos) < n:
+        return None
+    return sum(v for _, v in pontos[-n:]) / n
+
+
 def _estimativa(df, linhas, coluna):
     """Crescimento estimado pelos analistas (fração no Yahoo -> %). Devolve (valor, linha usada)."""
     if df is None or getattr(df, "empty", True) or coluna not in df.columns:
@@ -400,10 +408,16 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
     quebrou, motivo = fundamento_quebrou(f["lucros"], f["dl_ebitda"])
     # direção da tendência: só a posição do preço em relação à média de 200 dias
     direcao = "—" if r.mm200 is None else ("Alta" if r.preco_atual > r.mm200 else "Baixa")
-    lpa_anos = _pontos_anuais(d.get("lpa_anual"))[-3:]
+    pontos_lpa = _pontos_anuais(d.get("lpa_anual"))
+    lpa_anos = pontos_lpa[-3:]
     regra = regra_prejuizo([v for _, v in lpa_anos])
     lpa_media_3a = regra["media"] if regra["status"] in ("ok", "excluido") else None
     graham = graham_duas_versoes(f["lpa"], lpa_media_3a, f["vpa"])
+    # médias de 5 e 10 anos: mesma fonte anual do Yahoo, sem estender com dado trimestral; "Sem dado"
+    # quando o Yahoo não tem os anos pedidos (ele costuma trazer só ~4 anos de demonstrativo anual)
+    lpa_media_5a, lpa_media_10a = _media_n_anos(pontos_lpa, 5), _media_n_anos(pontos_lpa, 10)
+    pl_conservador = r.preco_atual / lpa_media_10a if lpa_media_10a and lpa_media_10a > 0 and r.preco_atual else None
+    teto_conservador = lpa_media_10a * 15 if lpa_media_10a and lpa_media_10a > 0 else None
     estado = decidir_estado(
         r.percentil, r.minimo_1a, r.maximo_1a,
         compra_validada=bool(bt5 and bt5["compraValidada"]),
@@ -461,6 +475,8 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "mm200": _n(r.mm200, 4), "tendencia": direcao, "forca": _n(r.ifr, 0),
         "lpaAnos": [{"ano": a, "lpa": _n(v, 4)} for a, v in lpa_anos],
         "regra": {"status": regra["status"], "media": _n(regra["media"], 4), "mensagem": regra["mensagem"]},
+        "lpaMedia5a": _n(lpa_media_5a, 4), "lpaMedia10a": _n(lpa_media_10a, 4),
+        "plConservador": _n(pl_conservador, 2), "tetoConservador": _n(teto_conservador, 2),
         "lynch": lynch,
         "guidance": guia, "consensoAno": consenso_ano,
         "guidanceInicial": _inicial(curto, guia, lpa_anos, r, f["acoes"]),

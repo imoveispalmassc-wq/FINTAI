@@ -346,9 +346,9 @@ body { margin: 0; background: var(--bg); font-family: var(--corpo); }
   <div class="modo-linha">
     <h2 class="visao-t">Visão geral</h2>
     <div class="modos" role="group" aria-label="Modo de análise">
-      <button data-modo="graham" aria-pressed="true">GRAHAM</button>
-      <button data-modo="lynch" aria-pressed="false">LYNCH</button>
-      <button data-modo="simons" aria-pressed="false">SIMONS</button>
+      <button data-modo="graham" aria-pressed="true">CONSERVADOR</button>
+      <button data-modo="lynch" aria-pressed="false">CRESCIMENTO</button>
+      <button data-modo="simons" aria-pressed="false">QUANTITATIVO</button>
     </div>
   </div>
   <section id="grafico"></section>
@@ -427,7 +427,7 @@ function montar(root, d) {
     : p > 92 ? 'left:auto;right:0;transform:none;text-align:right' : `left:${p}%`;
   const dy = tem(d.dividendo) && d.preco ? d.dividendo / d.preco * 100 : null;
   const naoPagadora = tem(dy) && dy < 0.5;
-  const metodosJusto = [['Graham', d.graham], ['P/L histórico', d.justoPL]]
+  const metodosJusto = [['Conservador', d.graham], ['P/L histórico', d.justoPL]]
     .concat(naoPagadora ? [] : [['Bazin', d.bazin]]).filter(m => tem(m[1]) && m[1] > 0).sort((a, b) => a[1] - b[1]);
 
   /* ---------------- folha "Ver como calculamos" */
@@ -476,13 +476,13 @@ function montar(root, d) {
       // Lynch só pela MM200 (ignora a faixa 30/70): oportunidade de -10% a +5%, neutro até +15%, caro acima
       const LP = d.lynch.preco, e = LP || fx.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
       classe = e.codigo === 'COMPRAR' ? (LP || e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
-      alerta = LP ? `Preço ${sinal(LP.dist, 1)} da média de 200 dias (${din(LP.mm200)}). Lynch: oportunidade de ${din(LP.bemAbaixoAte)} a ${din(LP.oportunidadeAte)} (MM200 −10% a +5%), neutro até ${din(LP.caroAcima)}, caro acima.${LP.zona === 'Bem abaixo da MM200' ? ' Hoje está bem abaixo da MM200 (mais de 10%).' : ''}` : (e.alerta || '');
+      alerta = LP ? `Preço ${sinal(LP.dist, 1)} da média de 200 dias (${din(LP.mm200)}). Oportunidade de ${din(LP.bemAbaixoAte)} a ${din(LP.oportunidadeAte)} (MM200 −10% a +5%), neutro até ${din(LP.caroAcima)}, caro acima.${LP.zona === 'Bem abaixo da MM200' ? ' Hoje está bem abaixo da MM200 (mais de 10%).' : ''}` : (e.alerta || '');
       const zona = LP && LP.zona === 'Bem abaixo da MM200' ? 'faixa Bem abaixo da MM200' : { COMPRAR: 'Zona de Oportunidade', AGUARDAR: 'Zona Neutra', CARO: 'Zona Cara' }[e.codigo];
       const conclusao = v.cor === 'verde'
-        ? (e.codigo === 'COMPRAR' ? 'Lynch aprova o crescimento e o preço está na Zona de Oportunidade.'
-          : `Lynch aprova o crescimento, mas o preço está na ${zona}. Por isso: AGUARDAR.`)
-        : v.cor === 'amarelo' ? `Lynch fica de olho no crescimento, e o preço está na ${zona}.${e.codigo === 'COMPRAR' ? '' : ' Por isso: AGUARDAR.'}`
-        : v.cor === 'vermelho' ? `Lynch não compra pelo crescimento, qualquer que seja o preço. O preço está na ${zona}.`
+        ? (e.codigo === 'COMPRAR' ? 'Crescimento aprovado e o preço está na Zona de Oportunidade.'
+          : `Crescimento aprovado, mas o preço está na ${zona}. Por isso: AGUARDAR.`)
+        : v.cor === 'amarelo' ? `Fica de olho no crescimento, e o preço está na ${zona}.${e.codigo === 'COMPRAR' ? '' : ' Por isso: AGUARDAR.'}`
+        : v.cor === 'vermelho' ? `Não compra pelo crescimento, qualquer que seja o preço. O preço está na ${zona}.`
         : `Sem PEG para avaliar o crescimento. O preço está na ${zona}.`;
       const stV = { verde: 'bom', vermelho: 'ruim' }[v.cor] || 'neutro';
       extra = `<div class="lynch-linha"><span class="st ${stV}">${v.titulo}</span>${ex('lucroLongo') || ex('receitaProx')}
@@ -1027,7 +1027,7 @@ function montar(root, d) {
     // série trimestral em outra base (ex.: lucro ajustado x contábil): mesma tolerância de 10% do P/L médio
     const outraBase = trimestral && tem(d.lpa) && d.lpa > 0 && tem(d.lpaAgora) && Math.abs(d.lpaAgora / d.lpa - 1) > 0.10;
     const rotL = trimestral ? [outraBase ? 'Atual (ajustado)' : 'Atual', '12m atrás'] : ['Ano fiscal', 'Ano anterior'];
-    const notaBase = outraBase ? ` Os dois valores são do lucro por ação trimestral do Yahoo (lucro ajustado), na mesma base, então a comparação vale. O LPA usado no P/L e no Graham é o contábil, ${din(d.lpa)}.` : '';
+    const notaBase = outraBase ? ` Os dois valores são do lucro por ação trimestral do Yahoo (lucro ajustado), na mesma base, então a comparação vale. O LPA usado no P/L e no Conservador é o contábil, ${din(d.lpa)}.` : '';
     const fraseL = !tem(difLPA) ? 'O Yahoo Finance não traz o histórico de lucros deste ativo.'
       : `O lucro por ação ${difLPA >= 0 ? 'cresceu' : 'caiu'} de ${din(d.lpa12Atras)} para ${din(lpaAtual)} ${trimestral ? 'em relação a 12 meses atrás' : 'de um ano fiscal para o outro'}. Base: ${d.baseLpa}.${notaBase}`;
 
@@ -1094,20 +1094,20 @@ function montar(root, d) {
   })($('fundamentos'));
 
   /* ---------------- preço justo */
-  // aviso do Graham: lucro de 12 meses abaixo de 60% da média de 3 anos
+  // aviso do Conservador: lucro de 12 meses abaixo de 60% da média de 3 anos
   const avisoGraham = !d.grahamAviso ? ''
     : d.grahamBase === 'atual'
-      ? 'Lucro atual 40%+ abaixo da média de 3 anos. Estamos usando o Graham mais conservador (lucro atual). Se usasse a média, o valor seria otimista.'
-      : 'Lucro dos últimos 12 meses negativo: o Graham do lucro atual não se aplica e só resta a média de 3 anos, que pode estar otimista.';
+      ? 'Lucro atual 40%+ abaixo da média de 3 anos. Estamos usando o cálculo mais conservador (lucro atual). Se usasse a média, o valor seria otimista.'
+      : 'Lucro dos últimos 12 meses negativo: o cálculo do lucro atual não se aplica e só resta a média de 3 anos, que pode estar otimista.';
   (function FairPrice(el) {
     const m = metodosJusto, t0 = v => f(Math.round(v), 0);
-    const linhaGraham = !tem(d.graham) ? '' : `<div class="nota num" style="margin:-4px 0 10px">Graham usa o menor de dois valores: ${tem(d.grahamAtual) ? `lucro de 12 meses ${din(d.grahamAtual)}` : 'lucro de 12 meses não se aplica'} · ${tem(d.grahamMedia) ? `média de 3 anos ${din(d.grahamMedia)}` : 'média de 3 anos não se aplica'}.</div>
+    const linhaGraham = !tem(d.graham) ? '' : `<div class="nota num" style="margin:-4px 0 10px">Conservador usa o menor de dois valores: ${tem(d.grahamAtual) ? `lucro de 12 meses ${din(d.grahamAtual)}` : 'lucro de 12 meses não se aplica'} · ${tem(d.grahamMedia) ? `média de 3 anos ${din(d.grahamMedia)}` : 'média de 3 anos não se aplica'}.</div>
           ${avisoGraham ? `<div class="aviso" style="margin:0 0 10px">${avisoGraham}</div>` : ''}`;
     const formulas = () => `
-      <p><b>Graham</b>: calculado com dois lucros por ação; vale o <b>menor</b> valor.</p>
+      <p><b>Conservador</b>: calculado com dois lucros por ação; vale o <b>menor</b> valor.</p>
       ${tem(d.grahamAtual) ? `<code>Atual: √(22,5 × LPA 12 meses ${f(d.lpa)} × VPA ${f(d.vpa)}) = ${f(d.grahamAtual)}</code>` : `<p>Atual: não se aplica (${tem(d.lpa) && d.lpa <= 0 ? 'lucro dos últimos 12 meses negativo' : 'sem lucro ou patrimônio no Yahoo'}).</p>`}
       ${tem(d.grahamMedia) ? `<code>Média 3 anos: √(22,5 × LPA médio ${f(d.lpaMedio3a)} × VPA ${f(d.vpa)}) = ${f(d.grahamMedia)}</code>` : `<p>Média 3 anos: não se aplica (${d.regra && d.regra.status === 'recorrente' ? 'prejuízo em 2 ou mais dos últimos 3 anos' : 'sem lucro anual no Yahoo'}).</p>`}
-      ${tem(d.graham) ? `<p>Usado: <b>${din(d.graham)}</b> (${d.grahamBase === 'media' ? 'média de 3 anos' : 'lucro dos últimos 12 meses'}).</p>` : '<p>Graham não se aplica a este ativo.</p>'}
+      ${tem(d.graham) ? `<p>Usado: <b>${din(d.graham)}</b> (${d.grahamBase === 'media' ? 'média de 3 anos' : 'lucro dos últimos 12 meses'}).</p>` : '<p>Conservador não se aplica a este ativo.</p>'}
       ${avisoGraham ? `<p>${avisoGraham}</p>` : ''}
       ${tem(d.justoPL) ? `<p><b>P/L histórico</b></p><code>P/L médio de ${f(d.plHistAnos, 1)} anos ${f(d.plHistorico)} × LPA ${f(d.lpa)} = ${f(d.justoPL)}</code>` : '<p><b>P/L histórico:</b> sem histórico de lucros suficiente no Yahoo Finance.</p>'}
       ${tem(d.bazin) ? `<p><b>Preço-teto Bazin</b></p><code>Dividendo médio 5 anos ${f(d.divMedio5)} / 6% = ${f(d.bazin)}</code>
@@ -1375,10 +1375,17 @@ function montar(root, d) {
       const divG = G && tem(G.dividendo) ? (G.dividendoFonte === 'empresa' ? ` Dividendo anual divulgado pela empresa: ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`
         : ` Dividendo projetado: ${din(G.lpa)} × payout ${f(G.payout * 100, 0)}% = ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`) : '';
       const linhaProj = anoProj ? `<div class="proj"><span>${anoProj} <span class="tag-proj">${G ? 'guidance' : 'projeção'}</span>${ex('lpaEsteAno')}</span><b>${tem(proj) ? din(proj) : 'Sem estimativa'}</b></div>` : '';
+      // médias mais longas (mesma fonte anual do Yahoo; "Sem dado" quando ele não tem os anos pedidos)
+      // e, só no Conservador, o P/L e o preço teto sobre a média de 10 anos
+      const linhasLongas = `<div>Média 5 anos<b>${tem(d.lpaMedia5a) ? din(d.lpaMedia5a) : 'Sem dado'}</b></div>`
+        + `<div>Média 10 anos<b>${tem(d.lpaMedia10a) ? din(d.lpaMedia10a) : 'Sem dado'}</b></div>`
+        + `<div>P/L Conservador<b>${tem(d.plConservador) ? f(d.plConservador) : 'Sem dado'}</b></div>`
+        + `<div>Preço teto conservador<b>${tem(d.tetoConservador) ? din(d.tetoConservador) : 'Sem dado'}</b></div>`;
       el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>
         <div class="card">${G ? `<div style="margin-bottom:10px"><span class="selo ok">GUIDANCE OFICIAL · ${G.data}</span>
           <div class="nota" style="margin-top:6px">Fonte: ${G.url ? `<a class="link" href="${G.url}" target="_blank" rel="noopener" id="g-fonte"></a>` : '<span id="g-fonte"></span>'}</div></div>` : ''}${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}${linhaProj}</div>` : ''}
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
+          <div class="lista-v num" style="margin-top:10px">${linhasLongas}</div>
           <div class="nota" id="g-nota"></div></div>`;
       if (G) { const fz = el.querySelector('#g-fonte'); if (fz) fz.textContent = G.fonte; }
       el.querySelector('#g-nota').textContent = `${nota}${anoProj ? ` ${tem(proj) ? `Projeção ${anoProj}: ${consenso}${tem(varProj) ? `; ${sinal(varProj, 0)} sobre ${anos[anos.length - 1].ano}${G && G.porLpa ? ' (o guidance é LPA ajustado; o ano anterior é o LPA contábil do Yahoo, bases diferentes)' : ''}` : ''}.${divG}${baseG} Não entra na média.${G ? ' O guidance oficial substitui o consenso dos analistas do Yahoo.' : ''}` : `Sem estimativa no Yahoo para ${anoProj}.`}` : ''}`;
@@ -1405,7 +1412,7 @@ function montar(root, d) {
           <div class="card"><span class="rot">Passado</span><div class="nota">Últimos 3 anos · lucro por ação de cada ano</div>
             ${lpas ? `<div class="lista-v num">${lpas}${media}</div>` : `<div class="nota" style="margin-top:8px">Sem dado</div>`}
             ${rg.status === 'excluido' ? '<div class="destaque">Ano de prejuízo excluído</div>' : ''}
-            ${rg.status === 'recorrente' ? '<div class="destaque" style="color:var(--vermelho)">Sem PEG - Lynch não compra empresa sem lucro</div>' : ''}
+            ${rg.status === 'recorrente' ? '<div class="destaque" style="color:var(--vermelho)">Sem PEG - não compra empresa sem lucro</div>' : ''}
             <div class="lista-v num" style="margin-bottom:0"><div>Lucro${L.passado.anosLucro ? ` (em ${L.passado.anosLucro} ${L.passado.anosLucro === 1 ? 'ano' : 'anos'})` : ''}<b>${cresc(L.passado.lucro, L.passado.anosLucro)}</b></div><div>Receita${L.passado.anosReceita ? ` (em ${L.passado.anosReceita} ${L.passado.anosReceita === 1 ? 'ano' : 'anos'})` : ''}<b>${cresc(L.passado.receita, L.passado.anosReceita)}</b></div></div>
             ${[L.passado.lucro, L.passado.receita].some(x => tem(x) && x > 100) ? '<div class="nota" style="margin-top:8px">Base inicial muito baixa: o valor multiplicou no período, e o crescimento ao ano não serve para comparar.</div>' : ''}
           </div>

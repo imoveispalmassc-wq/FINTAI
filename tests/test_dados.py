@@ -267,3 +267,13 @@ def test_indicador_de_atualizacao_do_contabil_b3():
     c2 = {**c, "atualizado_em": "31/12 08:05"}
     assert atualizacao_contabil(c2, dt.datetime(2027, 1, 1, 9, 0, tzinfo=br))["iso"].startswith("2026-12-31")
     assert atualizacao_contabil({"status": "ok"}) is None and atualizacao_contabil(None) is None
+
+
+def test_media_n_anos_so_calcula_com_anos_suficientes():
+    from tela.dados import _media_n_anos
+    pontos = [(2021, 1.0), (2022, 2.0), (2023, 3.0), (2024, 4.0)]   # só 4 anos (limite comum do Yahoo)
+    assert _media_n_anos(pontos, 3) == pytest.approx(3.0)           # (2+3+4)/3
+    assert _media_n_anos(pontos, 4) == pytest.approx(2.5)
+    assert _media_n_anos(pontos, 5) is None                         # não tem 5 anos: nunca estende
+    assert _media_n_anos(pontos, 10) is None
+    assert _media_n_anos([], 3) is None
