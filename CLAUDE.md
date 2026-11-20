@@ -135,6 +135,11 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   índice da SEC, não só pelo nome do arquivo - correção necessária porque empresas como a NVIDIA nomeiam o
   press release sem o padrão "ex99" (ex.: "q3fy27pr.htm"), e a leitura por nome falhava silenciosamente para
   elas (isso também melhora a leitura do guidance ANUAL e do contábil, que usam a mesma função).
+  O aviso da fila pública ("ainda não verificado") deixa claro que é do guidance ANUAL ("Guidance ANUAL de
+  TICKER ainda não verificado"), para não confundir com o trimestral. Ticker já travado no guidance anual (em
+  queue_nao_validado.json) mas com guidance trimestral verificado: em vez do aviso de pendente, mostra uma nota
+  diferente ("Guidance ANUAL de TICKER não encontrado ... a empresa só dá guidance trimestral. Guidance
+  trimestral verificado abaixo") - não é um dado faltando, é a empresa que não dá guidance anual.
 - Contábil 12 meses (B3): tickers de utils/contabil_br_config.json (linha do lucro e nome da fonte; hoje só BBAS3, linha
   "Lucro Líquido Ajustado", fonte "BB, Divulgação de Resultados, Lucro Líquido Ajustado"). O robô lê o release de
   resultados de cada trimestre na CVM (trimestre = o último encerrado antes da entrega), extrai o lucro do trimestre

@@ -329,12 +329,13 @@ def pacote(ticker: str, versao: str = "") -> dict:
 # ------------------------------------------------------------ fila pública de tickers novos
 ARQ_GUIDANCE_TICKERS = Path(__file__).parent / "utils" / "guidance_tickers.json"
 ARQ_NAO_VALIDADO = Path(__file__).parent / "utils" / "queue_nao_validado.json"
+ARQ_OUTLOOK_TRI = Path(__file__).parent / "utils" / "guidance_trimestral_eua.json"
 
 
 @st.cache_data(ttl=900, show_spinner=False)   # mesmo ritmo do robô: recarrega a cada deploy/restart
-def _estado_fila() -> tuple[set[str], set[str]]:
-    """(tickers já cadastrados, tickers já tentados e não validados) — os dois arquivos são gravados
-    só pelo robô via GitHub Actions; o app só lê."""
+def _estado_fila() -> tuple[set[str], set[str], set[str]]:
+    """(tickers já cadastrados, tickers já tentados e não validados, tickers com guidance TRIMESTRAL
+    verificado) — os três arquivos são gravados só pelo robô via GitHub Actions; o app só lê."""
     def ler(caminho, padrao):
         try:
             return json.loads(caminho.read_text(encoding="utf-8"))
@@ -342,7 +343,8 @@ def _estado_fila() -> tuple[set[str], set[str]]:
             return padrao
     registrados = {t.upper() for t in ler(ARQ_GUIDANCE_TICKERS, [])}
     nao_validados = {t.upper() for t in ler(ARQ_NAO_VALIDADO, {})}
-    return registrados, nao_validados
+    com_trimestral = {t.upper() for t in ler(ARQ_OUTLOOK_TRI, {})}
+    return registrados, nao_validados, com_trimestral
 
 
 @st.cache_data(ttl=3600, show_spinner=False)   # 1 pedido por ticker novo por hora (por instância do app)
@@ -354,13 +356,20 @@ def _pedir_na_fila(ticker_curto: str) -> bool:
 
 def aviso_guidance_pendente(ticker: str) -> None:
     """Ticker com preço válido do Yahoo, mas ainda fora de guidance_tickers.json e de
-    queue_nao_validado.json: mostra o aviso e registra o pedido na fila (Issues do GitHub) — uma
-    vez só por ticker por sessão, e no máximo uma chamada à API por hora por instância do app."""
+    queue_nao_validado.json: mostra o aviso (do guidance ANUAL) e registra o pedido na fila (Issues
+    do GitHub) — uma vez só por ticker por sessão, e no máximo uma chamada à API por hora por
+    instância do app. Ticker já travado (sem guidance anual) mas com guidance TRIMESTRAL verificado:
+    mostra uma nota explicando (não é um dado pendente, é a empresa que só dá guidance trimestral)."""
     curto_t = curto(ticker)
-    registrados, nao_validados = _estado_fila()
-    if curto_t in registrados or curto_t in nao_validados:
+    registrados, nao_validados, com_trimestral = _estado_fila()
+    if curto_t in registrados:
         return
-    st.info(f"🕒 Guidance de {curto_t} ainda não verificado — vamos checar hoje à noite.", icon="🕒")
+    if curto_t in nao_validados:
+        if curto_t in com_trimestral:
+            st.info(f"ℹ️ Guidance ANUAL de {curto_t} não encontrado nos comunicados oficiais — a empresa só dá "
+                    "guidance trimestral. Guidance trimestral verificado abaixo.", icon="ℹ️")
+        return
+    st.info(f"🕒 Guidance ANUAL de {curto_t} ainda não verificado — vamos checar hoje à noite.", icon="🕒")
     pedidos = st.session_state.setdefault("_fila_pedidos", set())
     if curto_t not in pedidos:
         pedidos.add(curto_t)
