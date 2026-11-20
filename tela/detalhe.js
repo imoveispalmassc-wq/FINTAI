@@ -428,10 +428,14 @@ function montar(root, d) {
     const p = posicao(d.preco, fx.min, fx.max), larg = fx.max - fx.min;
     const aBruto = larg > 0 ? (zO - fx.min) / larg * 100 : 30, bBruto = larg > 0 ? (zC - fx.min) / larg * 100 : 70;
     const a = Math.max(0, Math.min(100, aBruto)), b = Math.max(a, Math.min(100, bBruto));
+    // 2ª referência, só visual (não muda a decisão): ponto de oportunidade pela faixa clássica de
+    // 52 semanas (mínima + 30%), marcado num verde mais claro na mesma barra
+    const tem52 = C && tem(C.oportunidade52);
+    const a52 = tem52 && larg > 0 ? Math.max(0, Math.min(100, (C.oportunidade52 - fx.min) / larg * 100)) : null;
     const fundo = `linear-gradient(90deg,var(--verde) 0 ${a}%,var(--ardosia) ${a}% ${b}%,var(--ambar) ${b}% 100%)`;
     const titulo = C ? `Valuation (LPA médio de ${C.anosUsados} ${C.anosUsados === 1 ? 'ano' : 'anos'} × VPA)` : fx.rotulo;
     const nota = C
-      ? `Preço teto (margem de segurança de 30%): ${din(C.teto)}${C.numeroGraham ? ' (Número de Graham)' : ''}.${C.aviso ? ` ${C.aviso}.` : ''}${C.seloIncompleta ? ` ${C.seloIncompleta}.` : ''} A barra mostra só onde o preço está dentro do período escolhido (1A, 5A ou Máx.); os cortes de oportunidade/neutra/cara vêm do valuation, não do período.`
+      ? `Preço teto (margem de segurança de 30%): ${din(C.teto)}${C.numeroGraham ? ' (Número de Graham)' : ''}.${C.aviso ? ` ${C.aviso}.` : ''}${C.seloIncompleta ? ` ${C.seloIncompleta}.` : ''} A barra mostra só onde o preço está dentro do período escolhido (1A, 5A ou Máx.); os cortes de oportunidade/neutra/cara vêm do valuation, não do período.${tem52 ? ` O traço mais claro é só uma referência: oportunidade pela faixa clássica de 52 semanas (mínima + 30%), ${din(C.oportunidade52)} — não entra na decisão.` : ''}`
       : `Mínima e máxima ${fx.curto === '52 semanas' ? 'das últimas 52 semanas' : fx.curto === 'todo o histórico' ? 'de todo o histórico' : `dos últimos ${fx.curto}`} nas pontas da barra. A faixa acompanha o período do gráfico (1A, 5A ou Máx.).`;
     el.innerHTML = `<h2>Faixa de preço <small>${titulo}</small></h2>
       <div class="pilha">
@@ -445,10 +449,13 @@ function montar(root, d) {
             <span style="color:var(--ambar)"><b>Cara</b></span>
           </div>
           <div class="marca-cima limites num">
-            <span class="esq">${f(fx.min)}</span><span style="left:${a}%">${f(zO)}</span>
+            <span class="esq">${f(fx.min)}</span>
+            ${a52 !== null ? `<span style="left:${a52}%;color:var(--verde-claro)">${f(C.oportunidade52)}</span>` : ''}
+            <span style="left:${a}%">${f(zO)}</span>
             <span style="left:${b}%">${f(zC)}</span><span class="dir">${f(fx.max)}</span>
           </div>
           <div class="regua" style="background:${fundo};margin-top:4px">
+            ${a52 !== null ? `<span class="traco" style="left:${a52}%;background:var(--verde-claro)"></span>` : ''}
             <span class="traco" style="left:${a}%"></span><span class="traco" style="left:${b}%"></span>
             <span class="bola" style="left:${p}%"></span>
           </div>

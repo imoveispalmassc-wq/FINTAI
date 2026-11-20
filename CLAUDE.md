@@ -140,12 +140,17 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Sem VPA (mas com o LPA médio): Teto = LPA médio × 15, aviso "Sem VPA, teto por P/L 15". Sem LPA médio: sem
   teto - a tela cai para a faixa de 52 semanas como alternativa visual, com aviso; nunca tem teste histórico
   ("SEM TESTE"), mesmo quando o valuation está disponível. A regra do LPA médio da Faixa é diferente da do card
-  de Lucro por ação: a Faixa não exige 10 anos completos - com 3 ou mais anos em `_pontos_anuais`, usa a média
-  de todos os anos disponíveis, com o aviso "Média de N anos - base incompleta"; com menos de 3 anos, sem teto.
-  O card de Lucro por ação continua exigindo exatamente 10 anos ("Sem dado" sem isso) e não muda com nada disso:
-  "P/L Conservador" e "Preço teto conservador" dali (LPA médio 10a × 15) continuam só como diagnóstico, não
-  viram teto nem usam preço de fechamento por ano. A barra (mínima/máxima do período do gráfico e "Você está
-  aqui") continua só mostrando onde o preço está; não define mais os cortes. LYNCH ignora a faixa e usa só a
+  de Lucro por ação: a Faixa não exige 10 anos completos - com 3 ou mais anos em `_pontos_anuais`, usa a
+  MEDIANA (não a média) de todos os anos disponíveis, com o aviso "Média de N anos - base incompleta"; com
+  menos de 3 anos, sem teto. Mediana em vez de média simples porque, em setor cíclico (ex. semicondutores),
+  1 ano fraco isolado dentro de uma janela curta (3-9 anos) derrubaria o teto sozinho numa média simples.
+  O card de Lucro por ação continua exigindo exatamente 10 anos ("Sem dado" sem isso), com média simples, e
+  não muda com nada disso: "P/L Conservador" e "Preço teto conservador" dali (LPA médio 10a × 15) continuam
+  só como diagnóstico, não viram teto nem usam preço de fechamento por ano. A barra (mínima/máxima do período
+  do gráfico e "Você está aqui") continua só mostrando onde o preço está; não define mais os cortes. Com
+  valuation disponível, a barra também mostra, num verde mais claro, o ponto de oportunidade pela faixa
+  clássica de 52 semanas (mínima + 30%) como referência extra - não entra na decisão, só no visual. LYNCH
+  ignora a faixa e usa só a
   MM200: Oportunidade = MM200 −10% a +5%;
   abaixo de −10% = "Bem abaixo da MM200" (azul, separado, ainda COMPRAR); Neutro = +5% a +15%; Caro = +15% ou mais;
   ponto de oportunidade = MM200 × 1,05.

@@ -246,13 +246,19 @@ def _media_n_anos(pontos: list[tuple[int, float]], n: int) -> float | None:
 
 
 def _media_disponivel(pontos: list[tuple[int, float]], minimo: int = 3) -> tuple[float | None, int]:
-    """Média do LPA com TODOS os anos que o Yahoo tiver (regra diferente de `_media_n_anos`: não
+    """Mediana do LPA com TODOS os anos que o Yahoo tiver (regra diferente de `_media_n_anos`: não
     exige um número fixo de anos, só o mínimo). Usada só na Faixa de preço do Conservador, nunca no
-    card de Lucro por ação (esse continua exigindo exatamente 10 anos). Devolve (média, nº de anos
-    usados); (None, 0) com menos de `minimo` anos."""
+    card de Lucro por ação (esse continua exigindo exatamente 10 anos, com média simples).
+
+    Mediana em vez de média simples: com poucos anos (3-9) um único ano fraco de ciclo (comum em
+    setores cíclicos, ex. semicondutores) não derruba o teto sozinho como derrubaria na média.
+    Devolve (mediana, nº de anos usados); (None, 0) com menos de `minimo` anos."""
     if len(pontos) < minimo:
         return None, 0
-    return sum(v for _, v in pontos) / len(pontos), len(pontos)
+    valores = sorted(v for _, v in pontos)
+    n, meio = len(valores), len(valores) // 2
+    mediana = valores[meio] if n % 2 else (valores[meio - 1] + valores[meio]) / 2
+    return mediana, n
 
 
 def _estimativa(df, linhas, coluna):
@@ -435,6 +441,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
     # (que exige exatamente 10 anos e não muda); CSMG3 com só 3 anos já mostra teto, não "Sem dado"
     lpa_media_faixa, anos_faixa = _media_disponivel(pontos_lpa, 3)
     teto_v = teto_valuation_conservador(lpa_media_faixa, f["vpa"])
+    faixa = zonas(r.minimo_1a, r.maximo_1a)   # faixa de 52 semanas: usada abaixo também como 2ª referência
     conservador_faixa = None
     if teto_v["teto"] is not None:
         estado_c = decidir_estado_conservador(r.preco_atual, teto_v["teto"], quebrou=quebrou,
@@ -444,6 +451,9 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
             "numeroGraham": _n(teto_v["numeroGraham"], 4), "teto": _n(teto_v["teto"], 4),
             "oportunidadeAte": _n(teto_v["teto"] * 0.70, 4), "aviso": teto_v["aviso"],
             "seloIncompleta": f"Média de {anos_faixa} anos - base incompleta" if anos_faixa < 10 else "",
+            # 2ª referência (só visual, não entra na decisão): ponto de oportunidade pela faixa de 52
+            # semanas clássica (mínima + 30%), mostrado na mesma barra com um verde mais claro
+            "oportunidade52": _n(faixa.oportunidade_ate, 4),
             "decisao": {"codigo": estado_c.codigo, "rotulo": estado_c.rotulo, "texto": estado_c.texto,
                        "zona": estado_c.zona, "validado": estado_c.validado, "alerta": estado_c.alerta},
         }
@@ -453,8 +463,6 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         venda_validada=bool(bt5 and bt5["vendaValidada"]),
         quebrou=quebrou, motivo_quebra=motivo, simbolo=moeda,
         preco=r.preco_atual, tendencia=direcao)
-
-    faixa = zonas(r.minimo_1a, r.maximo_1a)
 
     # guidance oficial da empresa (OVERRIDE) ganha do consenso do Yahoo no LPA projetado
     lynch = modo_lynch(d, f["pl"], regra)

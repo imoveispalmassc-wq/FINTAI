@@ -379,3 +379,19 @@ def test_faixa_conservador_limites_exatos_70_e_100_por_cento():
 def test_faixa_conservador_com_10_anos_nao_mostra_selo_incompleta():
     fx = _faixa_conservador(2.4, 10, vpa=18.0, preco=20.0)
     assert fx["seloIncompleta"] == ""
+
+
+def test_media_disponivel_e_mediana_nao_media_em_caso_ciclico():
+    # setor cíclico (ex.: semicondutores): 1 ano fraco isolado não derruba o teto como na média
+    from tela.dados import _media_disponivel
+    anos_mu = [(2022, 8.0), (2023, 5.0), (2024, 0.70), (2025, 7.65)]
+    mediana, n = _media_disponivel(anos_mu, 3)
+    media_simples = sum(v for _, v in anos_mu) / len(anos_mu)
+    assert n == 4 and mediana == pytest.approx((5.0 + 7.65) / 2)   # dois do meio: 5,0 e 7,65
+    assert mediana > media_simples   # a média simples (5,34) ficaria bem mais baixa que a mediana (6,33)
+
+
+def test_media_disponivel_mediana_com_numero_impar_de_anos():
+    from tela.dados import _media_disponivel
+    mediana, n = _media_disponivel([(2023, 1.0), (2024, 100.0), (2025, 2.0)], 3)
+    assert n == 3 and mediana == 2.0   # valor do meio depois de ordenar: 1, 2, 100
