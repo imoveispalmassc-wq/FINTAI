@@ -395,3 +395,26 @@ def test_media_disponivel_mediana_com_numero_impar_de_anos():
     from tela.dados import _media_disponivel
     mediana, n = _media_disponivel([(2023, 1.0), (2024, 100.0), (2025, 2.0)], 3)
     assert n == 3 and mediana == 2.0   # valor do meio depois de ordenar: 1, 2, 100
+
+
+def test_outlook_trimestral_eua_le_do_arquivo_gravado_pelo_robo(tmp_path, monkeypatch):
+    import json
+
+    from tela.dados import ARQ_OUTLOOK_TRI, outlook_trimestral_eua
+
+    arq = tmp_path / "guidance_trimestral_eua.json"
+    arq.write_text(json.dumps({"MU": {"periodo": "1T FY2027", "receita_min": 6e10, "receita_max": 6.3e10,
+                                      "margem_bruta": 85.95, "lpa_min": 36.84, "lpa_max": 38.84,
+                                      "fonte": "MICRON TECHNOLOGY INC, Form 8-K (SEC)", "data": "30/09/2026"}}),
+                   encoding="utf-8")
+    monkeypatch.setattr("tela.dados.ARQ_OUTLOOK_TRI", arq)
+    r = outlook_trimestral_eua("MU")
+    assert r["periodo"] == "1T FY2027" and r["lpaMin"] == 36.84 and r["lpaMax"] == 38.84
+
+
+def test_outlook_trimestral_eua_b3_e_ticker_sem_dado_devolvem_none(tmp_path, monkeypatch):
+    from tela.dados import outlook_trimestral_eua
+
+    monkeypatch.setattr("tela.dados.ARQ_OUTLOOK_TRI", tmp_path / "nao_existe.json")
+    assert outlook_trimestral_eua("PETR4.SA") is None
+    assert outlook_trimestral_eua("ZZZZ") is None

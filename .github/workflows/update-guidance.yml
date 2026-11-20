@@ -42,13 +42,20 @@ jobs:
           SEC_CONTACT_EMAIL: ${{ secrets.SEC_CONTACT_EMAIL }}
         run: python -m utils.fetch_guidance planejar --saida plano.json
 
+      # Guidance TRIMESTRAL (receita, margem, LPA do próximo trimestre) - só informativo, não passa
+      # pelas 4 travas (não é a projeção anual que vira "Previsão atual"/P/L)
+      - name: Buscar outlook trimestral (EUA)
+        env:
+          SEC_CONTACT_EMAIL: ${{ secrets.SEC_CONTACT_EMAIL }}
+        run: python -m utils.fetch_guidance outlook-trimestral
+
       # AUTOMÁTICO COM PROTEÇÃO: só publica sozinho o que passou nas 4 travas, e avisa depois
       - name: Publicar o que passou nas 4 travas
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           python -m utils.fetch_guidance aplicar plano.json --tipo commit --aviso publicado.md
-          arquivos="utils/guidance_auto.json utils/guidance_inicial.json utils/contabil_sec.json utils/contabil_br.json utils/guidance_log.json"
+          arquivos="utils/guidance_auto.json utils/guidance_inicial.json utils/contabil_sec.json utils/contabil_br.json utils/guidance_log.json utils/guidance_trimestral_eua.json"
           if ! git diff --quiet -- $arquivos; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

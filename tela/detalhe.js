@@ -1035,13 +1035,25 @@ function montar(root, d) {
         + `<div>Média 10 anos<b>${tem(d.lpaMedia10a) ? din(d.lpaMedia10a) : 'Sem dado'}</b></div>`
         + `<div>P/L Conservador<b>${tem(d.plConservador) ? f(d.plConservador) : 'Sem dado'}</b></div>`
         + `<div>Preço teto conservador<b>${tem(d.tetoConservador) ? din(d.tetoConservador) : 'Sem dado'}</b></div>`;
+      const OT = d.outlookTrimestral;
+      const outlookHtml = OT ? `<div class="card" style="margin-top:12px">
+          <span class="rot">Guidance da empresa para o próximo trimestre</span>
+          <div class="nota" style="margin-top:4px">${OT.periodo} · informativo: não entra no P/L nem na Previsão atual acima (que é guidance ANUAL)</div>
+          <div class="lista-v num" style="margin-top:8px">
+            <div>Receita<b>${tem(OT.receitaMin) && tem(OT.receitaMax) ? `${din(OT.receitaMin / 1e9, 1)} a ${din(OT.receitaMax / 1e9, 1)} bi` : 'Sem dado'}</b></div>
+            <div>Margem bruta<b>${tem(OT.margemBruta) ? `${f(OT.margemBruta, 1)}%` : 'Sem dado'}</b></div>
+            <div>LPA projetado<b>${tem(OT.lpaMin) && tem(OT.lpaMax) ? `${din(OT.lpaMin)} a ${din(OT.lpaMax)}` : 'Sem dado'}</b></div>
+          </div>
+          <div class="nota" style="margin-top:8px">Fonte: ${OT.fonte ? `<a class="link" href="" target="_blank" rel="noopener" id="ot-fonte"></a>` : '<span id="ot-fonte"></span>'} (${OT.data})</div>
+        </div>` : '';
       el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>
         <div class="card">${G ? `<div style="margin-bottom:10px"><span class="selo ok">GUIDANCE OFICIAL · ${G.data}</span>
           <div class="nota" style="margin-top:6px">Fonte: ${G.url ? `<a class="link" href="${G.url}" target="_blank" rel="noopener" id="g-fonte"></a>` : '<span id="g-fonte"></span>'}</div></div>` : ''}${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}${linhaProj}</div>` : ''}
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
           <div class="lista-v num" style="margin-top:10px">${linhasLongas}</div>
-          <div class="nota" id="g-nota"></div></div>`;
+          <div class="nota" id="g-nota"></div></div>${outlookHtml}`;
       if (G) { const fz = el.querySelector('#g-fonte'); if (fz) fz.textContent = G.fonte; }
+      if (OT) { const oz = el.querySelector('#ot-fonte'); if (oz) { oz.textContent = OT.fonte; oz.href = OT.url || ''; } }
       el.querySelector('#g-nota').textContent = `${nota}${anoProj ? ` ${tem(proj) ? `Projeção ${anoProj}: ${consenso}${tem(varProj) ? `; ${sinal(varProj, 0)} sobre ${anos[anos.length - 1].ano}${G && G.porLpa ? ' (o guidance é LPA ajustado; o ano anterior é o LPA contábil do Yahoo, bases diferentes)' : ''}` : ''}.${divG}${baseG} Não entra na média.${G ? ' O guidance oficial substitui o consenso dos analistas do Yahoo.' : ''}` : `Sem estimativa no Yahoo para ${anoProj}.`}` : ''}`;
     } else if (modo === 'lynch') {
       const L = d.lynch, v = L.veredito, F = L.futuro, pc = x => tem(x) ? `${sinal(x, 1)} ao ano` : 'Sem dado';

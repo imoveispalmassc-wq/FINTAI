@@ -95,6 +95,21 @@ def ultimo_balanco(lpa_tri) -> dict | None:
 
 
 ARQ_CONTABIL_SEC = Path(__file__).resolve().parent.parent / "utils" / "contabil_sec.json"
+ARQ_OUTLOOK_TRI = Path(__file__).resolve().parent.parent / "utils" / "guidance_trimestral_eua.json"
+
+
+def outlook_trimestral_eua(ticker: str) -> dict | None:
+    """Guidance TRIMESTRAL (receita, margem, LPA do próximo trimestre) gravado pelo robô, direto do
+    earnings release na SEC - só informativo (não participa do P/L nem do selo GUIDANCE OFICIAL,
+    que são do guidance ANUAL). None pra B3 ou quando o robô não achou nada pro ticker."""
+    if ticker.endswith(".SA"):
+        return None
+    c = _ler(ARQ_OUTLOOK_TRI).get(ticker.upper())
+    if not c:
+        return None
+    return {"periodo": c.get("periodo"), "receitaMin": _n(c.get("receita_min"), 2), "receitaMax": _n(c.get("receita_max"), 2),
+            "margemBruta": _n(c.get("margem_bruta"), 2), "lpaMin": _n(c.get("lpa_min"), 4), "lpaMax": _n(c.get("lpa_max"), 4),
+            "fonte": c.get("fonte") or "", "data": c.get("data") or "", "url": c.get("url") or ""}
 
 
 ARQ_CONTABIL_BR = Path(__file__).resolve().parent.parent / "utils" / "contabil_br.json"
@@ -512,6 +527,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "mm200": _n(r.mm200, 4), "tendencia": direcao, "forca": _n(r.ifr, 0),
         "lpaAnos": [{"ano": a, "lpa": _n(v, 4)} for a, v in lpa_anos],
         "lpaAnualFonte": d.get("lpa_anual_fonte") or "",
+        "outlookTrimestral": outlook_trimestral_eua(ticker),
         "regra": {"status": regra["status"], "media": _n(regra["media"], 4), "mensagem": regra["mensagem"]},
         "lpaMedia5a": _n(lpa_media_5a, 4), "lpaMedia10a": _n(lpa_media_10a, 4),
         "plConservador": _n(pl_conservador, 2), "tetoConservador": _n(teto_conservador, 2),

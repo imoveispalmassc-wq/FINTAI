@@ -115,6 +115,26 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   anos como o Yahoo (só ~4): usa todo o histórico de 10-K que a SEC tiver, o que ajuda a Média de 5/10 anos e a
   Faixa a aparecerem com mais frequência. Precisa do mesmo e-mail de contato que o robô usa (SEC_CONTACT_EMAIL),
   só que como Secret do Streamlit Cloud - são dois lugares diferentes, cada um com o seu Secret.
+- Guidance TRIMESTRAL (EUA, card "Guidance da empresa para o próximo trimestre"): empresas como a Micron dão
+  guidance a cada earnings release para o PRÓXIMO TRIMESTRE (receita, margem bruta, LPA), não para o ano fiscal
+  inteiro - diferente do guidance ANUAL (lpa_min/lpa_max, "Previsão atual"/P/L, selo GUIDANCE OFICIAL) descrito
+  acima. Os dois nunca se misturam: usar o LPA de 1 trimestre como se fosse do ano inteiro distorceria o P/L.
+  Por isso é só informativo, num card separado, sem entrar no P/L nem nas 4 travas do AUTOMÁTICO COM PROTEÇÃO
+  (não precisa: não é o número que a tela usa para decidir nada). O robô (`atualizar_outlook_trimestral_eua`,
+  rodado pelo workflow todo dia junto com o guidance anual) olha os earnings releases mais recentes de cada
+  ticker dos EUA já em guidance_tickers.json e tenta achar a tabela/lista de "Business Outlook"/"Financial
+  Outlook" só por padrões de texto (sem API do Claude, sem travas - a faixa extraída é usada tal como está no
+  documento, nunca inventada). Reconhece hoje: "guidance for the Nth quarter of year", "'s outlook for the Nth
+  quarter of fiscal year" e "for the fiscal Nth quarter year, we expect"; faixas em "X ± Y", "X to Y" e "X, plus
+  or minus Z%"; margem em "Approximately X%" ou "between X% and Y%" (nesse caso o ponto médio). Nem toda empresa
+  dá guidance de LPA (ex. NVIDIA só dá receita/margem) nem usa um desses formatos (ex. Apple não dá guidance
+  numérico formal) - sem achar um formato reconhecido, o campo correspondente fica "Sem dado" e, sem nada achado,
+  o card simplesmente não aparece (nunca trava o ticker como "não validado": isso é só do guidance ANUAL). Grava
+  em utils/guidance_trimestral_eua.json; uma tentativa sem sucesso nunca apaga um valor bom já gravado.
+  `anexo_sec` (abre o Exhibit 99.1 de um 8-K/6-K) identifica o arquivo certo pela coluna "Type" da página de
+  índice da SEC, não só pelo nome do arquivo - correção necessária porque empresas como a NVIDIA nomeiam o
+  press release sem o padrão "ex99" (ex.: "q3fy27pr.htm"), e a leitura por nome falhava silenciosamente para
+  elas (isso também melhora a leitura do guidance ANUAL e do contábil, que usam a mesma função).
 - Contábil 12 meses (B3): tickers de utils/contabil_br_config.json (linha do lucro e nome da fonte; hoje só BBAS3, linha
   "Lucro Líquido Ajustado", fonte "BB, Divulgação de Resultados, Lucro Líquido Ajustado"). O robô lê o release de
   resultados de cada trimestre na CVM (trimestre = o último encerrado antes da entrega), extrai o lucro do trimestre

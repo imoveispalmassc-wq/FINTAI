@@ -984,3 +984,116 @@ def test_cik_do_ticker_sem_mapa_busca_na_sec(monkeypatch):
     monkeypatch.setattr(fg, "tickers_sec", fake_tickers_sec)
     assert fg.cik_do_ticker("AAPL", cab={"x": 1}) == ("0000320193", "Apple Inc.")
     assert len(chamadas) == 1
+
+
+# ------------------------------------------------------------ outlook trimestral (EUA)
+TEXTO_OUTLOOK_MU = (
+    "Business Outlook The following table presents Micron's guidance for the first quarter of 2027: "
+    "FQ1-27 GAAP (1) Outlook Non-GAAP (2) Outlook Revenue $61.5 billion ± $1.5 billion $61.5 billion "
+    "± $1.5 billion Gross margin Approximately 85.95% Approximately 86.25% Operating expenses "
+    "Approximately $2.31 billion Approximately $2.06 billion Diluted earnings per share $37.84 ± "
+    "$1.00 $38.15 ± $1.00 Further information regarding Micron's business outlook"
+)
+
+TEXTO_OUTLOOK_NVDA = (
+    "Outlook NVIDIA's outlook for the fourth quarter of fiscal 2027, which includes an additional "
+    "week, is as follows: • Revenue is expected to be $130.0 billion, plus or minus 3%. NVIDIA is "
+    "not assuming any Data Center compute revenue from China in its outlook. • GAAP and non-GAAP "
+    "gross margins are expected to be between 71.0% and 72.0%. • GAAP and non-GAAP operating "
+    "expenses are expected to be approximately $11.0 billion"
+)
+
+TEXTO_OUTLOOK_PANW = (
+    "Financial Outlook Palo Alto Networks provides guidance based on current market conditions and "
+    "expectations. For the fiscal second quarter 2027, we expect: • Next-Generation Security ARR "
+    "of $10.20 billion to $10.22 billion. • Total revenue in the range of $3.530 billion to $3.550 "
+    "billion, representing year-over-year growth of 36% to 37%. • Diluted non-GAAP net income per "
+    "share in the range of $1.01 to $1.03, using 837 million to 842 million shares outstanding."
+)
+
+
+def test_outlook_trimestral_mu_faixa_com_mais_menos():
+    r = fg.extrair_outlook_trimestral_eua(TEXTO_OUTLOOK_MU)
+    assert r["periodo"] == "1T FY2027"
+    assert r["receita_min"] == 60_000_000_000.0 and r["receita_max"] == 63_000_000_000.0
+    assert r["margem_bruta"] == 85.95
+    assert r["lpa_min"] == 36.84 and r["lpa_max"] == 38.84
+
+
+def test_outlook_trimestral_nvda_percentual_e_faixa_de_margem_sem_lpa():
+    """NVIDIA não dá guidance de LPA - tem que devolver receita/margem sem travar por falta de LPA."""
+    r = fg.extrair_outlook_trimestral_eua(TEXTO_OUTLOOK_NVDA)
+    assert r["periodo"] == "4T FY2027"
+    assert r["receita_min"] == pytest.approx(126_100_000_000.0)
+    assert r["receita_max"] == pytest.approx(133_900_000_000.0)
+    assert r["margem_bruta"] == 71.5   # ponto médio de "between 71.0% and 72.0%"
+    assert r["lpa_min"] is None and r["lpa_max"] is None
+
+
+def test_outlook_trimestral_panw_faixa_com_to_e_rotulo_non_gaap():
+    r = fg.extrair_outlook_trimestral_eua(TEXTO_OUTLOOK_PANW)
+    assert r["periodo"] == "2T FY2027"
+    assert r["receita_min"] == 3_530_000_000.0 and r["receita_max"] == 3_550_000_000.0
+    assert r["lpa_min"] == 1.01 and r["lpa_max"] == 1.03
+
+
+def test_outlook_trimestral_sem_guidance_devolve_none():
+    assert fg.extrair_outlook_trimestral_eua("Nada de guidance aqui, só resultados do trimestre passado.") is None
+
+
+def test_atualizar_outlook_trimestral_eua_nao_apaga_valor_bom_sem_achar_de_novo(tmp_path, monkeypatch):
+    arq = tmp_path / "guidance_trimestral_eua.json"
+    arq.write_text('{"MU": {"periodo": "4T FY2026"}}', encoding="utf-8")
+    monkeypatch.setattr(fg, "ARQ_OUTLOOK_TRI", arq)
+    tab = fg.atualizar_outlook_trimestral_eua(
+        tickers=["MU"], cabecalho=lambda: {"User-Agent": "x"},
+        buscar_cik=lambda t, cab: ("0000723125", "Micron"),
+        buscar_docs=lambda cik, cab: [{"form": "8-K", "data": "2026-01-01", "acc": "1", "cik": cik}],
+        ler_anexo=lambda doc, cab: ("http://x", "nada de outlook aqui"))
+    assert tab["MU"] == {"periodo": "4T FY2026"}   # mantido: a tentativa não achou nada novo
+
+
+def test_atualizar_outlook_trimestral_eua_grava_quando_acha(tmp_path, monkeypatch):
+    arq = tmp_path / "guidance_trimestral_eua.json"
+    monkeypatch.setattr(fg, "ARQ_OUTLOOK_TRI", arq)
+    tab = fg.atualizar_outlook_trimestral_eua(
+        tickers=["MU"], cabecalho=lambda: {"User-Agent": "x"},
+        buscar_cik=lambda t, cab: ("0000723125", "Micron Technology, Inc."),
+        buscar_docs=lambda cik, cab: [{"form": "8-K", "data": "2026-09-30", "acc": "1", "cik": cik}],
+        ler_anexo=lambda doc, cab: ("http://x", TEXTO_OUTLOOK_MU))
+    assert tab["MU"]["periodo"] == "1T FY2027"
+    assert json.loads(arq.read_text(encoding="utf-8"))["MU"]["periodo"] == "1T FY2027"
+
+
+def test_anexo_sec_identifica_exhibit_pelo_type_da_pagina_indice(monkeypatch):
+    """NVIDIA (e outras) nomeiam o press release sem o padrão 'ex99' no nome do arquivo (ex.:
+    'q3fy27pr.htm'); a leitura pelo nome falhava silenciosamente. Agora usa a coluna "Type" da
+    página de índice da SEC, que identifica o exhibit certo independente do nome do arquivo."""
+    index_html = """
+    <tr class="evenRow">
+        <td scope="row">2</td>
+        <td scope="row">EX-99.1</td>
+        <td scope="row"><a href="/Archives/edgar/data/1045810/000104581026000088/q3fy27pr.htm">q3fy27pr.htm</a></td>
+        <td scope="row">EX-99.1</td>
+        <td scope="row">348063</td>
+    </tr>
+    """
+
+    class FakeResp:
+        def __init__(self, text):
+            self.text = text
+
+        def json(self):
+            return json.loads(self.text)
+
+    def fake_get_sec(url, cab):
+        if url.endswith("-index.htm"):
+            return FakeResp(index_html)
+        assert url.endswith("q3fy27pr.htm")
+        return FakeResp("<html><body>guidance for the fourth quarter</body></html>")
+
+    monkeypatch.setattr(fg, "_get_sec", fake_get_sec)
+    doc = {"form": "8-K", "data": "2026-11-17", "acc": "0001045810-26-000088", "cik": "0001045810"}
+    link, texto = fg.anexo_sec(doc, cab={"User-Agent": "x"})
+    assert link.endswith("q3fy27pr.htm")
+    assert "guidance for the fourth quarter" in texto

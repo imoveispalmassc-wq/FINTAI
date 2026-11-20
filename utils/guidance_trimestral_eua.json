@@ -1,0 +1,38 @@
+{
+  "MU": {
+    "periodo": "1T FY2027",
+    "receita_min": 60000000000.0,
+    "receita_max": 63000000000.0,
+    "margem_bruta": 85.95,
+    "lpa_min": 36.84,
+    "lpa_max": 38.84,
+    "trecho": "guidance for the first quarter of 2027: FQ1-27 GAAP (1) Outlook Non-GAAP (2) Outlook Revenue $61.5 billion ± $1.5 billion $61.5 billion ± $1.5 billion Gross margin Approximately 85.95% Approximately 86.25% Operating expenses Approximately $2.31 billion Approximately $2.06 billion Diluted earnings per share $37.84 ± $1.00 $38.15 ± $1.00",
+    "fonte": "MICRON TECHNOLOGY INC, Form 8-K Exhibit 99.1 de 30/09/2026 (SEC)",
+    "data": "30/09/2026",
+    "url": "https://www.sec.gov/Archives/edgar/data/723125/000072312526000018/a2026q4ex991-pressrelease.htm"
+  },
+  "NVDA": {
+    "periodo": "4T FY2027",
+    "receita_min": 126100000000.0,
+    "receita_max": 133900000000.0,
+    "margem_bruta": 71.5,
+    "lpa_min": null,
+    "lpa_max": null,
+    "trecho": "’s outlook for the fourth quarter of fiscal 2027, which includes an additional week, is as follows: • Revenue is expected to be $130.0 billion, plus or minus 3%. NVIDIA is not assuming any Data Center compute revenue from China in its outlook. • GAAP and non-GAAP gross margins are expected to be between 71.0% and 72.0%. • GAAP and non-GAAP operat",
+    "fonte": "NVIDIA CORP, Form 8-K Exhibit 99.1 de 17/11/2026 (SEC)",
+    "data": "17/11/2026",
+    "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000088/q3fy27pr.htm"
+  },
+  "PANW": {
+    "periodo": "2T FY2027",
+    "receita_min": 3530000000.0,
+    "receita_max": 3550000000.0,
+    "margem_bruta": null,
+    "lpa_min": 1.01,
+    "lpa_max": 1.03,
+    "trecho": "For the fiscal second quarter 2027, we expect: • Next-Generation Security ARR of $10.20 billion to $10.22 billion, representing year-over-year growth of 61%. • Remaining performance obligations of $21.5 billion to $21.6 billion, representing year-over-year growth of 34% to 35%. • Total revenue in the range of $3.530 billion to $3.550 billion,",
+    "fonte": "Palo Alto Networks Inc, Form 8-K Exhibit 99.1 de 18/11/2026 (SEC)",
+    "data": "18/11/2026",
+    "url": "https://www.sec.gov/Archives/edgar/data/1327567/000132756726000030/ex991q127earningsrelease.htm"
+  }
+}

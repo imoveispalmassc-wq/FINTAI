@@ -67,6 +67,7 @@ PL_FATOR = 3                 # trava 4: P/L novo fora de 1/3 a 3x o P/L de 12 me
 ARQ_LOG = RAIZ / "utils" / "guidance_log.json"
 ARQ_NAO_VALIDADO = RAIZ / "utils" / "queue_nao_validado.json"   # tickers da fila pública que não validaram
 FILA_MAX_POR_RUN = 15    # tickers novos processados por execução, para não estourar o tempo do Actions
+ARQ_OUTLOOK_TRI = RAIZ / "utils" / "guidance_trimestral_eua.json"   # guidance trimestral, só informativo
 IDADE_MAXIMA_DIAS = 120      # documento mais velho que isso (mais de um trimestre) vai para revisão
 MAX_DOCUMENTOS = 6           # documentos lidos por ticker, do mais novo para o mais antigo
 MODELO = "claude-opus-5-5"
@@ -854,13 +855,40 @@ def documentos_sec(cik: str, cab: dict) -> list[dict]:
     return docs
 
 
+def _exhibit_99_pela_pagina_indice(pasta: str, acc: str, cab: dict) -> str | None:
+    """Nome do arquivo marcado como Exhibit 99.x na página de índice da SEC (coluna "Type"), não só
+    pelo nome do arquivo: várias empresas (ex. NVIDIA: "q3fy27pr.htm") nomeiam o press release de um
+    jeito que não bate com o padrão "ex99", e aí a leitura por nome falha silenciosamente."""
+    html = _get_sec(f"{pasta}/{acc}-index.htm", cab).text
+    candidatos = []
+    for m in re.finditer(r"<tr[^>]*>(.*?)</tr>", html, re.S | re.I):
+        celulas = re.findall(r"<td[^>]*>(.*?)</td>", m.group(1), re.S | re.I)
+        if len(celulas) < 4:
+            continue
+        tipo = re.sub(r"<[^>]+>", "", celulas[3]).strip().upper()
+        if not re.match(r"EX-?99", tipo, re.I):
+            continue
+        link = re.search(r'href="([^"]+)"', celulas[2])
+        if link:
+            candidatos.append((tipo, link.group(1).rsplit("/", 1)[-1]))
+    if not candidatos:
+        return None
+    return next((n for t, n in candidatos if t in ("EX-99.1", "EX-99")), candidatos[0][1])
+
+
 def anexo_sec(doc: dict, cab: dict) -> tuple[str, str] | None:
     """Link e texto do Exhibit 99.1 (press release) de um 8-K/6-K."""
     pasta = f"{SEC_ARQUIVOS}/Archives/edgar/data/{int(doc['cik'])}/{doc['acc'].replace('-', '')}"
-    itens = _get_sec(f"{pasta}/index.json", cab).json().get("directory", {}).get("item", [])
-    nomes = [i["name"] for i in itens if i.get("name", "").lower().endswith((".htm", ".html", ".txt"))]
-    alvo = next((n for n in nomes if re.search(r"ex[-_]?99[-_.]?0?1|ex991|exhibit991|dex991", n, re.I)), None) \
-        or next((n for n in nomes if re.search(r"ex[-_]?99|exhibit99", n, re.I)), None)
+    try:
+        alvo = _exhibit_99_pela_pagina_indice(pasta, doc["acc"], cab)
+    except Exception as e:  # noqa: BLE001
+        log.info("  não consegui ler a página de índice (%s): tento pelo nome do arquivo", e.__class__.__name__)
+        alvo = None
+    if not alvo:
+        itens = _get_sec(f"{pasta}/index.json", cab).json().get("directory", {}).get("item", [])
+        nomes = [i["name"] for i in itens if i.get("name", "").lower().endswith((".htm", ".html", ".txt"))]
+        alvo = next((n for n in nomes if re.search(r"ex[-_]?99[-_.]?0?1|ex991|exhibit991|dex991", n, re.I)), None) \
+            or next((n for n in nomes if re.search(r"ex[-_]?99|exhibit99", n, re.I)), None)
     if not alvo:
         return None
     html = _get_sec(f"{pasta}/{alvo}", cab).text
@@ -945,6 +973,142 @@ def extrair_eps_eua(texto: str, ano_minimo: int) -> dict | None:
     periodo = (f"FY{melhor['ano']}" if melhor["fiscal"] and "fiscal" in melhor["trecho"].lower() else str(melhor["ano"] or ""))
     return {**melhor, "periodo": periodo, "confianca": "baixa" if motivos else "alta", "motivos": motivos, "escolha": escolha,
             "dividendo": round(div.pop() * 4, 4) if len(div) == 1 else None, "faixas": sorted(distintos)}
+
+
+# -------------------------------------------- outlook trimestral (EUA) - só informativo
+RE_OUTLOOK_TRI = re.compile(
+    r"(?:(?:guidance\s+for\s+the|(?:’s|'s)\s+outlook\s+for\s+the)\s+(first|second|third|fourth)\s+quarter"
+    r"\s+of\s+(?:fiscal\s+)?(\d{4}))"
+    r"|(?:for\s+the\s+fiscal\s+(first|second|third|fourth)\s+quarter\s+(\d{4}),?\s+we\s+expect)", re.I)
+_ORDINAL_TRI = {"first": 1, "second": 2, "third": 3, "fourth": 4}
+_NUM_TRI = r"\$?\s*([\d][\d,]*\.?\d*)"
+_ESCALA_TRI = {"billion": 1e9, "million": 1e6}
+
+
+def _faixa_tri(rotulo: str, texto: str, unidade: bool = False) -> tuple[float, float] | None:
+    """Acha a faixa de 'rotulo' logo depois do rótulo, em qualquer um destes formatos:
+    'X ± Y [bilhão/milhão]', 'X to Y [bilhão/milhão]', ou 'X, plus or minus Z%' (faixa por
+    percentual do valor central). Devolve já convertido pela unidade (bilhão/milhão), se houver."""
+    pad_unid = r"\s*(billion|million)?" if unidade else ""
+    m = re.search(rf"{rotulo}\D{{0,25}}{_NUM_TRI}{pad_unid}\s*±\s*{_NUM_TRI}", texto, re.I)
+    if m:
+        unid = m.group(2) if unidade else None
+        delta_i = 3 if unidade else 2
+        meio, delta = float(m.group(1).replace(",", "")), float(m.group(delta_i).replace(",", ""))
+        fator = _ESCALA_TRI.get(unid, 1)
+        return (meio - delta) * fator, (meio + delta) * fator
+    m = re.search(rf"{rotulo}\D{{0,25}}{_NUM_TRI}{pad_unid}\s*,?\s*plus or minus\s*([\d.]+)\s*%", texto, re.I)
+    if m:
+        unid = m.group(2) if unidade else None
+        pct_i = 3 if unidade else 2
+        meio, pct = float(m.group(1).replace(",", "")), float(m.group(pct_i)) / 100
+        fator = _ESCALA_TRI.get(unid, 1)
+        return meio * (1 - pct) * fator, meio * (1 + pct) * fator
+    m = re.search(rf"{rotulo}\D{{0,25}}{_NUM_TRI}{pad_unid}\s*(?:to|-|–)\s*{_NUM_TRI}", texto, re.I)
+    if m:
+        unid = m.group(2) if unidade else None
+        b_i = 3 if unidade else 2
+        a, b = float(m.group(1).replace(",", "")), float(m.group(b_i).replace(",", ""))
+        fator = _ESCALA_TRI.get(unid, 1)
+        return min(a, b) * fator, max(a, b) * fator
+    return None
+
+
+def _margem_tri(texto: str) -> float | None:
+    """Margem bruta guiada: um valor único (ex. 'Approximately 86%') ou uma faixa ('between 71% and
+    72%'); nesse caso devolve o ponto médio (o card mostra o trecho original para conferência)."""
+    m = re.search(r"[Gg]ross margins?\D{0,30}between\s+([\d.]+)\s*%\s+and\s+([\d.]+)\s*%", texto, re.I)
+    if m:
+        return round((float(m.group(1)) + float(m.group(2))) / 2, 2)
+    m = re.search(r"[Gg]ross margins?\D{0,30}([\d.]+)\s*%", texto, re.I)
+    return float(m.group(1)) if m else None
+
+
+def extrair_outlook_trimestral_eua(texto: str) -> dict | None:
+    """Guidance TRIMESTRAL da própria empresa (receita, margem bruta, LPA do próximo trimestre),
+    direto do texto do earnings release (8-K/6-K Exhibit 99.1 na SEC). Informativo: não participa
+    do "Previsão atual"/P/L nem do selo GUIDANCE OFICIAL (aquele é guidance ANUAL, campo diferente -
+    usar o LPA de 1 trimestre como se fosse do ano inteiro distorceria o P/L). Só pelos padrões de
+    texto (sem API do Claude, sem as 4 travas): sem achar com segurança, devolve None e a tela
+    simplesmente não mostra o card - nunca inventa um número. Nem toda empresa dá guidance de LPA
+    (algumas só dão receita/margem): o que não for achado fica None, sem travar o resto.
+
+    Devolve {"periodo", "receita_min", "receita_max" (em dólares, já convertido pela unidade),
+    "margem_bruta" (%, opcional), "lpa_min", "lpa_max", "trecho"} ou None."""
+    texto = normalizar(texto)
+    m = RE_OUTLOOK_TRI.search(texto)
+    if not m:
+        return None
+    ordinal, ano_txt = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+    tri, ano = _ORDINAL_TRI[ordinal.lower()], int(ano_txt)
+    janela = texto[m.end(): m.end() + 2000]   # a tabela/lista de outlook vem logo depois do título
+    receita = _faixa_tri(r"Revenue", janela, unidade=True)
+    lpa = _faixa_tri(r"Diluted(?:\s+non-GAAP)?\s+(?:net income per share|earnings per share)", janela)
+    if not receita and not lpa:
+        return None
+    return {"periodo": f"{tri}T FY{ano}",
+            "receita_min": receita[0] if receita else None, "receita_max": receita[1] if receita else None,
+            "margem_bruta": _margem_tri(janela),
+            "lpa_min": lpa[0] if lpa else None, "lpa_max": lpa[1] if lpa else None,
+            "trecho": texto[m.start(): m.end() + 300].strip()[:400]}
+
+
+def atualizar_outlook_trimestral_eua(tickers: list[str] | None = None, *, cabecalho=cabecalho_sec,
+                                     buscar_cik=cik_do_ticker, buscar_docs=documentos_sec,
+                                     ler_anexo=anexo_sec, max_docs: int = 3) -> dict[str, dict]:
+    """Guidance TRIMESTRAL (receita, margem, LPA do próximo trimestre) de cada ticker dos EUA já
+    cadastrado em guidance_tickers.json - só informativo (ver extrair_outlook_trimestral_eua: não
+    participa do P/L nem do selo GUIDANCE OFICIAL). Olha os `max_docs` earnings releases mais
+    recentes de cada ticker até achar um com a tabela de outlook; sem achar em nenhum, mantém o que
+    já estava gravado (uma tentativa sem sucesso nunca apaga um valor bom). Grava em
+    utils/guidance_trimestral_eua.json e devolve a tabela completa (gravada ou não)."""
+    if tickers is None:
+        tickers = [t.strip().upper() for t in _ler_json(ARQ_TICKERS, [])
+                   if not re.fullmatch(r"(?=.*[A-Z])[A-Z0-9]{4}\d{1,2}", t.strip().upper())]
+    tab = _ler_json(ARQ_OUTLOOK_TRI, {})
+    cab = cabecalho()
+    if not cab:
+        log.warning("outlook trimestral: sem SEC_CONTACT_EMAIL (Secret do GitHub): pulado")
+        return tab
+    mudou = False
+    for t in tickers:
+        try:
+            empresa = buscar_cik(t, cab)
+        except Exception as e:  # noqa: BLE001
+            log.info("  outlook %s: não consegui achar o CIK (%s)", t, e.__class__.__name__)
+            continue
+        if not empresa:
+            continue
+        cik, nome = empresa
+        achou = None
+        try:
+            docs = buscar_docs(cik, cab)[:max_docs]
+        except Exception as e:  # noqa: BLE001
+            log.info("  outlook %s: não consegui listar os documentos (%s)", t, e.__class__.__name__)
+            continue
+        for doc in docs:
+            try:
+                anexo = ler_anexo(doc, cab)
+            except Exception as e:  # noqa: BLE001
+                log.info("  outlook %s: não abriu %s de %s (%s)", t, doc["form"], _data_br(doc["data"]), e.__class__.__name__)
+                continue
+            if not anexo:
+                continue
+            link, texto = anexo
+            dados = extrair_outlook_trimestral_eua(texto)
+            if dados:
+                achou = {**dados, "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {_data_br(doc['data'])} (SEC)",
+                        "data": _data_br(doc["data"]), "url": link}
+                break
+        if achou and tab.get(t) != achou:
+            tab[t] = achou
+            mudou = True
+            log.info("  outlook %s: %s", t, achou["periodo"])
+        elif not achou:
+            log.info("  outlook %s: sem tabela de outlook nos %d comunicados mais recentes (mantido o anterior)", t, max_docs)
+    if mudou:
+        ARQ_OUTLOOK_TRI.write_text(json.dumps(dict(sorted(tab.items())), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return tab
 
 
 def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
@@ -1861,7 +2025,12 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--saida", default="resumo.md")
     pf = sub.add_parser("fila", help="processa a fila pública de tickers novos (Issues do GitHub)")
     pf.add_argument("--max", type=int, default=FILA_MAX_POR_RUN)
+    sub.add_parser("outlook-trimestral", help="guidance trimestral (EUA), só informativo")
     args = p.parse_args(argv)
+    if args.cmd == "outlook-trimestral":
+        tab = atualizar_outlook_trimestral_eua()
+        log.info("outlook trimestral: %d ticker(s) com dado", len(tab))
+        return 0
     if args.cmd == "resumo":
         Path(args.saida).write_text(resumo_semana(_ler_json(ARQ_LOG, []), dt.date.today(), args.dias), encoding="utf-8")
         return 0
