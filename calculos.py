@@ -76,6 +76,21 @@ class Resultado:
     dividend_yield: float
     fechamentos_1a: pd.Series
     semanal: pd.DataFrame
+    # médias semanais de 3 e 5 anos (preço médio do período, usado na Faixa do Conservador)
+    media_fech_3a: float | None
+    media_fech_5a: float | None
+
+
+def _media_fechamento_semanal(hist: pd.DataFrame, fim: pd.Timestamp, anos: int) -> float | None:
+    """Preço médio do período (fechamento semanal, mesmo jeito de media_fechamentos de 1 ano),
+    usado como âncora da Faixa do Conservador. None sem histórico suficiente (tolerância de 30
+    dias - evita confundir 'quase completou N anos' com 'ticker sem esse histórico')."""
+    inicio_alvo = fim - pd.DateOffset(years=anos)
+    if hist.index[0] > inicio_alvo + pd.Timedelta(days=30):
+        return None
+    janela = hist[hist.index > inicio_alvo]
+    semanal = janela["Close"].resample("W-FRI").last().dropna()
+    return float(semanal.mean()) if len(semanal) else None
 
 
 def _retorno(serie: pd.Series, anos: int) -> float | None:
@@ -351,19 +366,28 @@ def preco_justo_graham(lpa: float | None, vpa: float | None) -> float | None:
     return None
 
 
-def teto_valuation_conservador(lpa_media_10a: float | None, vpa: float | None) -> dict:
-    """Preço teto da Faixa de preço do modo Conservador: Número de Graham
-    (√(22,5 × LPA médio de 10 anos × VPA)) — diferente do "Preço teto conservador" (LPA médio
-    × 15) mostrado no card de Lucro por ação, que não muda.
+def teto_valuation_conservador(media_1a: float | None, media_3a: float | None,
+                               media_5a: float | None) -> dict:
+    """Preço teto da Faixa de preço do modo Conservador: ÂNCORA = preço médio dos últimos 1 ano
+    (fechamento semanal) — substitui o Número de Graham (LPA médio × VPA), que ficava "Sem dado"
+    sempre que faltava LPA/VPA confiável (ex. ano de supercycle distorcendo a mediana de anos).
+    Preço histórico quase nunca falta (diferente de LPA/VPA), então a Faixa deixa de cair pra
+    "sem teto" na maioria dos casos.
 
-    Sem VPA (mas com o LPA médio de 10 anos): cai para LPA médio × 15, com aviso.
-    Sem o LPA médio de 10 anos: sem teto (o chamador usa a faixa de 52 semanas como alternativa)."""
-    if not lpa_media_10a or lpa_media_10a <= 0:
-        return {"teto": None, "numeroGraham": None, "aviso": ""}
-    numero_graham = preco_justo_graham(lpa_media_10a, vpa)
-    if numero_graham is not None:
-        return {"teto": numero_graham, "numeroGraham": numero_graham, "aviso": ""}
-    return {"teto": lpa_media_10a * 15, "numeroGraham": None, "aviso": "Sem VPA, teto por P/L 15"}
+    Margem de segurança de 30% sobre a âncora de 1 ano, igual à margem já usada em todo o app
+    (ver decidir_estado_conservador): Oportunidade até 0,70 × âncora; Neutra até a âncora; Cara
+    acima. As médias de 3 anos (margem de 40%: limite = 0,60 × média) e 5 anos (margem de 50%:
+    limite = 0,50 × média) NÃO travam a decisão - são só referência extra mostrada na tela.
+
+    Sem 1 ano de histórico de preço (ticker recém-listado): sem teto, o chamador usa a faixa de
+    52 semanas como alternativa, como antes."""
+    if not media_1a or media_1a <= 0:
+        return {"teto": None, "ancora1a": None, "limite3a": None, "limite5a": None}
+    return {
+        "teto": media_1a, "ancora1a": media_1a,
+        "limite3a": media_3a * 0.60 if media_3a and media_3a > 0 else None,
+        "limite5a": media_5a * 0.50 if media_5a and media_5a > 0 else None,
+    }
 
 
 def calcular(hist: pd.DataFrame, dividendos: pd.Series | None) -> Resultado:
@@ -460,5 +484,7 @@ def calcular(hist: pd.DataFrame, dividendos: pd.Series | None) -> Resultado:
         dividend_yield=dy,
         fechamentos_1a=um_ano["Close"],
         semanal=semanal,
+        media_fech_3a=_media_fechamento_semanal(hist, fim, 3),
+        media_fech_5a=_media_fechamento_semanal(hist, fim, 5),
     )
 retorno_periodo = _retorno

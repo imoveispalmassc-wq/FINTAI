@@ -1,6 +1,8 @@
+import numpy as np
+import pandas as pd
 import pytest
 
-from calculos import normalizar_ticker
+from calculos import calcular, normalizar_ticker
 
 
 def test_normalizar_ticker_br_padrao_ganha_sa():
@@ -23,27 +25,53 @@ def test_normalizar_ticker_ja_com_sufixo_nao_duplica():
     assert normalizar_ticker("PETR4.SA") == "PETR4.SA"
 
 
-def test_teto_valuation_conservador_numero_de_graham():
+def test_teto_valuation_conservador_ancora_e_a_media_de_1_ano():
     from calculos import teto_valuation_conservador
-    r = teto_valuation_conservador(2.0, 20.0)   # Número de Graham = sqrt(22.5*2*20) = 30
-    assert r["teto"] == pytest.approx(30.0) and r["numeroGraham"] == pytest.approx(30.0) and r["aviso"] == ""
+    r = teto_valuation_conservador(100.0, 80.0, 60.0)
+    assert r["teto"] == pytest.approx(100.0) and r["ancora1a"] == pytest.approx(100.0)
+    assert r["limite3a"] == pytest.approx(48.0)    # margem de 40%: 0,60 × 80
+    assert r["limite5a"] == pytest.approx(30.0)    # margem de 50%: 0,50 × 60
 
 
-def test_teto_valuation_conservador_sem_vpa_cai_para_p_l_15():
+def test_teto_valuation_conservador_sem_3a_5a_nao_trava_o_teto():
+    """Limite de 3/5 anos é só referência - sem esse histórico, o teto (âncora de 1 ano)
+    continua valendo normalmente."""
     from calculos import teto_valuation_conservador
-    r = teto_valuation_conservador(2.0, None)
-    assert r["teto"] == pytest.approx(30.0) and r["numeroGraham"] is None
-    assert "Sem VPA" in r["aviso"] and "15" in r["aviso"]
+    r = teto_valuation_conservador(100.0, None, None)
+    assert r["teto"] == pytest.approx(100.0)
+    assert r["limite3a"] is None and r["limite5a"] is None
 
 
-def test_teto_valuation_conservador_sem_lpa_media_e_sem_dado():
+def test_teto_valuation_conservador_sem_media_1a_e_sem_dado():
     from calculos import teto_valuation_conservador
-    assert teto_valuation_conservador(None, 20.0) == {"teto": None, "numeroGraham": None, "aviso": ""}
-    assert teto_valuation_conservador(0, 20.0)["teto"] is None
-    assert teto_valuation_conservador(-1, 20.0)["teto"] is None
+    assert teto_valuation_conservador(None, 80.0, 60.0) == {"teto": None, "ancora1a": None, "limite3a": None, "limite5a": None}
+    assert teto_valuation_conservador(0, 80.0, 60.0)["teto"] is None
+    assert teto_valuation_conservador(-1, 80.0, 60.0)["teto"] is None
 
 
-def test_teto_valuation_conservador_vpa_invalido_tambem_cai_para_15():
-    from calculos import teto_valuation_conservador
-    assert teto_valuation_conservador(2.0, 0)["teto"] == pytest.approx(30.0)
-    assert teto_valuation_conservador(2.0, -5)["teto"] == pytest.approx(30.0)
+def _hist_longa():
+    # quase 8 anos de pregões (cobre a janela de 5 anos usada em media_fech_5a)
+    idx = pd.bdate_range("2019-01-01", "2026-11-13", tz="America/New_York")
+    c = pd.Series(50 * np.exp(np.cumsum(np.random.default_rng(4).normal(0.0006, 0.02, len(idx)))), idx)
+    return pd.DataFrame({"Open": c, "High": c * 1.01, "Low": c * 0.99, "Close": c, "Adj Close": c,
+                         "Volume": 1000, "Dividends": 0.0, "Stock Splits": 0.0})
+
+
+def test_calcular_media_fech_3a_5a_ficam_perto_da_media_simples_dos_fechamentos():
+    r = calcular(_hist_longa(), None)
+    hist = _hist_longa()
+    fim = hist.index[-1]
+    esperado_3a = hist.loc[hist.index > fim - pd.DateOffset(years=3), "Close"].mean()
+    esperado_5a = hist.loc[hist.index > fim - pd.DateOffset(years=5), "Close"].mean()
+    # média semanal (não diária) tem uma diferença pequena pro cálculo direto; tolerância de 5%
+    assert r.media_fech_3a == pytest.approx(esperado_3a, rel=0.05)
+    assert r.media_fech_5a == pytest.approx(esperado_5a, rel=0.05)
+
+
+def test_calcular_media_fech_3a_5a_sem_historico_suficiente_e_none():
+    idx = pd.bdate_range("2025-01-01", "2026-11-13", tz="America/New_York")   # menos de 2 anos
+    c = pd.Series(50 * np.exp(np.cumsum(np.random.default_rng(1).normal(0.0006, 0.02, len(idx)))), idx)
+    hist = pd.DataFrame({"Open": c, "High": c * 1.01, "Low": c * 0.99, "Close": c, "Adj Close": c,
+                         "Volume": 1000, "Dividends": 0.0, "Stock Splits": 0.0})
+    r = calcular(hist, None)
+    assert r.media_fech_3a is None and r.media_fech_5a is None

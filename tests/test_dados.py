@@ -281,120 +281,75 @@ def test_media_n_anos_so_calcula_com_anos_suficientes():
 
 def test_decidir_estado_conservador_zonas_com_margem_de_30_por_cento():
     from utils.signals import decidir_estado_conservador
-    teto = 100.0   # oportunidade até 70, cara acima de 100
+    teto = 100.0   # oportunidade até 70; neutra alargada até 130 (30% acima); cara daí pra cima
     assert decidir_estado_conservador(69.0, teto).codigo == "COMPRAR"
     assert decidir_estado_conservador(70.0, teto).codigo == "COMPRAR"
     assert decidir_estado_conservador(85.0, teto).codigo == "AGUARDAR"
     assert decidir_estado_conservador(100.0, teto).codigo == "AGUARDAR"
-    assert decidir_estado_conservador(100.01, teto).codigo == "CARO"
+    assert decidir_estado_conservador(130.0, teto).codigo == "AGUARDAR"
+    assert decidir_estado_conservador(130.01, teto).codigo == "CARO"
     e = decidir_estado_conservador(50.0, teto, simbolo="R$")
     assert "R$" in e.texto and "70" in e.texto
     assert decidir_estado_conservador(50.0, teto).validado is False   # nunca tem teste histórico
 
 
+def test_decidir_estado_conservador_caro_acima_explicito_sobrescreve_padrao():
+    from utils.signals import decidir_estado_conservador
+    # caro_acima explícito (ex. vindo da Faixa, já calculado como teto × 1,30) vence o padrão
+    assert decidir_estado_conservador(105.0, 100.0, 110.0).codigo == "AGUARDAR"
+    assert decidir_estado_conservador(110.01, 100.0, 110.0).codigo == "CARO"
 
 
-def test_media_disponivel_usa_todos_os_anos_sem_exigir_10():
-    from tela.dados import _media_disponivel
-    tres_anos = [(2023, 1.0), (2024, 2.0), (2025, 3.0)]
-    media, n = _media_disponivel(tres_anos, 3)
-    assert media == pytest.approx(2.0) and n == 3          # (1+2+3)/3, não precisa de 10 anos
-
-
-def test_media_disponivel_com_4_anos_usa_os_4():
-    from tela.dados import _media_disponivel
-    quatro_anos = [(2022, 1.0), (2023, 2.0), (2024, 3.0), (2025, 4.0)]
-    media, n = _media_disponivel(quatro_anos, 3)
-    assert media == pytest.approx(2.5) and n == 4
-
-
-def test_media_disponivel_com_menos_de_3_anos_e_sem_dado():
-    from tela.dados import _media_disponivel
-    assert _media_disponivel([(2024, 1.0), (2025, 2.0)], 3) == (None, 0)
-    assert _media_disponivel([], 3) == (None, 0)
 
 
 # ------------------------------------------------------------ Faixa de preço do Conservador (ponta a ponta)
-def _faixa_conservador(lpa_media, anos, vpa, preco):
+def _faixa_conservador(media_1a, media_3a, media_5a, mm200, preco):
     """Simula o trecho de montar() que monta conservadorFaixa, sem precisar da rede."""
     from calculos import teto_valuation_conservador
     from utils.signals import decidir_estado_conservador
-    teto_v = teto_valuation_conservador(lpa_media, vpa)
+    teto_v = teto_valuation_conservador(media_1a, media_3a, media_5a)
     if teto_v["teto"] is None:
         return None
-    estado_c = decidir_estado_conservador(preco, teto_v["teto"], simbolo="R$")
-    return {"lpaMedia": lpa_media, "anosUsados": anos, "vpa": vpa,
-           "numeroGraham": teto_v["numeroGraham"], "teto": teto_v["teto"],
-           "oportunidadeAte": teto_v["teto"] * 0.70, "aviso": teto_v["aviso"],
-           "seloIncompleta": f"Média de {anos} anos - base incompleta" if anos < 10 else "",
+    caro_acima = teto_v["teto"] * 1.30
+    estado_c = decidir_estado_conservador(preco, teto_v["teto"], caro_acima, simbolo="R$")
+    return {"ancora1a": teto_v["ancora1a"], "teto": teto_v["teto"], "oportunidadeAte": teto_v["teto"] * 0.70,
+           "caroAcima": caro_acima, "limite3a": teto_v["limite3a"], "limite5a": teto_v["limite5a"], "mm200": mm200,
            "decisao": {"codigo": estado_c.codigo, "rotulo": estado_c.rotulo, "texto": estado_c.texto,
                       "zona": estado_c.zona, "validado": estado_c.validado, "alerta": estado_c.alerta}}
 
 
-def test_csmg3_com_3_anos_mostra_teto_nao_sem_dado():
-    # cenário real: CSMG3 só tem 3 anos de LPA no income_stmt do Yahoo (não 10) — tem que mostrar
-    # teto mesmo assim, com o selo de base incompleta, nunca "Sem dado"
-    from tela.dados import _media_disponivel
-    pontos_csmg3 = [(2023, 2.10), (2024, 2.40), (2025, 2.70)]     # 3 anos, como no Yahoo real
-    media, anos = _media_disponivel(pontos_csmg3, 3)
-    assert media is not None and anos == 3
-    fx = _faixa_conservador(media, anos, vpa=18.0, preco=20.0)
-    assert fx is not None and fx["teto"] is not None
-    assert fx["seloIncompleta"] == "Média de 3 anos - base incompleta"
+def test_faixa_conservador_ancora_1a_com_limites_3a_5a_como_referencia():
+    fx = _faixa_conservador(100.0, 80.0, 60.0, mm200=90.0, preco=90.0)
+    assert fx["teto"] == pytest.approx(100.0) and fx["ancora1a"] == pytest.approx(100.0)
+    assert fx["caroAcima"] == pytest.approx(130.0)
+    assert fx["limite3a"] == pytest.approx(48.0) and fx["limite5a"] == pytest.approx(30.0)
+    assert fx["mm200"] == pytest.approx(90.0)
+    assert fx["decisao"]["codigo"] == "AGUARDAR"   # 90 está entre 70 (oportunidade) e 130 (cara)
 
 
-def test_faixa_conservador_com_vpa_e_3_anos():
-    fx = _faixa_conservador(2.4, 3, vpa=18.0, preco=20.0)
-    assert fx["numeroGraham"] == pytest.approx((22.5 * 2.4 * 18.0) ** 0.5) and fx["aviso"] == ""
-    assert fx["seloIncompleta"] == "Média de 3 anos - base incompleta"
+def test_faixa_conservador_sem_media_1a_fica_none():
+    # ticker recém-listado (menos de 1 ano de pregão): sem teto, a tela cai pra faixa de 52 semanas
+    assert _faixa_conservador(None, 80.0, 60.0, mm200=None, preco=20.0) is None
 
 
-def test_faixa_conservador_sem_vpa_3_anos_cai_para_p_l_15():
-    fx = _faixa_conservador(2.4, 3, vpa=None, preco=20.0)
-    assert fx["teto"] == pytest.approx(2.4 * 15) and fx["aviso"] == "Sem VPA, teto por P/L 15"
-
-
-def test_faixa_conservador_sem_lpa_media_fica_none():
-    assert _faixa_conservador(None, 0, vpa=18.0, preco=20.0) is None
-
-
-def test_faixa_conservador_vpa_invalido_cai_para_15():
-    fx = _faixa_conservador(2.4, 4, vpa=-1, preco=20.0)
-    assert fx["teto"] == pytest.approx(2.4 * 15) and "Sem VPA" in fx["aviso"]
-    fx0 = _faixa_conservador(2.4, 4, vpa=0, preco=20.0)
-    assert fx0["teto"] == pytest.approx(2.4 * 15)
-
-
-def test_faixa_conservador_limites_exatos_70_e_100_por_cento():
-    teto = 100.0
-    fx_70 = _faixa_conservador(teto / 15, 4, vpa=None, preco=70.0)   # 70% do teto: ainda oportunidade
+def test_faixa_conservador_limites_exatos_70_e_130_por_cento():
+    ancora = 100.0   # oportunidade até 70; zona neutra alargada até 130 (30% acima da âncora)
+    fx_70 = _faixa_conservador(ancora, None, None, mm200=None, preco=70.0)   # 70% da âncora: ainda oportunidade
     assert fx_70["decisao"]["codigo"] == "COMPRAR"
-    fx_100 = _faixa_conservador(teto / 15, 4, vpa=None, preco=100.0)  # exatamente o teto: ainda neutra
+    fx_100 = _faixa_conservador(ancora, None, None, mm200=None, preco=100.0)  # exatamente a âncora: ainda neutra
     assert fx_100["decisao"]["codigo"] == "AGUARDAR"
-    fx_101 = _faixa_conservador(teto / 15, 4, vpa=None, preco=100.01)  # passou do teto: cara
-    assert fx_101["decisao"]["codigo"] == "CARO"
+    fx_130 = _faixa_conservador(ancora, None, None, mm200=None, preco=130.0)  # 30% acima: ainda neutra
+    assert fx_130["decisao"]["codigo"] == "AGUARDAR"
+    fx_131 = _faixa_conservador(ancora, None, None, mm200=None, preco=130.01)  # passou dos 30%: cara
+    assert fx_131["decisao"]["codigo"] == "CARO"
     assert fx_70["decisao"]["validado"] is False and fx_100["decisao"]["validado"] is False
 
 
-def test_faixa_conservador_com_10_anos_nao_mostra_selo_incompleta():
-    fx = _faixa_conservador(2.4, 10, vpa=18.0, preco=20.0)
-    assert fx["seloIncompleta"] == ""
-
-
-def test_media_disponivel_e_mediana_nao_media_em_caso_ciclico():
-    # setor cíclico (ex.: semicondutores): 1 ano fraco isolado não derruba o teto como na média
-    from tela.dados import _media_disponivel
-    anos_mu = [(2022, 8.0), (2023, 5.0), (2024, 0.70), (2025, 7.65)]
-    mediana, n = _media_disponivel(anos_mu, 3)
-    media_simples = sum(v for _, v in anos_mu) / len(anos_mu)
-    assert n == 4 and mediana == pytest.approx((5.0 + 7.65) / 2)   # dois do meio: 5,0 e 7,65
-    assert mediana > media_simples   # a média simples (5,34) ficaria bem mais baixa que a mediana (6,33)
-
-
-def test_media_disponivel_mediana_com_numero_impar_de_anos():
-    from tela.dados import _media_disponivel
-    mediana, n = _media_disponivel([(2023, 1.0), (2024, 100.0), (2025, 2.0)], 3)
-    assert n == 3 and mediana == 2.0   # valor do meio depois de ordenar: 1, 2, 100
+def test_faixa_conservador_sem_3a_5a_nao_trava_o_teto():
+    # sem histórico de 3/5 anos (ticker mais novo): o teto (âncora de 1 ano) continua valendo
+    fx = _faixa_conservador(100.0, None, None, mm200=None, preco=20.0)
+    assert fx is not None and fx["teto"] == pytest.approx(100.0)
+    assert fx["limite3a"] is None and fx["limite5a"] is None
 
 
 def test_outlook_trimestral_eua_le_do_arquivo_gravado_pelo_robo(tmp_path, monkeypatch):

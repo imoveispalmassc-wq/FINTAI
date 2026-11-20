@@ -260,22 +260,6 @@ def _media_n_anos(pontos: list[tuple[int, float]], n: int) -> float | None:
     return sum(v for _, v in pontos[-n:]) / n
 
 
-def _media_disponivel(pontos: list[tuple[int, float]], minimo: int = 3) -> tuple[float | None, int]:
-    """Mediana do LPA com TODOS os anos que o Yahoo tiver (regra diferente de `_media_n_anos`: não
-    exige um número fixo de anos, só o mínimo). Usada só na Faixa de preço do Conservador, nunca no
-    card de Lucro por ação (esse continua exigindo exatamente 10 anos, com média simples).
-
-    Mediana em vez de média simples: com poucos anos (3-9) um único ano fraco de ciclo (comum em
-    setores cíclicos, ex. semicondutores) não derruba o teto sozinho como derrubaria na média.
-    Devolve (mediana, nº de anos usados); (None, 0) com menos de `minimo` anos."""
-    if len(pontos) < minimo:
-        return None, 0
-    valores = sorted(v for _, v in pontos)
-    n, meio = len(valores), len(valores) // 2
-    mediana = valores[meio] if n % 2 else (valores[meio - 1] + valores[meio]) / 2
-    return mediana, n
-
-
 def _estimativa(df, linhas, coluna):
     """Crescimento estimado pelos analistas (fração no Yahoo -> %). Devolve (valor, linha usada)."""
     if df is None or getattr(df, "empty", True) or coluna not in df.columns:
@@ -449,26 +433,24 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
     lpa_media_5a, lpa_media_10a = _media_n_anos(pontos_lpa, 5), _media_n_anos(pontos_lpa, 10)
     pl_conservador = r.preco_atual / lpa_media_10a if lpa_media_10a and lpa_media_10a > 0 and r.preco_atual else None
     teto_conservador = lpa_media_10a * 15 if lpa_media_10a and lpa_media_10a > 0 else None
-    # Faixa de preço do modo Conservador: valuation (Número de Graham com LPA médio de 10 anos),
-    # não a faixa de preço histórica de 52 semanas. Sem o LPA médio de 10 anos: fica None, e a tela
-    # usa a faixa de 52 semanas como alternativa visual, com aviso (nunca inventa o teto).
-    # a Faixa usa TODOS os anos disponíveis (mínimo 3), regra diferente do card de Lucro por ação
-    # (que exige exatamente 10 anos e não muda); CSMG3 com só 3 anos já mostra teto, não "Sem dado"
-    lpa_media_faixa, anos_faixa = _media_disponivel(pontos_lpa, 3)
-    teto_v = teto_valuation_conservador(lpa_media_faixa, f["vpa"])
-    faixa = zonas(r.minimo_1a, r.maximo_1a)   # faixa de 52 semanas: usada abaixo também como 2ª referência
+    # Faixa de preço do modo Conservador: valuation (âncora = preço médio dos últimos 1 ano), não
+    # a faixa de preço histórica de 52 semanas. Sem 1 ano de histórico de preço: fica None, e a
+    # tela usa a faixa de 52 semanas como alternativa visual (nunca inventa o teto).
+    teto_v = teto_valuation_conservador(r.media_fechamentos, r.media_fech_3a, r.media_fech_5a)
+    faixa = zonas(r.minimo_1a, r.maximo_1a)   # faixa de 52 semanas: usada abaixo também por modo_simons/zOport/zCara
     conservador_faixa = None
     if teto_v["teto"] is not None:
-        estado_c = decidir_estado_conservador(r.preco_atual, teto_v["teto"], quebrou=quebrou,
+        # zona neutra alargada: 30% acima da âncora, não trava em "Cara" assim que passa do teto
+        caro_acima = teto_v["teto"] * 1.30
+        estado_c = decidir_estado_conservador(r.preco_atual, teto_v["teto"], caro_acima, quebrou=quebrou,
                                               motivo_quebra=motivo, simbolo=moeda)
         conservador_faixa = {
-            "lpaMedia": _n(lpa_media_faixa, 4), "anosUsados": anos_faixa, "vpa": _n(f["vpa"], 4),
-            "numeroGraham": _n(teto_v["numeroGraham"], 4), "teto": _n(teto_v["teto"], 4),
-            "oportunidadeAte": _n(teto_v["teto"] * 0.70, 4), "aviso": teto_v["aviso"],
-            "seloIncompleta": f"Média de {anos_faixa} anos - base incompleta" if anos_faixa < 10 else "",
-            # 2ª referência (só visual, não entra na decisão): ponto de oportunidade pela faixa de 52
-            # semanas clássica (mínima + 30%), mostrado na mesma barra com um verde mais claro
-            "oportunidade52": _n(faixa.oportunidade_ate, 4),
+            "ancora1a": _n(teto_v["ancora1a"], 4), "teto": _n(teto_v["teto"], 4),
+            "oportunidadeAte": _n(teto_v["teto"] * 0.70, 4), "caroAcima": _n(caro_acima, 4),
+            # referência extra (não trava a decisão): limite de 3 anos (margem de 40%) e de 5 anos
+            # (margem de 50%), e a média de 200 dias (marcada na própria barra)
+            "limite3a": _n(teto_v["limite3a"], 4), "limite5a": _n(teto_v["limite5a"], 4),
+            "mm200": _n(r.mm200, 4),
             "decisao": {"codigo": estado_c.codigo, "rotulo": estado_c.rotulo, "texto": estado_c.texto,
                        "zona": estado_c.zona, "validado": estado_c.validado, "alerta": estado_c.alerta},
         }

@@ -184,21 +184,27 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   partes da entrada; histórico em vezes que subiu/caiu (sem % solto; contorno azul = hoje; ★ MELHOR só com 30+ casos, 8+ pontos
   acima da média geral e 5+ acima da segunda melhor; senão "Nenhum padrão forte - todos entre X% e Y%"); régua fixa de 1 a 5+.
 - CONSERVADOR: a "Faixa de preço" (zona de oportunidade/neutra/cara e o badge COMPRAR/AGUARDAR/CARO do topo) usa
-  valuation, não a faixa histórica de 52 semanas. Preço Teto = Número de Graham = √(22,5 × LPA médio × VPA
-  atual); margem de segurança de 30%: Oportunidade até 0,70 × Teto, Neutra até o Teto, Cara acima do Teto.
-  Sem VPA (mas com o LPA médio): Teto = LPA médio × 15, aviso "Sem VPA, teto por P/L 15". Sem LPA médio: sem
-  teto - a tela cai para a faixa de 52 semanas como alternativa visual, com aviso; nunca tem teste histórico
-  ("SEM TESTE"), mesmo quando o valuation está disponível. A regra do LPA médio da Faixa é diferente da do card
-  de Lucro por ação: a Faixa não exige 10 anos completos - com 3 ou mais anos em `_pontos_anuais`, usa a
-  MEDIANA (não a média) de todos os anos disponíveis, com o aviso "Média de N anos - base incompleta"; com
-  menos de 3 anos, sem teto. Mediana em vez de média simples porque, em setor cíclico (ex. semicondutores),
-  1 ano fraco isolado dentro de uma janela curta (3-9 anos) derrubaria o teto sozinho numa média simples.
-  O card de Lucro por ação continua exigindo exatamente 10 anos ("Sem dado" sem isso), com média simples, e
-  não muda com nada disso: "P/L Conservador" e "Preço teto conservador" dali (LPA médio 10a × 15) continuam
-  só como diagnóstico, não viram teto nem usam preço de fechamento por ano. A barra (mínima/máxima do período
-  do gráfico e "Você está aqui") continua só mostrando onde o preço está; não define mais os cortes. Com
-  valuation disponível, a barra também mostra, num verde mais claro, o ponto de oportunidade pela faixa
-  clássica de 52 semanas (mínima + 30%) como referência extra - não entra na decisão, só no visual. LYNCH
+  valuation, não a faixa histórica de 52 semanas. Preço Teto = ÂNCORA = preço médio dos últimos 1 ano (fechamento
+  semanal, igual à `media_fechamentos` de 52 semanas). Oportunidade até 0,70 × Teto (margem de segurança de 30%);
+  Neutra alargada até 1,30 × Teto (30% ACIMA do teto - não vira "Cara" só por passar um pouco da âncora); Cara
+  acima disso (`decidir_estado_conservador` aceita `caro_acima` opcional, padrão 1,30 × teto). Substituiu o
+  Número de Graham (LPA médio × VPA): o preço histórico quase nunca falta (diferente de LPA/VPA, que ficavam
+  "Sem dado" com frequência, e cuja mediana de anos longos pode ficar presa a um regime de mercado antigo da
+  empresa, ex. MU antes do supercycle de IA). Sem 1 ano de histórico de preço (ticker recém-listado): sem teto -
+  a tela cai para a faixa de 52 semanas como alternativa visual; nunca tem teste histórico ("SEM TESTE"), mesmo
+  quando o valuation está disponível. Médias de 3 anos (margem de 40%: limite = 0,60 × média) e 5 anos (margem
+  de 50%: limite = 0,50 × média) NÃO travam a decisão - aparecem só como referência extra na tela (lista abaixo
+  da barra), e de forma escalonada: a referência de 3 anos só aparece se o preço já bateu a de 1 ano (já está na
+  zona de oportunidade); a de 5 anos só aparece se o preço já bateu a de 3 anos. A média de 200 dias (mm200)
+  também é só referência, mas marcada direto na barra (traço laranja, sempre visível), não na lista escalonada.
+  Mais reativo a mudança de cenário do que usar um LPA médio de vários anos (que reage devagar) e
+  menos sujeito a 1 ano isolado distorcer tudo (diferente de olhar só o LPA do último ano). O card de Lucro por
+  ação continua exigindo exatamente 10 anos ("Sem dado" sem isso) para "Média 5/10 anos" e o Graham ali, com
+  média simples, e não muda com nada disso: "P/L Conservador" e "Preço teto conservador" (LPA médio 10a × 15)
+  continuam só como diagnóstico, não viram teto nem usam preço de fechamento por ano. A barra (mínima/máxima do
+  período do gráfico e "Você está aqui") continua só mostrando onde o preço está; não define mais os cortes. A
+  faixa de 52 semanas clássica (mínima + 30%) não aparece mais como referência extra na barra (tirada por ser um
+  número antigo e confundir com os cortes do valuation). LYNCH
   ignora a faixa e usa só a
   MM200: Oportunidade = MM200 −10% a +5%;
   abaixo de −10% = "Bem abaixo da MM200" (azul, separado, ainda COMPRAR); Neutro = +5% a +15%; Caro = +15% ou mais;

@@ -116,22 +116,25 @@ def decidir_estado(percentil: float, minimo: float, maximo: float, *,
     return Estado("AGUARDAR", "AGUARDAR - Neutro", texto, "Zona neutra", False, " ".join(avisos))
 
 
-def decidir_estado_conservador(preco: float, teto: float, *, quebrou: bool = False,
-                               motivo_quebra: str = "", simbolo: str = "R$") -> Estado:
-    """Decisão do modo Conservador por valuation (Preço Teto = Número de Graham com o LPA
-    médio de 10 anos), não pela faixa de preço histórica de 52 semanas.
+def decidir_estado_conservador(preco: float, teto: float, caro_acima: float | None = None, *,
+                               quebrou: bool = False, motivo_quebra: str = "", simbolo: str = "R$") -> Estado:
+    """Decisão do modo Conservador por valuation (Preço Teto = âncora de preço médio de 1 ano),
+    não pela faixa de preço histórica de 52 semanas.
 
-    - Preço <= 70% do Preço Teto (margem de segurança de 30%): COMPRAR - Oportunidade
-    - Preço entre 70% e 100% do Teto:                          AGUARDAR - Neutro
-    - Preço > Teto:                                            CARO - Evitar
+    - Preço <= 70% da âncora (margem de segurança de 30%): COMPRAR - Oportunidade
+    - Preço entre 70% da âncora e `caro_acima` (padrão: a própria âncora × 1,30 - zona
+      neutra alargada em 30% acima, pra não virar "Cara" só por passar um pouco do teto):
+      AGUARDAR - Neutro
+    - Preço > caro_acima:                                     CARO - Evitar
 
     Nunca validado por teste histórico (não existe backtest para este critério)."""
     alvo = teto * 0.70
+    caro_acima = teto * 1.30 if caro_acima is None else caro_acima
     texto = f"Ponto de oportunidade em {simbolo} {num(alvo)}"
     avisos = [f"Atenção: {motivo_quebra}."] if quebrou and motivo_quebra else []
     if preco <= alvo:
         return Estado("COMPRAR", "COMPRAR - Oportunidade", texto, "Zona de oportunidade", False, " ".join(avisos))
-    if preco > teto:
+    if preco > caro_acima:
         return Estado("CARO", "CARO - Evitar", texto, "Zona cara", False, " ".join(avisos))
     return Estado("AGUARDAR", "AGUARDAR - Neutro", texto, "Zona neutra", False, " ".join(avisos))
 
