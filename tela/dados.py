@@ -13,7 +13,7 @@ import math
 import pandas as pd
 
 from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, lpa_contabil_ttm, media_no_periodo, pl_medio_12m, pl_medio_contabil,
-                      graham_duas_versoes, pl_medio_longo, ponto_entrada_escalonado, preco_justo_graham, preco_teto_bazin,
+                      graham_duas_versoes, pl_medio_longo, preco_justo_graham, preco_teto_bazin,
                       teto_valuation_conservador)
 from utils.lynch import crescimento_anual, peg, preco_lynch, regra_prejuizo, veredito
 from utils.override import guidance as guidance_oficial
@@ -444,17 +444,13 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         # zona neutra alargada: 30% acima da âncora, não trava em "Cara" assim que passa do teto
         caro_acima = teto_v["teto"] * 1.30
         oportunidade_ate = teto_v["teto"] * 0.70
-        # ponto de entrada escalonado: avança pro próximo nível (3a, depois 5a) assim que o atual é
-        # batido, incentivando esperar um preço ainda melhor - só visual, não muda a classificação
-        ponto_entrada = ponto_entrada_escalonado(r.preco_atual, oportunidade_ate, teto_v["limite3a"], teto_v["limite5a"])
-        estado_c = decidir_estado_conservador(r.preco_atual, teto_v["teto"], caro_acima, ponto_entrada=ponto_entrada,
+        estado_c = decidir_estado_conservador(r.preco_atual, teto_v["teto"], caro_acima,
                                               quebrou=quebrou, motivo_quebra=motivo, simbolo=moeda)
         conservador_faixa = {
             "ancora1a": _n(teto_v["ancora1a"], 4), "teto": _n(teto_v["teto"], 4),
             "oportunidadeAte": _n(oportunidade_ate, 4), "caroAcima": _n(caro_acima, 4),
-            "pontoEntrada": _n(ponto_entrada, 4),
-            # referência extra (não trava a decisão): limite de 3 anos (margem de 40%) e de 5 anos
-            # (margem de 50%), e a média de 200 dias (marcada na própria barra)
+            # referência extra (não trava a decisão, só marcada na própria barra): limite de 3 anos
+            # (margem de 40%), de 5 anos (margem de 50%) e a média de 200 dias
             "limite3a": _n(teto_v["limite3a"], 4), "limite5a": _n(teto_v["limite5a"], 4),
             "mm200": _n(r.mm200, 4),
             "decisao": {"codigo": estado_c.codigo, "rotulo": estado_c.rotulo, "texto": estado_c.texto,

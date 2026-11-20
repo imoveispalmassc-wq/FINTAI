@@ -117,8 +117,7 @@ def decidir_estado(percentil: float, minimo: float, maximo: float, *,
 
 
 def decidir_estado_conservador(preco: float, teto: float, caro_acima: float | None = None, *,
-                               ponto_entrada: float | None = None, quebrou: bool = False,
-                               motivo_quebra: str = "", simbolo: str = "R$") -> Estado:
+                               quebrou: bool = False, motivo_quebra: str = "", simbolo: str = "R$") -> Estado:
     """Decisão do modo Conservador por valuation (Preço Teto = âncora de preço médio de 1 ano),
     não pela faixa de preço histórica de 52 semanas.
 
@@ -128,14 +127,10 @@ def decidir_estado_conservador(preco: float, teto: float, caro_acima: float | No
       AGUARDAR - Neutro
     - Preço > caro_acima:                                     CARO - Evitar
 
-    `ponto_entrada` (opcional) só muda o texto "Ponto de oportunidade em X" (ex. o alvo escalonado
-    de `ponto_entrada_escalonado`, quando o preço já bateu o primeiro nível) - nunca a classificação
-    acima, que continua sempre pela margem de 30% sobre a âncora.
-
     Nunca validado por teste histórico (não existe backtest para este critério)."""
     alvo = teto * 0.70
     caro_acima = teto * 1.30 if caro_acima is None else caro_acima
-    texto = f"Ponto de oportunidade em {simbolo} {num(alvo if ponto_entrada is None else ponto_entrada)}"
+    texto = f"Ponto de oportunidade em {simbolo} {num(alvo)}"
     avisos = [f"Atenção: {motivo_quebra}."] if quebrou and motivo_quebra else []
     if preco <= alvo:
         return Estado("COMPRAR", "COMPRAR - Oportunidade", texto, "Zona de oportunidade", False, " ".join(avisos))

@@ -300,36 +300,24 @@ def test_decidir_estado_conservador_caro_acima_explicito_sobrescreve_padrao():
     assert decidir_estado_conservador(110.01, 100.0, 110.0).codigo == "CARO"
 
 
-def test_decidir_estado_conservador_ponto_entrada_so_muda_o_texto_nao_a_classificacao():
-    from utils.signals import decidir_estado_conservador
-    # preço já bateu a oportunidade (70,0 <= 70,0): COMPRAR de qualquer forma; com ponto_entrada
-    # escalonado (ex. 64,65, o próximo degrau), o texto mostra esse valor, não o de 1 ano (70,0)
-    e = decidir_estado_conservador(70.0, 100.0, ponto_entrada=64.65, simbolo="R$")
-    assert e.codigo == "COMPRAR" and e.texto == "Ponto de oportunidade em R$ 64,65"
-
-
-def test_decidir_estado_conservador_sem_ponto_entrada_mostra_o_alvo_normal():
+def test_decidir_estado_conservador_texto_mostra_sempre_o_alvo_de_30_por_cento():
     from utils.signals import decidir_estado_conservador
     e = decidir_estado_conservador(50.0, 100.0, simbolo="R$")
     assert "70" in e.texto
 
-
-
-
 # ------------------------------------------------------------ Faixa de preço do Conservador (ponta a ponta)
 def _faixa_conservador(media_1a, media_3a, media_5a, mm200, preco):
     """Simula o trecho de montar() que monta conservadorFaixa, sem precisar da rede."""
-    from calculos import ponto_entrada_escalonado, teto_valuation_conservador
+    from calculos import teto_valuation_conservador
     from utils.signals import decidir_estado_conservador
     teto_v = teto_valuation_conservador(media_1a, media_3a, media_5a)
     if teto_v["teto"] is None:
         return None
     caro_acima = teto_v["teto"] * 1.30
     oportunidade_ate = teto_v["teto"] * 0.70
-    ponto_entrada = ponto_entrada_escalonado(preco, oportunidade_ate, teto_v["limite3a"], teto_v["limite5a"])
-    estado_c = decidir_estado_conservador(preco, teto_v["teto"], caro_acima, ponto_entrada=ponto_entrada, simbolo="R$")
+    estado_c = decidir_estado_conservador(preco, teto_v["teto"], caro_acima, simbolo="R$")
     return {"ancora1a": teto_v["ancora1a"], "teto": teto_v["teto"], "oportunidadeAte": oportunidade_ate,
-           "caroAcima": caro_acima, "pontoEntrada": ponto_entrada,
+           "caroAcima": caro_acima,
            "limite3a": teto_v["limite3a"], "limite5a": teto_v["limite5a"], "mm200": mm200,
            "decisao": {"codigo": estado_c.codigo, "rotulo": estado_c.rotulo, "texto": estado_c.texto,
                       "zona": estado_c.zona, "validado": estado_c.validado, "alerta": estado_c.alerta}}
@@ -349,16 +337,17 @@ def test_faixa_conservador_sem_media_1a_fica_none():
     assert _faixa_conservador(None, 80.0, 60.0, mm200=None, preco=20.0) is None
 
 
-def test_faixa_conservador_ponto_entrada_escalona_caso_real_bbas3():
+def test_faixa_conservador_caso_real_bbas3_ponto_de_entrada_fixo_em_30_por_cento():
     # caso real: âncora (preço médio 1a) 21,73 -> oportunidade 15,21, limite 3a 14,65, limite 5a
-    # 11,28; preço 14,30 já bateu a oportunidade e o limite de 3a - o ponto de entrada (e o texto
-    # "Ponto de oportunidade em") avança pro limite de 5 anos, mas a classificação continua COMPRAR
+    # 11,28 (só referências visuais); preço 14,30 já bateu a oportunidade - COMPRAR, e o texto
+    # "Ponto de oportunidade em" continua mostrando o alvo fixo de 30% (15,21), não os de 3/5 anos
     media_3a, media_5a = 14.646974525937608 / 0.60, 11.275316084938488 / 0.50
     fx = _faixa_conservador(21.73115379993732, media_3a, media_5a, mm200=21.65, preco=14.30)
     assert fx["oportunidadeAte"] == pytest.approx(15.21, abs=0.01)
-    assert fx["pontoEntrada"] == pytest.approx(11.28, abs=0.01)
+    assert fx["limite3a"] == pytest.approx(14.65, abs=0.01)
+    assert fx["limite5a"] == pytest.approx(11.28, abs=0.01)
     assert fx["decisao"]["codigo"] == "COMPRAR"
-    assert "11,28" in fx["decisao"]["texto"]
+    assert "15,21" in fx["decisao"]["texto"]
 
 
 def test_faixa_conservador_limites_exatos_70_e_130_por_cento():

@@ -216,7 +216,7 @@ function montar(root, d) {
       if (modo !== 'simons') {
       const LPg = modo === 'lynch' && d.lynch && d.lynch.preco;
       const Cg = modo === 'graham' && d.conservadorFaixa;
-      const zOport = LPg ? LPg.oportunidadeAte : Cg ? Cg.pontoEntrada : zOportF;
+      const zOport = LPg ? LPg.oportunidadeAte : Cg ? Cg.oportunidadeAte : zOportF;
       const zCara = LPg ? LPg.caroAcima : Cg ? Cg.caroAcima : zCaraF;
       // MM200: mesma régua da barra, repetida aqui como linha pontilhada - já existia no Lynch,
       // agora também no Conservador (Graham), só que esse é novo (antes só aparecia na barra)
@@ -444,30 +444,42 @@ function montar(root, d) {
     // Com valuation disponível, os cortes (oportunidade/neutra/cara) vêm do Preço Teto, não do
     // período do gráfico; a barra (mínima/máxima e "você está aqui") continua mostrando só onde
     // o preço está dentro do período escolhido (1A/5A/Máx) — ela não define mais os cortes.
-    // zO é o ponto de entrada ESCALONADO (avança pro próximo nível assim que o atual é batido -
-    // ver ponto_entrada_escalonado): a zona verde e o rótulo acompanham esse alvo, não o fixo de
-    // 1 ano; a classificação COMPRAR/AGUARDAR/CARO continua usando sempre o de 1 ano (oportunidadeAte)
-    const zO = C ? C.pontoEntrada : zOport, zC = C ? C.caroAcima : zCara;
-    const p = posicao(d.preco, fx.min, fx.max), larg = fx.max - fx.min;
-    const aBruto = larg > 0 ? (zO - fx.min) / larg * 100 : 30, bBruto = larg > 0 ? (zC - fx.min) / larg * 100 : 70;
+    // Ponto de entrada (zona verde) é FIXO na margem de 30% sobre a âncora de 1 ano; os limites de
+    // 3 e 5 anos (40%/50%) são só referências visuais marcadas na própria barra, como a MM200.
+    const zO = C ? C.oportunidadeAte : zOport, zC = C ? C.caroAcima : zCara;
+    // os limites de 3/5 anos ou a MM200 podem cair fora da faixa mínima/máxima do período (ex.
+    // preço muito perto da mínima de 52 semanas, com o limite de 5 anos abaixo dela): estende a
+    // escala da barra com uma margem de 15% do intervalo oportunidade-cara, senão essas marcações
+    // caem fora da régua
+    const pontosEscala = C ? [zO, zC, tem(C.limite3a) ? C.limite3a : null, tem(C.limite5a) ? C.limite5a : null,
+      tem(C.mm200) ? C.mm200 : null].filter(tem) : [];
+    const margemEscala = C ? Math.max(zC - zO, 1e-6) * 0.15 : 0;
+    const minEfetivo = C ? Math.min(fx.min, ...pontosEscala.map(v => v - margemEscala)) : fx.min;
+    const maxEfetivo = C ? Math.max(fx.max, ...pontosEscala.map(v => v + margemEscala)) : fx.max;
+    const p = posicao(d.preco, minEfetivo, maxEfetivo), larg = maxEfetivo - minEfetivo;
+    const aBruto = larg > 0 ? (zO - minEfetivo) / larg * 100 : 30, bBruto = larg > 0 ? (zC - minEfetivo) / larg * 100 : 70;
     const a = Math.max(0, Math.min(100, aBruto)), b = Math.max(a, Math.min(100, bBruto));
-    // referência extra, só visual (não muda a decisão): média de 200 dias, marcada na mesma barra
+    // referências extra, só visuais (não mudam a decisão): média de 200 dias, limite de 3 anos e
+    // de 5 anos, marcadas na mesma barra
     const temMM = C && tem(C.mm200);
-    const aMM = temMM && larg > 0 ? Math.max(0, Math.min(100, (C.mm200 - fx.min) / larg * 100)) : null;
-    const fundo = `linear-gradient(90deg,var(--verde) 0 ${a}%,var(--ardosia) ${a}% ${b}%,var(--ambar) ${b}% 100%)`;
+    const aMM = temMM && larg > 0 ? Math.max(0, Math.min(100, (C.mm200 - minEfetivo) / larg * 100)) : null;
+    const tem3a = C && tem(C.limite3a);
+    const a3a = tem3a && larg > 0 ? Math.max(0, Math.min(100, (C.limite3a - minEfetivo) / larg * 100)) : null;
+    const tem5a = C && tem(C.limite5a);
+    const a5a = tem5a && larg > 0 ? Math.max(0, Math.min(100, (C.limite5a - minEfetivo) / larg * 100)) : null;
+    // zona de oportunidade em 3 tons de verde: mais clara perto do ponto de entrada (15,21 no ex.
+    // real da BBAS3) e mais forte quanto mais funda (perto do limite de 5 anos) - só visual, não
+    // muda a classificação, que continua sempre pela margem de 30% sobre a âncora de 1 ano
+    const cortesVerde = [a5a, a3a].filter(v => v !== null && v > 0 && v < a).sort((x, y) => x - y);
+    const bordasVerde = [0, ...cortesVerde, a];
+    const coresVerde = bordasVerde.length - 1 === 3 ? ['var(--verde-forte)', 'var(--verde)', 'var(--verde-claro)']
+      : bordasVerde.length - 1 === 2 ? ['var(--verde)', 'var(--verde-claro)'] : ['var(--verde)'];
+    const faixaVerde = bordasVerde.slice(0, -1).map((ini, i) => `${coresVerde[i]} ${ini}% ${bordasVerde[i + 1]}%`).join(',');
+    const fundo = `linear-gradient(90deg,${faixaVerde},var(--ardosia) ${a}% ${b}%,var(--ambar) ${b}% 100%)`;
     const titulo = C ? 'Valuation (preço médio de 1 ano)' : fx.rotulo;
-    const escalou = C && C.pontoEntrada !== C.oportunidadeAte;
     const nota = C
-      ? `Preço teto (âncora) = preço médio dos últimos 12 meses: ${din(C.teto)}. Oportunidade até 30% abaixo (margem de segurança); zona neutra alargada até 30% acima (${din(C.caroAcima)}); cara daí pra cima.${escalou ? ` Preço já passou de ${din(C.oportunidadeAte)}: o ponto de entrada avançou pro próximo nível (${din(C.pontoEntrada)}), incentivando esperar um preço ainda melhor - a classificação COMPRAR/AGUARDAR/CARO continua a mesma.` : ''} A barra mostra só onde o preço está dentro do período escolhido (1A, 5A ou Máx.); os cortes vêm do valuation, não do período.${temMM ? ` O traço laranja é a média de 200 dias (${din(C.mm200)}) - só referência, não entra na decisão.` : ''}`
+      ? `Preço teto (âncora) = preço médio dos últimos 12 meses: ${din(C.teto)}. Oportunidade até 30% abaixo (margem de segurança); zona neutra alargada até 30% acima (${din(C.caroAcima)}); cara daí pra cima. A barra mostra só onde o preço está dentro do período escolhido (1A, 5A ou Máx.); os cortes vêm do valuation, não do período.${temMM ? ` O traço laranja é a média de 200 dias (${din(C.mm200)}) - só referência, não entra na decisão.` : ''}${tem3a || tem5a ? ` Dentro da zona de oportunidade, o verde fica mais forte quanto mais fundo o preço: ${tem3a ? `até ${din(C.limite3a)} (margem de 40%, 3 anos)` : ''}${tem3a && tem5a ? ' e ' : ''}${tem5a ? `até ${din(C.limite5a)} (margem de 50%, 5 anos)` : ''} - só referência, o ponto de entrada continua em ${din(zO)}.` : ''}`
       : `Mínima e máxima ${fx.curto === '52 semanas' ? 'das últimas 52 semanas' : fx.curto === 'todo o histórico' ? 'de todo o histórico' : `dos últimos ${fx.curto}`} nas pontas da barra. A faixa acompanha o período do gráfico (1A, 5A ou Máx.).`;
-    // referência extra (não trava a decisão): limite de 3/5 anos (margem de 40%/50%) - a de 3 anos
-    // só aparece se o preço já bateu a de 1 ano (oportunidade, valor fixo - não o alvo escalonado),
-    // e a de 5 anos só se já bateu a de 3
-    const bateu1a = C && d.preco <= C.oportunidadeAte, bateu3a = bateu1a && tem(C && C.limite3a) && d.preco <= C.limite3a;
-    const refs = C ? [
-      bateu1a && tem(C.limite3a) ? `Referência 3 anos (margem de 40%)<b>${din(C.limite3a)}</b>` : '',
-      bateu3a && tem(C.limite5a) ? `Referência 5 anos (margem de 50%)<b>${din(C.limite5a)}</b>` : '',
-    ].filter(Boolean) : [];
     el.innerHTML = `<h2>Faixa de preço <small>${titulo}</small></h2>
       <div class="pilha">
         <div class="zona" style="--c:var(--verde)"><span class="rot">Zona de oportunidade</span><b class="num">até ${din(zO)}</b></div>
@@ -480,28 +492,31 @@ function montar(root, d) {
             <span style="color:var(--ambar)"><b>${100 - b < 11 ? '' : 'Cara'}</b></span>
           </div>
           <div class="marca-cima limites num">
-            <span class="esq">${f(fx.min)}</span>
+            <span class="esq">${f(minEfetivo)}</span>
             ${(() => {
               // rótulos afastados pra não colar (ex. ativo perto da mínima: zona de oportunidade
               // estreita); o traço na régua embaixo continua na posição exata, só o texto se afasta
               const pontos = [
                 aMM !== null ? { pos: aMM, html: f(C.mm200), cor: '#f2994a' } : null,
+                a3a !== null ? { pos: a3a, html: f(C.limite3a), cor: null } : null,
+                a5a !== null ? { pos: a5a, html: f(C.limite5a), cor: null } : null,
                 { pos: a, html: f(zO), cor: null },
                 { pos: b, html: f(zC), cor: null },
               ].filter(Boolean).sort((x, y) => x.pos - y.pos);
               const ajustadas = afastar(pontos.map(p => p.pos));
               return pontos.map((p, i) => `<span style="left:${ajustadas[i]}%${p.cor ? `;color:${p.cor}` : ''}">${p.html}</span>`).join('');
             })()}
-            <span class="dir">${f(fx.max)}</span>
+            <span class="dir">${f(maxEfetivo)}</span>
           </div>
           <div class="regua" style="background:${fundo};margin-top:4px">
             ${aMM !== null ? `<span class="traco" style="left:${aMM}%;background:#f2994a"></span>` : ''}
+            ${a3a !== null ? `<span class="traco" style="left:${a3a}%"></span>` : ''}
+            ${a5a !== null ? `<span class="traco" style="left:${a5a}%"></span>` : ''}
             <span class="traco" style="left:${a}%"></span><span class="traco" style="left:${b}%"></span>
             <span class="bola" style="left:${p}%"></span>
           </div>
           <div class="marca-baixo num"><span class="aqui-rot" style="${ancora(p)}"><b>${f(d.preco)}</b>Você está aqui</span></div>
           <div class="nota" style="margin-top:6px">${nota}</div>
-          ${refs.length ? `<div class="lista-v num" style="margin-top:10px">${refs.map(r => `<div>${r}</div>`).join('')}</div>` : ''}
         </div>
       </div>`;
   }
