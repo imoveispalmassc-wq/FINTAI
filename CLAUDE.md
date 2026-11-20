@@ -197,6 +197,14 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   da barra), e de forma escalonada: a referência de 3 anos só aparece se o preço já bateu a de 1 ano (já está na
   zona de oportunidade); a de 5 anos só aparece se o preço já bateu a de 3 anos. A média de 200 dias (mm200)
   também é só referência, mas marcada direto na barra (traço laranja, sempre visível), não na lista escalonada.
+  PONTO DE ENTRADA ESCALONADO (`ponto_entrada_escalonado`): a zona verde da barra (e o texto "Ponto de
+  oportunidade em") não ficam travados no primeiro nível batido - assim que o preço bate o nível atual, o alvo
+  avança pro próximo (3 anos, depois 5 anos), mesmo que o preço ainda não tenha alcançado esse próximo nível,
+  incentivando esperar um preço ainda melhor em vez de comprar assim que entra na oportunidade. Ex. real (BBAS3):
+  oportunidade até R$15,21, limite 3a R$14,65, limite 5a R$11,28; preço R$14,30 já bateu os dois primeiros -
+  avança até R$11,28, mesmo sem o preço ter chegado lá. Só muda o texto/a barra, nunca a classificação
+  COMPRAR/AGUARDAR/CARO, que sempre usa a margem de 30% sobre a âncora de 1 ano. Mesma lógica no gráfico
+  pontilhado do modo Conservador (repete o ponto de entrada escalonado, não o fixo de 1 ano).
   Mais reativo a mudança de cenário do que usar um LPA médio de vários anos (que reage devagar) e
   menos sujeito a 1 ano isolado distorcer tudo (diferente de olhar só o LPA do último ano). O card de Lucro por
   ação continua exigindo exatamente 10 anos ("Sem dado" sem isso) para "Média 5/10 anos" e o Graham ali, com

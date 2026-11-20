@@ -390,6 +390,23 @@ def teto_valuation_conservador(media_1a: float | None, media_3a: float | None,
     }
 
 
+def ponto_entrada_escalonado(preco: float, oportunidade_ate: float, limite3a: float | None,
+                             limite5a: float | None) -> float:
+    """Alvo de entrada que escala pro próximo nível assim que o atual é batido: sempre que o
+    preço está <= alvo atual, avança pro próximo (mais fundo), mesmo que o preço ainda não tenha
+    alcançado esse próximo nível - incentiva esperar um preço ainda melhor, em vez de parar no
+    primeiro nível batido. Só visual (não muda a classificação COMPRAR/AGUARDAR/CARO, que continua
+    usando `oportunidade_ate` normalmente). Ex.: oportunidade até 15,21, limite 3a 14,65, limite 5a
+    11,28; preço 14,30 bate o primeiro (15,21) e avança pro limite de 3a (14,65); bate esse também
+    e avança pro limite de 5a (11,28); como não há mais níveis, para em 11,28."""
+    alvo = oportunidade_ate
+    for proximo in (limite3a, limite5a):
+        if proximo is None or preco > alvo:
+            break
+        alvo = proximo
+    return alvo
+
+
 def calcular(hist: pd.DataFrame, dividendos: pd.Series | None) -> Resultado:
     """hist: histórico diário (colunas High, Low, Close e, se houver, Adj Close)."""
     hist = _sem_fuso(hist).dropna(subset=["High", "Low", "Close"])

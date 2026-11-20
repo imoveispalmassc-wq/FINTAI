@@ -216,7 +216,7 @@ function montar(root, d) {
       if (modo !== 'simons') {
       const LPg = modo === 'lynch' && d.lynch && d.lynch.preco;
       const Cg = modo === 'graham' && d.conservadorFaixa;
-      const zOport = LPg ? LPg.oportunidadeAte : Cg ? Cg.oportunidadeAte : zOportF;
+      const zOport = LPg ? LPg.oportunidadeAte : Cg ? Cg.pontoEntrada : zOportF;
       const zCara = LPg ? LPg.caroAcima : Cg ? Cg.caroAcima : zCaraF;
       // MM200: mesma régua da barra, repetida aqui como linha pontilhada - já existia no Lynch,
       // agora também no Conservador (Graham), só que esse é novo (antes só aparecia na barra)
@@ -444,7 +444,10 @@ function montar(root, d) {
     // Com valuation disponível, os cortes (oportunidade/neutra/cara) vêm do Preço Teto, não do
     // período do gráfico; a barra (mínima/máxima e "você está aqui") continua mostrando só onde
     // o preço está dentro do período escolhido (1A/5A/Máx) — ela não define mais os cortes.
-    const zO = C ? C.oportunidadeAte : zOport, zC = C ? C.caroAcima : zCara;
+    // zO é o ponto de entrada ESCALONADO (avança pro próximo nível assim que o atual é batido -
+    // ver ponto_entrada_escalonado): a zona verde e o rótulo acompanham esse alvo, não o fixo de
+    // 1 ano; a classificação COMPRAR/AGUARDAR/CARO continua usando sempre o de 1 ano (oportunidadeAte)
+    const zO = C ? C.pontoEntrada : zOport, zC = C ? C.caroAcima : zCara;
     const p = posicao(d.preco, fx.min, fx.max), larg = fx.max - fx.min;
     const aBruto = larg > 0 ? (zO - fx.min) / larg * 100 : 30, bBruto = larg > 0 ? (zC - fx.min) / larg * 100 : 70;
     const a = Math.max(0, Math.min(100, aBruto)), b = Math.max(a, Math.min(100, bBruto));
@@ -453,12 +456,14 @@ function montar(root, d) {
     const aMM = temMM && larg > 0 ? Math.max(0, Math.min(100, (C.mm200 - fx.min) / larg * 100)) : null;
     const fundo = `linear-gradient(90deg,var(--verde) 0 ${a}%,var(--ardosia) ${a}% ${b}%,var(--ambar) ${b}% 100%)`;
     const titulo = C ? 'Valuation (preço médio de 1 ano)' : fx.rotulo;
+    const escalou = C && C.pontoEntrada !== C.oportunidadeAte;
     const nota = C
-      ? `Preço teto (âncora) = preço médio dos últimos 12 meses: ${din(C.teto)}. Oportunidade até 30% abaixo (margem de segurança); zona neutra alargada até 30% acima (${din(C.caroAcima)}); cara daí pra cima. A barra mostra só onde o preço está dentro do período escolhido (1A, 5A ou Máx.); os cortes vêm do valuation, não do período.${temMM ? ` O traço laranja é a média de 200 dias (${din(C.mm200)}) - só referência, não entra na decisão.` : ''}`
+      ? `Preço teto (âncora) = preço médio dos últimos 12 meses: ${din(C.teto)}. Oportunidade até 30% abaixo (margem de segurança); zona neutra alargada até 30% acima (${din(C.caroAcima)}); cara daí pra cima.${escalou ? ` Preço já passou de ${din(C.oportunidadeAte)}: o ponto de entrada avançou pro próximo nível (${din(C.pontoEntrada)}), incentivando esperar um preço ainda melhor - a classificação COMPRAR/AGUARDAR/CARO continua a mesma.` : ''} A barra mostra só onde o preço está dentro do período escolhido (1A, 5A ou Máx.); os cortes vêm do valuation, não do período.${temMM ? ` O traço laranja é a média de 200 dias (${din(C.mm200)}) - só referência, não entra na decisão.` : ''}`
       : `Mínima e máxima ${fx.curto === '52 semanas' ? 'das últimas 52 semanas' : fx.curto === 'todo o histórico' ? 'de todo o histórico' : `dos últimos ${fx.curto}`} nas pontas da barra. A faixa acompanha o período do gráfico (1A, 5A ou Máx.).`;
     // referência extra (não trava a decisão): limite de 3/5 anos (margem de 40%/50%) - a de 3 anos
-    // só aparece se o preço já bateu a de 1 ano (oportunidade), e a de 5 anos só se já bateu a de 3
-    const bateu1a = d.preco <= zO, bateu3a = bateu1a && tem(C && C.limite3a) && d.preco <= C.limite3a;
+    // só aparece se o preço já bateu a de 1 ano (oportunidade, valor fixo - não o alvo escalonado),
+    // e a de 5 anos só se já bateu a de 3
+    const bateu1a = C && d.preco <= C.oportunidadeAte, bateu3a = bateu1a && tem(C && C.limite3a) && d.preco <= C.limite3a;
     const refs = C ? [
       bateu1a && tem(C.limite3a) ? `Referência 3 anos (margem de 40%)<b>${din(C.limite3a)}</b>` : '',
       bateu3a && tem(C.limite5a) ? `Referência 5 anos (margem de 50%)<b>${din(C.limite5a)}</b>` : '',

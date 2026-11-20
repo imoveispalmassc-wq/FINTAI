@@ -75,3 +75,36 @@ def test_calcular_media_fech_3a_5a_sem_historico_suficiente_e_none():
                          "Volume": 1000, "Dividends": 0.0, "Stock Splits": 0.0})
     r = calcular(hist, None)
     assert r.media_fech_3a is None and r.media_fech_5a is None
+
+
+def test_ponto_entrada_escalonado_caso_real_bbas3():
+    """Caso real: oportunidade até 15,21, limite 3a 14,65, limite 5a 11,28. Preço 14,30 já bateu
+    os dois primeiros níveis (mesmo sem ter alcançado o terceiro) - avança até o limite de 5 anos,
+    o próximo nível ainda não batido."""
+    from calculos import ponto_entrada_escalonado
+    assert ponto_entrada_escalonado(14.30, 15.21, 14.65, 11.28) == pytest.approx(11.28)
+
+
+def test_ponto_entrada_escalonado_acima_da_oportunidade_fica_nela_sem_escalar():
+    from calculos import ponto_entrada_escalonado
+    # preço acima da oportunidade: nem entrou na zona, mostra ela mesma como alvo
+    assert ponto_entrada_escalonado(20.0, 15.21, 14.65, 11.28) == pytest.approx(15.21)
+
+
+def test_ponto_entrada_escalonado_bateu_so_o_1o_nivel_mostra_o_proximo():
+    from calculos import ponto_entrada_escalonado
+    # bateu só a oportunidade (15,21), ainda não o limite de 3a (14,65): o alvo já avança pro
+    # próximo degrau (14,65), incentivando esperar o preço cair ainda mais
+    assert ponto_entrada_escalonado(15.0, 15.21, 14.65, 11.28) == pytest.approx(14.65)
+
+
+def test_ponto_entrada_escalonado_para_no_proximo_nivel_nao_batido():
+    from calculos import ponto_entrada_escalonado
+    # bateu o 1º e o 2º, mas não o 3º (11,28): avança pro 3º mesmo assim (é o próximo degrau,
+    # mesmo sem o preço ter chegado lá) - mesmo comportamento do caso real da BBAS3 acima
+    assert ponto_entrada_escalonado(13.0, 15.21, 14.65, 11.28) == pytest.approx(11.28)
+
+
+def test_ponto_entrada_escalonado_sem_limites_3a_5a_fica_na_oportunidade():
+    from calculos import ponto_entrada_escalonado
+    assert ponto_entrada_escalonado(10.0, 15.21, None, None) == pytest.approx(15.21)
