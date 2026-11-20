@@ -94,10 +94,20 @@ function montar(root, d) {
     const el = $('decisao');
     let rotulo, classe = '', texto, pilula = '', selo = null, alerta = '', extra = '';
     if (modo === 'graham') {
-      const e = fx.decisao; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
-      selo = fx.testada ? seloGraham : ['sem', `SEM TESTE - Zonas de ${fx.curto} não têm teste histórico`];
-      classe = e.codigo === 'COMPRAR' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
-      alerta = e.alerta || '';
+      const C = d.conservadorFaixa;
+      if (C) {
+        // Faixa de preço por valuation (Número de Graham com LPA médio de 10 anos), não a
+        // faixa histórica de 52 semanas: nunca tem teste histórico, por isso sempre "SEM TESTE".
+        const e = C.decisao; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
+        selo = ['sem', 'SEM TESTE - Preço teto por valuation (LPA médio de 10 anos × VPA), sem teste histórico'];
+        classe = e.codigo === 'COMPRAR' ? 'COMPRAR' : e.codigo === 'CARO' ? 'CARO' : '';
+        alerta = [e.alerta, C.aviso].filter(Boolean).join(' ');
+      } else {
+        const e = fx.decisao; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
+        selo = fx.testada ? seloGraham : ['sem', `SEM TESTE - Zonas de ${fx.curto} não têm teste histórico`];
+        classe = e.codigo === 'COMPRAR' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
+        alerta = [e.alerta, 'Sem LPA médio de 10 anos (ou VPA) para o valuation: usando a faixa de preço histórica de 52 semanas como alternativa.'].filter(Boolean).join(' ');
+      }
     } else if (modo === 'lynch') {
       // Lynch só pela MM200 (ignora a faixa 30/70): oportunidade de -10% a +5%, neutro até +15%, caro acima
       const LP = d.lynch.preco, e = LP || fx.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
@@ -410,14 +420,24 @@ function montar(root, d) {
   }
   function renderFaixa() {
     const el = $('faixa');
+    const C = d.conservadorFaixa;
+    // Com valuation disponível, os cortes (oportunidade/neutra/cara) vêm do Preço Teto, não do
+    // período do gráfico; a barra (mínima/máxima e "você está aqui") continua mostrando só onde
+    // o preço está dentro do período escolhido (1A/5A/Máx) — ela não define mais os cortes.
+    const zO = C ? C.oportunidadeAte : zOport, zC = C ? C.teto : zCara;
     const p = posicao(d.preco, fx.min, fx.max), larg = fx.max - fx.min;
-    const a = larg > 0 ? (zOport - fx.min) / larg * 100 : 30, b = larg > 0 ? (zCara - fx.min) / larg * 100 : 70;
+    const aBruto = larg > 0 ? (zO - fx.min) / larg * 100 : 30, bBruto = larg > 0 ? (zC - fx.min) / larg * 100 : 70;
+    const a = Math.max(0, Math.min(100, aBruto)), b = Math.max(a, Math.min(100, bBruto));
     const fundo = `linear-gradient(90deg,var(--verde) 0 ${a}%,var(--ardosia) ${a}% ${b}%,var(--ambar) ${b}% 100%)`;
-    el.innerHTML = `<h2>Faixa de preço <small>${fx.rotulo}</small></h2>
+    const titulo = C ? `Valuation (LPA médio de ${C.anosUsados} ${C.anosUsados === 1 ? 'ano' : 'anos'} × VPA)` : fx.rotulo;
+    const nota = C
+      ? `Preço teto (margem de segurança de 30%): ${din(C.teto)}${C.numeroGraham ? ' (Número de Graham)' : ''}.${C.aviso ? ` ${C.aviso}.` : ''}${C.seloIncompleta ? ` ${C.seloIncompleta}.` : ''} A barra mostra só onde o preço está dentro do período escolhido (1A, 5A ou Máx.); os cortes de oportunidade/neutra/cara vêm do valuation, não do período.`
+      : `Mínima e máxima ${fx.curto === '52 semanas' ? 'das últimas 52 semanas' : fx.curto === 'todo o histórico' ? 'de todo o histórico' : `dos últimos ${fx.curto}`} nas pontas da barra. A faixa acompanha o período do gráfico (1A, 5A ou Máx.).`;
+    el.innerHTML = `<h2>Faixa de preço <small>${titulo}</small></h2>
       <div class="pilha">
-        <div class="zona" style="--c:var(--verde)"><span class="rot">Zona de oportunidade</span><b class="num">até ${din(zOport)}</b></div>
-        <div class="zona" style="--c:var(--ardosia)"><span class="rot">Zona neutra</span><b class="num">${f(zOport)} a ${f(zCara)}</b></div>
-        <div class="zona" style="--c:var(--ambar)"><span class="rot">Zona cara</span><b class="num">acima de ${din(zCara)}</b></div>
+        <div class="zona" style="--c:var(--verde)"><span class="rot">Zona de oportunidade</span><b class="num">até ${din(zO)}</b></div>
+        <div class="zona" style="--c:var(--ardosia)"><span class="rot">Zona neutra</span><b class="num">${f(zO)} a ${f(zC)}</b></div>
+        <div class="zona" style="--c:var(--ambar)"><span class="rot">Zona cara</span><b class="num">acima de ${din(zC)}</b></div>
         <div class="card">
           <div class="zonas-rot" style="grid-template-columns:${a}fr ${b - a}fr ${100 - b}fr">
             <span style="color:var(--verde)"><b>Oportunidade</b></span>
@@ -425,15 +445,15 @@ function montar(root, d) {
             <span style="color:var(--ambar)"><b>Cara</b></span>
           </div>
           <div class="marca-cima limites num">
-            <span class="esq">${f(fx.min)}</span><span style="left:${a}%">${f(zOport)}</span>
-            <span style="left:${b}%">${f(zCara)}</span><span class="dir">${f(fx.max)}</span>
+            <span class="esq">${f(fx.min)}</span><span style="left:${a}%">${f(zO)}</span>
+            <span style="left:${b}%">${f(zC)}</span><span class="dir">${f(fx.max)}</span>
           </div>
           <div class="regua" style="background:${fundo};margin-top:4px">
             <span class="traco" style="left:${a}%"></span><span class="traco" style="left:${b}%"></span>
             <span class="bola" style="left:${p}%"></span>
           </div>
           <div class="marca-baixo num"><span class="aqui-rot" style="${ancora(p)}"><b>${f(d.preco)}</b>Você está aqui</span></div>
-          <div class="nota" style="margin-top:6px">Mínima e máxima ${fx.curto === '52 semanas' ? 'das últimas 52 semanas' : fx.curto === 'todo o histórico' ? 'de todo o histórico' : `dos últimos ${fx.curto}`} nas pontas da barra. A faixa acompanha o período do gráfico (1A, 5A ou Máx.).</div>
+          <div class="nota" style="margin-top:6px">${nota}</div>
         </div>
       </div>`;
   }

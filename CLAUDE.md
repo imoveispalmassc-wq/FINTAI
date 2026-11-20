@@ -130,7 +130,19 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Cartões em barras visuais: classificação na faixa de 52 semanas com a MM200 marcada; dias de 0 a 10+ com as
   partes da entrada; histórico em vezes que subiu/caiu (sem % solto; contorno azul = hoje; ★ MELHOR só com 30+ casos, 8+ pontos
   acima da média geral e 5+ acima da segunda melhor; senão "Nenhum padrão forte - todos entre X% e Y%"); régua fixa de 1 a 5+.
-- Graham usa a faixa 30/70 de 52 semanas. LYNCH ignora a faixa e usa só a MM200: Oportunidade = MM200 −10% a +5%;
+- CONSERVADOR: a "Faixa de preço" (zona de oportunidade/neutra/cara e o badge COMPRAR/AGUARDAR/CARO do topo) usa
+  valuation, não a faixa histórica de 52 semanas. Preço Teto = Número de Graham = √(22,5 × LPA médio × VPA
+  atual); margem de segurança de 30%: Oportunidade até 0,70 × Teto, Neutra até o Teto, Cara acima do Teto.
+  Sem VPA (mas com o LPA médio): Teto = LPA médio × 15, aviso "Sem VPA, teto por P/L 15". Sem LPA médio: sem
+  teto - a tela cai para a faixa de 52 semanas como alternativa visual, com aviso; nunca tem teste histórico
+  ("SEM TESTE"), mesmo quando o valuation está disponível. A regra do LPA médio da Faixa é diferente da do card
+  de Lucro por ação: a Faixa não exige 10 anos completos - com 3 ou mais anos em `_pontos_anuais`, usa a média
+  de todos os anos disponíveis, com o aviso "Média de N anos - base incompleta"; com menos de 3 anos, sem teto.
+  O card de Lucro por ação continua exigindo exatamente 10 anos ("Sem dado" sem isso) e não muda com nada disso:
+  "P/L Conservador" e "Preço teto conservador" dali (LPA médio 10a × 15) continuam só como diagnóstico, não
+  viram teto nem usam preço de fechamento por ano. A barra (mínima/máxima do período do gráfico e "Você está
+  aqui") continua só mostrando onde o preço está; não define mais os cortes. LYNCH ignora a faixa e usa só a
+  MM200: Oportunidade = MM200 −10% a +5%;
   abaixo de −10% = "Bem abaixo da MM200" (azul, separado, ainda COMPRAR); Neutro = +5% a +15%; Caro = +15% ou mais;
   ponto de oportunidade = MM200 × 1,05.
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".

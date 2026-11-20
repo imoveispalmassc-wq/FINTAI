@@ -13,13 +13,13 @@ import math
 import pandas as pd
 
 from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, lpa_contabil_ttm, media_no_periodo, pl_medio_12m, pl_medio_contabil,
-                      graham_duas_versoes, pl_medio_longo, preco_justo_graham, preco_teto_bazin)
+                      graham_duas_versoes, pl_medio_longo, preco_justo_graham, preco_teto_bazin, teto_valuation_conservador)
 from utils.lynch import crescimento_anual, peg, preco_lynch, regra_prejuizo, veredito
 from utils.override import guidance as guidance_oficial
 from utils.override import guidance_inicial
 from utils.percentile import percentil_na_faixa, zonas
-from utils.signals import (backtest_percentil, decidir_estado, fundamento_quebrou,
-                           selo_backtest)
+from utils.signals import (backtest_percentil, decidir_estado, decidir_estado_conservador,
+                           fundamento_quebrou, selo_backtest)
 from utils.simons import SELO as SELO_SIMONS
 from utils.simons import JANELA, classificar, historico, leitura, melhor_linha, queda_desde_topo, timing
 
@@ -245,6 +245,16 @@ def _media_n_anos(pontos: list[tuple[int, float]], n: int) -> float | None:
     return sum(v for _, v in pontos[-n:]) / n
 
 
+def _media_disponivel(pontos: list[tuple[int, float]], minimo: int = 3) -> tuple[float | None, int]:
+    """Média do LPA com TODOS os anos que o Yahoo tiver (regra diferente de `_media_n_anos`: não
+    exige um número fixo de anos, só o mínimo). Usada só na Faixa de preço do Conservador, nunca no
+    card de Lucro por ação (esse continua exigindo exatamente 10 anos). Devolve (média, nº de anos
+    usados); (None, 0) com menos de `minimo` anos."""
+    if len(pontos) < minimo:
+        return None, 0
+    return sum(v for _, v in pontos) / len(pontos), len(pontos)
+
+
 def _estimativa(df, linhas, coluna):
     """Crescimento estimado pelos analistas (fração no Yahoo -> %). Devolve (valor, linha usada)."""
     if df is None or getattr(df, "empty", True) or coluna not in df.columns:
@@ -418,6 +428,25 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
     lpa_media_5a, lpa_media_10a = _media_n_anos(pontos_lpa, 5), _media_n_anos(pontos_lpa, 10)
     pl_conservador = r.preco_atual / lpa_media_10a if lpa_media_10a and lpa_media_10a > 0 and r.preco_atual else None
     teto_conservador = lpa_media_10a * 15 if lpa_media_10a and lpa_media_10a > 0 else None
+    # Faixa de preço do modo Conservador: valuation (Número de Graham com LPA médio de 10 anos),
+    # não a faixa de preço histórica de 52 semanas. Sem o LPA médio de 10 anos: fica None, e a tela
+    # usa a faixa de 52 semanas como alternativa visual, com aviso (nunca inventa o teto).
+    # a Faixa usa TODOS os anos disponíveis (mínimo 3), regra diferente do card de Lucro por ação
+    # (que exige exatamente 10 anos e não muda); CSMG3 com só 3 anos já mostra teto, não "Sem dado"
+    lpa_media_faixa, anos_faixa = _media_disponivel(pontos_lpa, 3)
+    teto_v = teto_valuation_conservador(lpa_media_faixa, f["vpa"])
+    conservador_faixa = None
+    if teto_v["teto"] is not None:
+        estado_c = decidir_estado_conservador(r.preco_atual, teto_v["teto"], quebrou=quebrou,
+                                              motivo_quebra=motivo, simbolo=moeda)
+        conservador_faixa = {
+            "lpaMedia": _n(lpa_media_faixa, 4), "anosUsados": anos_faixa, "vpa": _n(f["vpa"], 4),
+            "numeroGraham": _n(teto_v["numeroGraham"], 4), "teto": _n(teto_v["teto"], 4),
+            "oportunidadeAte": _n(teto_v["teto"] * 0.70, 4), "aviso": teto_v["aviso"],
+            "seloIncompleta": f"Média de {anos_faixa} anos - base incompleta" if anos_faixa < 10 else "",
+            "decisao": {"codigo": estado_c.codigo, "rotulo": estado_c.rotulo, "texto": estado_c.texto,
+                       "zona": estado_c.zona, "validado": estado_c.validado, "alerta": estado_c.alerta},
+        }
     estado = decidir_estado(
         r.percentil, r.minimo_1a, r.maximo_1a,
         compra_validada=bool(bt5 and bt5["compraValidada"]),
@@ -477,6 +506,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "regra": {"status": regra["status"], "media": _n(regra["media"], 4), "mensagem": regra["mensagem"]},
         "lpaMedia5a": _n(lpa_media_5a, 4), "lpaMedia10a": _n(lpa_media_10a, 4),
         "plConservador": _n(pl_conservador, 2), "tetoConservador": _n(teto_conservador, 2),
+        "conservadorFaixa": conservador_faixa,
         "lynch": lynch,
         "guidance": guia, "consensoAno": consenso_ano,
         "guidanceInicial": _inicial(curto, guia, lpa_anos, r, f["acoes"]),

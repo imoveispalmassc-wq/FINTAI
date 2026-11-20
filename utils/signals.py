@@ -116,6 +116,26 @@ def decidir_estado(percentil: float, minimo: float, maximo: float, *,
     return Estado("AGUARDAR", "AGUARDAR - Neutro", texto, "Zona neutra", False, " ".join(avisos))
 
 
+def decidir_estado_conservador(preco: float, teto: float, *, quebrou: bool = False,
+                               motivo_quebra: str = "", simbolo: str = "R$") -> Estado:
+    """Decisão do modo Conservador por valuation (Preço Teto = Número de Graham com o LPA
+    médio de 10 anos), não pela faixa de preço histórica de 52 semanas.
+
+    - Preço <= 70% do Preço Teto (margem de segurança de 30%): COMPRAR - Oportunidade
+    - Preço entre 70% e 100% do Teto:                          AGUARDAR - Neutro
+    - Preço > Teto:                                            CARO - Evitar
+
+    Nunca validado por teste histórico (não existe backtest para este critério)."""
+    alvo = teto * 0.70
+    texto = f"Ponto de oportunidade em {simbolo} {num(alvo)}"
+    avisos = [f"Atenção: {motivo_quebra}."] if quebrou and motivo_quebra else []
+    if preco <= alvo:
+        return Estado("COMPRAR", "COMPRAR - Oportunidade", texto, "Zona de oportunidade", False, " ".join(avisos))
+    if preco > teto:
+        return Estado("CARO", "CARO - Evitar", texto, "Zona cara", False, " ".join(avisos))
+    return Estado("AGUARDAR", "AGUARDAR - Neutro", texto, "Zona neutra", False, " ".join(avisos))
+
+
 # ------------------------------------------------------------ critérios de fundamentos
 @dataclass(frozen=True)
 class Avaliacao:

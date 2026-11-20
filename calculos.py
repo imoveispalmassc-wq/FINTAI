@@ -351,6 +351,21 @@ def preco_justo_graham(lpa: float | None, vpa: float | None) -> float | None:
     return None
 
 
+def teto_valuation_conservador(lpa_media_10a: float | None, vpa: float | None) -> dict:
+    """Preço teto da Faixa de preço do modo Conservador: Número de Graham
+    (√(22,5 × LPA médio de 10 anos × VPA)) — diferente do "Preço teto conservador" (LPA médio
+    × 15) mostrado no card de Lucro por ação, que não muda.
+
+    Sem VPA (mas com o LPA médio de 10 anos): cai para LPA médio × 15, com aviso.
+    Sem o LPA médio de 10 anos: sem teto (o chamador usa a faixa de 52 semanas como alternativa)."""
+    if not lpa_media_10a or lpa_media_10a <= 0:
+        return {"teto": None, "numeroGraham": None, "aviso": ""}
+    numero_graham = preco_justo_graham(lpa_media_10a, vpa)
+    if numero_graham is not None:
+        return {"teto": numero_graham, "numeroGraham": numero_graham, "aviso": ""}
+    return {"teto": lpa_media_10a * 15, "numeroGraham": None, "aviso": "Sem VPA, teto por P/L 15"}
+
+
 def calcular(hist: pd.DataFrame, dividendos: pd.Series | None) -> Resultado:
     """hist: histórico diário (colunas High, Low, Close e, se houver, Adj Close)."""
     hist = _sem_fuso(hist).dropna(subset=["High", "Low", "Close"])
