@@ -818,9 +818,18 @@ def _get_sec(url: str, cab: dict):
     return r
 
 
-def cik_do_ticker(ticker: str, cab: dict) -> tuple[str, str] | None:
-    """CIK (10 dígitos) e nome da empresa pelo ticker (lista oficial da SEC)."""
-    dados = _get_sec(f"{SEC_ARQUIVOS}/files/company_tickers.json", cab).json()
+def tickers_sec(cab: dict) -> dict:
+    """Lista oficial da SEC (ticker -> cik/title), um único arquivo (~10 mil empresas, poucos MB).
+    É a mesma lista para qualquer ticker: quem chama isto repetidas vezes seguidas (ex. o app, a
+    cada ticker dos EUA digitado) deve cachear o resultado e passar em `mapa`, em vez de baixar o
+    arquivo inteiro de novo a cada ticker."""
+    return _get_sec(f"{SEC_ARQUIVOS}/files/company_tickers.json", cab).json()
+
+
+def cik_do_ticker(ticker: str, cab: dict, mapa: dict | None = None) -> tuple[str, str] | None:
+    """CIK (10 dígitos) e nome da empresa pelo ticker (lista oficial da SEC). `mapa` opcional: o
+    resultado já buscado de `tickers_sec`, para não baixar a lista de novo."""
+    dados = mapa if mapa is not None else tickers_sec(cab)
     for linha in dados.values():
         if str(linha.get("ticker", "")).upper() == ticker.upper():
             return f"{int(linha['cik_str']):010d}", str(linha.get("title", ticker))

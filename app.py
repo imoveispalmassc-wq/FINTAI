@@ -272,6 +272,15 @@ def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]
     return {k: todos[k] for k in ordem}, padrao
 
 
+@st.cache_data(ttl=86400, show_spinner=False)   # lista de ~10 mil tickers da SEC: a mesma pra
+def _tickers_sec_cache(cab: dict) -> dict:      # qualquer ticker, baixa 1x por dia (não a cada ticker digitado)
+    import utils.fetch_guidance as fg
+    try:
+        return fg.tickers_sec(cab)
+    except Exception:
+        return {}
+
+
 @st.cache_data(ttl=86400, show_spinner=False)   # 10-K/10-Q não mudam mais que 1x por trimestre
 def lpa_anual_eua(ticker: str) -> list[dict]:
     """Histórico anual de LPA diluído (GAAP), direto da SEC (10-K) — qualquer ticker dos EUA, sem
@@ -288,7 +297,10 @@ def lpa_anual_eua(ticker: str) -> list[dict]:
 
     cab = {"User-Agent": f"fintai/1.0 (contato: {email})", "Accept-Encoding": "gzip, deflate"}
     try:
-        empresa = fg.cik_do_ticker(ticker, cab)
+        mapa = _tickers_sec_cache(cab)
+        if not mapa:
+            return []
+        empresa = fg.cik_do_ticker(ticker, cab, mapa=mapa)
         if not empresa:
             return []
         fatos = fg._get_sec(f"{fg.SEC_DADOS}/api/xbrl/companyfacts/CIK{empresa[0]}.json", cab).json()

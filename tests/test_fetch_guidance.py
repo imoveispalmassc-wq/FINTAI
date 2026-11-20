@@ -964,3 +964,23 @@ def test_lpa_anual_sec_reapresentacao_10ka_ganha_do_10k_original():
 def test_lpa_anual_sec_sem_fato_devolve_lista_vazia():
     assert fg.lpa_anual_sec({}) == []
     assert fg.lpa_anual_sec({"facts": {"us-gaap": {}}}) == []
+
+
+def test_cik_do_ticker_com_mapa_nao_baixa_lista_de_novo():
+    """Com `mapa` já em mãos (ex. cacheado pelo app pra todos os tickers), não chama a SEC de novo
+    - achou o bug de travamento: antes, cada ticker dos EUA digitado baixava a lista inteira
+    (~10 mil empresas) de novo."""
+    mapa = {"0": {"ticker": "MU", "cik_str": 723125, "title": "Micron Technology, Inc."}}
+    assert fg.cik_do_ticker("mu", cab={}, mapa=mapa) == ("0000723125", "Micron Technology, Inc.")
+
+
+def test_cik_do_ticker_sem_mapa_busca_na_sec(monkeypatch):
+    chamadas = []
+
+    def fake_tickers_sec(cab):
+        chamadas.append(cab)
+        return {"0": {"ticker": "AAPL", "cik_str": 320193, "title": "Apple Inc."}}
+
+    monkeypatch.setattr(fg, "tickers_sec", fake_tickers_sec)
+    assert fg.cik_do_ticker("AAPL", cab={"x": 1}) == ("0000320193", "Apple Inc.")
+    assert len(chamadas) == 1
