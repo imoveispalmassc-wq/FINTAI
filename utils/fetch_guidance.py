@@ -126,14 +126,27 @@ RE_FAIXA = re.compile(
     rf"(?:R\$\s*)?{NUM}\s*{UNID}?\s*(?:a|e|at[ée]|-|–|—)\s*(?:R\$\s*)?{NUM}\s*{UNID}?", re.I)
 RE_UNIDADE_SOLTA = re.compile(rf"R\$\s*{UNID}|\(\s*R\$\s*{UNID}\s*\)|em\s+{UNID}\s+de\s+reais", re.I)
 RE_ANO = re.compile(r"(?:guidance|proje[cç](?:[õo]es|[ãa]o)|estimativas?|perspectivas?)[^.]{0,80}?\b(20\d{2})\b", re.I)
+RE_ANO_SOLTO = re.compile(r"\b(20\d{2})\b")
 RE_PAYOUT = re.compile(
     r"payout[^%\d]{0,80}?(\d{1,3}(?:,\d+)?)\s*%(?:\s*(?:a|e|-|–)\s*(\d{1,3}(?:,\d+)?)\s*%)?", re.I)
+RAIO_ANO_VIZINHANCA = 500   # caracteres antes/depois da faixa, no fallback de ano (trava 2 do pedido)
 
 
-def extrair_por_padroes(texto: str, ano_alvo: int) -> Extracao | None:
-    """Faixa de lucro líquido projetada, ano e payout. None se o texto não traz faixa de lucro."""
+def _ano_unico(trecho: str) -> int | None:
+    """Um único ano (20xx) claro no trecho; None se não achar nenhum ou achar mais de um diferente
+    (nunca inventa: só usa quando não há ambiguidade)."""
+    anos = {int(a) for a in RE_ANO_SOLTO.findall(trecho)}
+    return anos.pop() if len(anos) == 1 else None
+
+
+def extrair_por_padroes(texto: str, ano_alvo: int, titulo: str = "") -> Extracao | None:
+    """Faixa de lucro líquido projetada, ano e payout. None se o texto não traz faixa de lucro.
+
+    titulo: categoria/tipo/assunto do documento na CVM, usado só no fallback de ano (ver abaixo)."""
     t = normalizar(texto)
+    titulo = normalizar(titulo)
     faixas: dict[tuple[float, float], str] = {}
+    posicoes: dict[tuple[float, float], int] = {}   # posição em `t` de cada faixa, para o fallback de ano
     revisao = False
     for m in RE_LUCRO.finditer(t):
         janela = t[m.start(): m.start() + 260]
@@ -168,6 +181,7 @@ def extrair_por_padroes(texto: str, ano_alvo: int) -> Extracao | None:
                     break
                 continue
             faixas.setdefault((a, b), janela[: f.end()].strip())
+            posicoes.setdefault((a, b), m.start())
             achou = True
         if achou and re.search(r"anterior|revis|atualiza", antes[-160:] + janela, re.I):
             revisao = True
@@ -181,6 +195,7 @@ def extrair_por_padroes(texto: str, ano_alvo: int) -> Extracao | None:
     if revisao:
         ex.motivos.append("documento fala em projeção anterior ou revisada")
 
+    ano_por_fallback = False
     anos = {int(a) for a in RE_ANO.findall(t)}
     if ano_alvo in anos:
         ex.ano = ano_alvo
@@ -188,7 +203,19 @@ def extrair_por_padroes(texto: str, ano_alvo: int) -> Extracao | None:
         ex.ano = max(anos)
         ex.motivos.append(f"projeção para {ex.ano}, não para {ano_alvo}")
     else:
-        ex.motivos.append("ano da projeção não encontrado")
+        # não achou o ano perto de "guidance/projeção/...": tenta 2 lugares extras, nessa ordem, antes
+        # de desistir (só usa se achar um ÚNICO ano claro em cada um; nunca inventa). Mesmo achando,
+        # a confiança continua baixa (abaixo) — vai sempre para a 2ª camada confirmar, nunca publica sozinho.
+        pos = posicoes.get((ex.lucro_min, ex.lucro_max), 0)
+        vizinhanca = t[max(0, pos - RAIO_ANO_VIZINHANCA): pos + RAIO_ANO_VIZINHANCA]
+        achado, onde = _ano_unico(titulo), "no título/cabeçalho do documento"
+        if achado is None:
+            achado, onde = _ano_unico(vizinhanca), "perto da faixa encontrada"
+        if achado is not None:
+            ex.ano, ano_por_fallback = achado, True
+            ex.motivos.append(f"ano {achado} achado {onde} (não perto de 'guidance/projeção'): confirma pela API do Claude")
+        else:
+            ex.motivos.append("ano da projeção não encontrado")
 
     payouts = set()
     for p in RE_PAYOUT.finditer(t):
@@ -201,7 +228,7 @@ def extrair_por_padroes(texto: str, ano_alvo: int) -> Extracao | None:
     elif len(payouts) > 1:
         ex.motivos.append("mais de um payout no documento: payout não usado")
 
-    ex.confianca = "alta" if len(faixas) == 1 and ex.ano == ano_alvo and not revisao else "baixa"
+    ex.confianca = "alta" if len(faixas) == 1 and ex.ano == ano_alvo and not revisao and not ano_por_fallback else "baixa"
     return ex
 
 
@@ -729,10 +756,10 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
         except Exception as e:  # noqa: BLE001
             log.info("  não abriu documento de %s (%s: %s)", _data_br(doc["data"]), e.__class__.__name__, e)
             continue
-        ex = extrair_por_padroes(texto, ano)
+        assunto = f"{doc.get('categoria', '')} {doc.get('tipo', '')} {doc.get('assunto', '')}"
+        ex = extrair_por_padroes(texto, ano, titulo=assunto)
         if ex is None:
             # 2ª camada: o regex não achou faixa num documento de projeção -> API do Claude (uma vez por documento)
-            assunto = f"{doc.get('categoria', '')} {doc.get('tipo', '')} {doc.get('assunto', '')}"
             if not tentou_claude and PALAVRAS_PROJECAO.search(assunto) and doc["link"] not in vistos:
                 tentou_claude = True
                 vistos.add(doc["link"])

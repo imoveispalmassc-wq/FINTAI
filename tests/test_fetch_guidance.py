@@ -854,3 +854,60 @@ def test_padrao_br_aceita_digito_no_meio_do_codigo_sem_confundir_eua():
     padrao = r"(?=.*[A-Z])[A-Z0-9]{4}\d{1,2}"
     assert re.fullmatch(padrao, "B3SA3") and re.fullmatch(padrao, "PETR4") and re.fullmatch(padrao, "BOVA11")
     assert not re.fullmatch(padrao, "AAPL") and not re.fullmatch(padrao, "TGT") and not re.fullmatch(padrao, "PANW")
+
+
+# ------------------------------------------------------------ fallback de ano (título/cabeçalho e vizinhança da faixa)
+def test_ano_no_titulo_e_usado_mas_confianca_fica_baixa():
+    texto = "A Companhia estima lucro líquido ajustado entre R$ 9 bilhões e R$ 11 bilhões, payout de 25%."
+    ex = fg.extrair_por_padroes(texto, 2026, titulo="Projeções Corporativas 2026")
+    assert ex.ano == 2026 and ex.confianca == "baixa"
+    assert any("título" in m and "2026" in m for m in ex.motivos)
+
+
+def test_ano_na_vizinhanca_da_faixa_e_usado_quando_titulo_nao_ajuda():
+    texto = ("Release de resultados. " + "x" * 50 + " Em 2026, a Companhia estima lucro líquido ajustado "
+             "entre R$ 9 bilhões e R$ 11 bilhões, payout de 25%.")
+    ex = fg.extrair_por_padroes(texto, 2026, titulo="Divulgação de Resultados")   # título sem ano nenhum
+    assert ex.ano == 2026 and ex.confianca == "baixa"
+    assert any("perto da faixa" in m for m in ex.motivos)
+
+
+def test_titulo_com_dois_anos_diferentes_cai_para_a_vizinhanca():
+    texto = "Em 2026, a Companhia estima lucro líquido ajustado entre R$ 9 bilhões e R$ 11 bilhões, payout de 25%."
+    ex = fg.extrair_por_padroes(texto, 2026, titulo="Resultados 2025 e projeções 2026")   # 2 anos no título: ambíguo
+    assert ex.ano == 2026 and any("perto da faixa" in m for m in ex.motivos)
+
+
+def test_sem_ano_em_nenhum_lugar_mantem_comportamento_atual():
+    texto = "A Companhia estima lucro líquido ajustado entre R$ 9 bilhões e R$ 11 bilhões, payout de 25%."
+    ex = fg.extrair_por_padroes(texto, 2026, titulo="Divulgação de Resultados")
+    assert ex.ano is None and ex.confianca == "baixa"
+    assert "ano da projeção não encontrado" in ex.motivos
+
+
+def test_dois_anos_no_titulo_e_tambem_na_vizinhanca_nao_inventa():
+    texto = "Em 2025 ou 2026, a Companhia estima lucro líquido ajustado entre R$ 9 bilhões e R$ 11 bilhões."
+    ex = fg.extrair_por_padroes(texto, 2026, titulo="Resultados 2024 e 2025")
+    assert ex.ano is None and "ano da projeção não encontrado" in ex.motivos
+
+
+def test_ano_ja_encontrado_pelo_padrao_normal_nao_muda_com_fallback():
+    # "guidance 2026" perto do número: já tinha ano antes do fix, continua idêntico (requisito do pedido)
+    texto = "Guidance 2026: lucro líquido ajustado entre R$ 9 bilhões e R$ 11 bilhões, payout de 25%."
+    ex = fg.extrair_por_padroes(texto, 2026, titulo="Resultados 2099")   # título com outro ano: não deve nem olhar
+    assert ex.ano == 2026 and ex.confianca == "alta"
+    assert not any("título" in m or "vizinhança" in m or "perto da faixa" in m for m in ex.motivos)
+
+
+def test_fallback_de_ano_nao_publica_sozinho_mesmo_batendo_com_ano_alvo(tmp_path, monkeypatch):
+    # ponta a ponta: ano só veio do fallback -> confiança baixa -> precisa da API do Claude confirmar;
+    # sem confirmação, trava (erro), nunca publica sozinho só porque o ano bateu por acaso
+    texto = "Em 2026, a Companhia estima lucro líquido ajustado entre R$ 9 bilhões e R$ 11 bilhões, payout de 25%."
+    docs = [{"data": "2026-11-11", "categoria": "Divulgação de Resultados", "assunto": "",
+            "link": "https://www.rad.cvm.gov.br/doc0.pdf"}]
+    item = fg.planejar_ticker(
+        "BBAS3", dt.date(2026, 11, 16), None, set(),
+        buscar_cnpj=lambda t, h: ("00.000.000/0001-91", "BANCO DO BRASIL S.A."),
+        buscar_docs=lambda c, h: docs, ler_pdf=lambda link: (b"%PDF", texto),
+        buscar_acoes=lambda t: 5.73e9, ler_com_claude=lambda *a: None)
+    assert item["acao"] == "erro" and "sem confiança" in item["motivo"]

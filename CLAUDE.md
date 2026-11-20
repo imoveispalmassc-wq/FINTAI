@@ -28,6 +28,13 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   pagina). API falhou ou sem guidance: mantém o anterior e o log diz "sem guidance".
   A leitura da API só vale se a faixa estiver no documento (achada pelos padrões ou no trecho, sem
   contar espaços e separadores de tabela). Ticker não gravado vira aviso amarelo na execução do Actions.
+  Fallback de ano (`extrair_por_padroes`): se os padrões acham a faixa de lucro mas não acham o ano perto de
+  "guidance/projeção/estimativa/perspectiva", tenta, nessa ordem, (1) um único ano claro no título/categoria/
+  assunto do documento na CVM, (2) um único ano claro nos 500 caracteres antes e depois da própria faixa. Achando
+  exatamente um ano nesses lugares, usa esse ano e manda para a API do Claude confirmar normalmente - a confiança
+  continua "baixa" mesmo quando o ano bate com o ano-alvo, então nunca publica sozinho só por causa do fallback.
+  Achando mais de um ano diferente, ou nenhum, mantém "ano da projeção não encontrado" como antes. Não muda nada
+  quando o ano já é achado pelo jeito normal (perto de "guidance/projeção").
   Histórico (janela deslizante): a API sempre devolve os últimos 4 guidances do documento, do mais antigo
   para o mais novo, só para o próprio modelo julgar se o pulo faz sentido (ex.: $7,50→$9,90→$10,65 é gradual,
   $8,00→$20,00 é suspeito e não confirma). O código confere que o último item do histórico bate com a faixa
