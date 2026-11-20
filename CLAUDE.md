@@ -101,7 +101,9 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   do press release (8-K Exhibit 99.1 de cada trimestre); fonte "SEC 8-K Exhibit 99.1, LPA Ajustado". Os trimestres saem
   do GAAP dos 10-Q/10-K (4º tri = ano − 9 meses). Trimestre sem ajustado usa o GAAP dele e o card marca "Contábil
   Ajustado (N trimestre GAAP por falta de Ajustado)". Sem nem GAAP completo (menos de 4 trimestres, fora de sequência
-  ou último com mais de 200 dias): Yahoo, "fonte: Yahoo - SEC incompleto".
+  ou último com mais de 200 dias): Yahoo, "fonte: Yahoo - SEC incompleto". No fim de cada ticker o robô grava
+  atualizado_em, trimestre_ref e trimestre_data, igual à B3 (ver abaixo) - calculando o trimestre a partir do
+  mês de fim de cada trimestre, já que a SEC não dá "3T26" pronto.
 - Contábil 12 meses (B3): tickers de utils/contabil_br_config.json (linha do lucro e nome da fonte; hoje só BBAS3, linha
   "Lucro Líquido Ajustado", fonte "BB, Divulgação de Resultados, Lucro Líquido Ajustado"). O robô lê o release de
   resultados de cada trimestre na CVM (trimestre = o último encerrado antes da entrega), extrai o lucro do trimestre
@@ -112,9 +114,11 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   coluna dele na tabela de um release posterior; log "BBAS3 3T26: frase=... tabela=... divergência=... gravou=..."), soma 4 trimestres consecutivos e grava em utils/contabil_br.json:
   LPA = soma ÷ ações (Yahoo). Sem conseguir ler: "Yahoo - pendente", nunca número inventado; pendente não apaga valor
   bom já gravado. Demais tickers da B3: Yahoo.
-  No fim de cada ticker o robô grava atualizado_em ("17/11 18:32", Brasília; só muda com leitura boa), trimestre_ref
-  ("3T26") e trimestre_data ("set/26"). O card de P/L mostra no topo "🟢 Atualizado em 17/11 às 18:32" e
-  "Contábil 12m até 3T26 (set/26)": verde com menos de 2h, amarelo com menos de 24h, vermelho com 24h ou mais.
+  No fim de cada ticker (B3 e EUA) o robô grava atualizado_em ("17/11 18:32", Brasília; só muda com leitura boa,
+  igual ao "pendente"/"incompleto" não apagar valor bom), trimestre_ref ("3T26") e trimestre_data ("set/26").
+  O card de P/L mostra no topo "🟢 Atualizado em 17/11 às 18:32" e "Contábil 12m até 3T26 (set/26)" para
+  qualquer ativo com contábil do robô (B3 ou EUA): verde com menos de 2h, amarelo com menos de 24h, vermelho
+  com 24h ou mais.
 - Projeção do início do ano: utils/guidance_inicial.json (ticker -> ano -> faixa, fonte, data, travado). O robô busca o
   primeiro documento do ano com projeção (release do 4T anterior, jan-abr; depois o 10-K) e grava uma única vez:
   nunca sobrescreve. Sem achar: {"status": "sem projeção inicial encontrada"}.

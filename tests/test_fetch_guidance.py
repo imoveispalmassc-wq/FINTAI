@@ -713,6 +713,32 @@ def test_contabil_br_grava_indicador_de_atualizacao_no_fim(tmp_path, monkeypatch
     assert dado["ultima_tentativa"] == "PDF não abriu"
 
 
+def test_contabil_eua_grava_indicador_de_atualizacao_calculando_o_trimestre_pelo_fim():
+    # EUA não tem "tri" (ex. "3T26") pronto, só "fim" (DD/MM/AAAA): o carimbo calcula o trimestre
+    # a partir do mês, na mesma notação usada na B3, e "manter isso para todos" (ADM, AAPL etc.)
+    ok = {"status": "ok", "lpa_12m": 5.19, "trimestres": [{"fim": "30/06/2026"}, {"fim": "30/09/2026"}]}
+    agora = dt.datetime(2026, 11, 17, 21, 32, tzinfo=dt.timezone.utc)
+    dado = fg.carimbo_atualizacao(ok, agora)
+    assert (dado["atualizado_em"], dado["trimestre_ref"], dado["trimestre_data"]) == ("17/11 18:32", "3T26", "set/26")
+
+
+def test_contabil_eua_grava_indicador_e_pendente_nao_apaga_valor_bom(tmp_path, monkeypatch):
+    arq = tmp_path / "sec.json"
+    monkeypatch.setattr(fg, "ARQ_CONTABIL", arq)
+    ok = {"status": "ok", "lpa_12m": 5.19, "trimestres": [{"fim": "31/03/2026"}, {"fim": "30/06/2026"}]}
+    agora = dt.datetime(2026, 11, 17, 21, 32, tzinfo=dt.timezone.utc)
+    fg.aplicar_contabil([{"ticker": "ADM", "contabil": ok}], agora=agora)
+    dado = json.loads(arq.read_text(encoding="utf-8"))["ADM"]
+    assert list(dado)[-3:] == ["atualizado_em", "trimestre_ref", "trimestre_data"]
+    assert (dado["atualizado_em"], dado["trimestre_ref"], dado["trimestre_data"]) == ("17/11 18:32", "2T26", "jun/26")
+    # leitura ficou incompleta depois: mantém o valor e a hora da última leitura boa
+    fg.aplicar_contabil([{"ticker": "ADM", "contabil": {"status": "incompleto", "motivo": "só 3 trimestre(s) na SEC"}}],
+                       agora=agora + dt.timedelta(days=1))
+    dado = json.loads(arq.read_text(encoding="utf-8"))["ADM"]
+    assert dado["atualizado_em"] == "17/11 18:32" and list(dado)[-1] == "trimestre_data"
+    assert dado["ultima_tentativa"] == "só 3 trimestre(s) na SEC"
+
+
 # ------------------------------------------------------------ fila pública de tickers novos
 def test_fila_sem_token_nao_processa_nada(monkeypatch):
     monkeypatch.delenv("GITHUB_QUEUE_TOKEN", raising=False)

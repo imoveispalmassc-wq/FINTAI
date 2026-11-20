@@ -1162,12 +1162,21 @@ CAMPOS_ATUALIZACAO = ("atualizado_em", "trimestre_ref", "trimestre_data")
 
 
 def carimbo_atualizacao(c: dict, agora: dt.datetime) -> dict:
-    """Indicador de atualização no fim do JSON: "17/11 18:32" (Brasília), "3T26" e "set/26"."""
+    """Indicador de atualização no fim do JSON: "17/11 18:32" (Brasília), "3T26" e "set/26".
+
+    B3 já traz o trimestre em "tri" (ex. "3T26"); EUA só tem "fim" (DD/MM/AAAA) em cada trimestre,
+    daí o trimestre é calculado a partir do mês, na mesma notação."""
     base = {k: v for k, v in c.items() if k not in CAMPOS_ATUALIZACAO}
-    ult = (c.get("trimestres") or [{}])[-1].get("tri")
-    fim = fim_do_trimestre(ult) if ult else None
+    ultimo = (c.get("trimestres") or [{}])[-1]
+    tri, fim = ultimo.get("tri"), None
+    if tri:
+        fim = fim_do_trimestre(tri)
+    elif ultimo.get("fim"):
+        fim = _data(ultimo["fim"])
+        if fim:
+            tri = f"{(fim.month - 1) // 3 + 1}T{fim:%y}"
     return {**base, "atualizado_em": agora.astimezone(BRASILIA).strftime("%d/%m %H:%M"),
-            "trimestre_ref": ult, "trimestre_data": f"{MESES[fim.month - 1]}/{fim:%y}" if fim else None}
+            "trimestre_ref": tri, "trimestre_data": f"{MESES[fim.month - 1]}/{fim:%y}" if fim else None}
 
 
 def aplicar_contabil_br(plano: list[dict], agora: dt.datetime | None = None) -> int:
@@ -1196,13 +1205,25 @@ def aplicar_contabil_br(plano: list[dict], agora: dt.datetime | None = None) -> 
     return n
 
 
-def aplicar_contabil(plano: list[dict]) -> int:
-    """Grava o contábil da SEC (sempre o mais novo; não é congelado)."""
+def aplicar_contabil(plano: list[dict], agora: dt.datetime | None = None) -> int:
+    """Grava o contábil da SEC. "incompleto" não apaga um valor bom já gravado, igual à B3:
+    atualizado_em só muda quando a leitura dá certo."""
+    agora = agora or dt.datetime.now(BRASILIA)
     tab, n = _ler_json(ARQ_CONTABIL, {}), 0
     for i in plano:
         c = i.get("contabil")
-        if c and tab.get(i["ticker"]) != c:
-            tab[i["ticker"]] = c
+        if not c:
+            continue
+        atual = tab.get(i["ticker"]) or {}
+        if c.get("status") == "ok":
+            novo = carimbo_atualizacao(c, agora)
+        elif atual.get("status") != "ok":
+            novo = c
+        else:
+            base = {k: v for k, v in atual.items() if k not in CAMPOS_ATUALIZACAO}
+            novo = {**base, "ultima_tentativa": c.get("motivo"), **{k: atual[k] for k in CAMPOS_ATUALIZACAO if k in atual}}
+        if novo != atual:
+            tab[i["ticker"]] = novo
             n += 1
     if n:
         ARQ_CONTABIL.write_text(json.dumps(dict(sorted(tab.items())), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
