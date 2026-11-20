@@ -354,26 +354,27 @@ def _pedir_na_fila(ticker_curto: str) -> bool:
     return fila.pedir_ticker(ticker_curto, token)
 
 
-def aviso_guidance_pendente(ticker: str) -> None:
+def aviso_guidance_pendente(ticker: str) -> str | None:
     """Ticker com preço válido do Yahoo, mas ainda fora de guidance_tickers.json e de
-    queue_nao_validado.json: mostra o aviso (do guidance ANUAL) e registra o pedido na fila (Issues
-    do GitHub) — uma vez só por ticker por sessão, e no máximo uma chamada à API por hora por
-    instância do app. Ticker já travado (sem guidance anual) mas com guidance TRIMESTRAL verificado:
-    mostra uma nota explicando (não é um dado pendente, é a empresa que só dá guidance trimestral)."""
+    queue_nao_validado.json: registra o pedido na fila (Issues do GitHub) — uma vez só por ticker
+    por sessão, e no máximo uma chamada à API por hora por instância do app — e devolve o texto do
+    aviso (do guidance ANUAL), para a tela mostrar perto do card "Lucro por ação". Ticker já travado
+    (sem guidance anual) mas com guidance TRIMESTRAL verificado: devolve uma nota explicando (não é
+    um dado pendente, é a empresa que só dá guidance trimestral). Nada a avisar: None."""
     curto_t = curto(ticker)
     registrados, nao_validados, com_trimestral = _estado_fila()
     if curto_t in registrados:
-        return
+        return None
     if curto_t in nao_validados:
         if curto_t in com_trimestral:
-            st.info(f"ℹ️ Guidance ANUAL de {curto_t} não encontrado nos comunicados oficiais — a empresa só dá "
-                    "guidance trimestral. Guidance trimestral verificado abaixo.", icon="ℹ️")
-        return
-    st.info(f"🕒 Guidance ANUAL de {curto_t} ainda não verificado — vamos checar hoje à noite.", icon="🕒")
+            return (f"Guidance ANUAL de {curto_t} não encontrado nos comunicados oficiais — a empresa só dá "
+                    "guidance trimestral. Guidance trimestral verificado abaixo.")
+        return None
     pedidos = st.session_state.setdefault("_fila_pedidos", set())
     if curto_t not in pedidos:
         pedidos.add(curto_t)
         _pedir_na_fila(curto_t)
+    return f"Guidance ANUAL de {curto_t} ainda não verificado — vamos checar hoje à noite."
 
 
 # ------------------------------------------------------------ lista e compartilhar
@@ -425,7 +426,9 @@ def painel(ticker: str):
     with st.spinner(f"Buscando {ticker}..."):
         dados = pacote(ticker, VERSAO_CALCULO)
     barra_de_acoes(ticker)
-    aviso_guidance_pendente(ticker)       # ticker novo (fora da lista do robô): avisa e entra na fila
+    aviso = aviso_guidance_pendente(ticker)   # ticker novo (fora da lista do robô): avisa e entra na fila
+    if aviso:
+        dados = {**dados, "avisoGuidanceAnual": aviso}
     tela_detalhe(data={"dados": dados}, key=f"tela_{ticker}")
 
 
