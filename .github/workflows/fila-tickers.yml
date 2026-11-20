@@ -35,7 +35,7 @@ jobs:
 
       - name: Processar a fila (valida ou trava, sem inventar número)
         env:
-          GITHUB_QUEUE_TOKEN: ${{ secrets.GITHUB_QUEUE_TOKEN }}
+          GITHUB_QUEUE_TOKEN: ${{ secrets.QUEUE_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SEC_CONTACT_EMAIL: ${{ secrets.SEC_CONTACT_EMAIL }}
         run: python -m utils.fetch_guidance fila
