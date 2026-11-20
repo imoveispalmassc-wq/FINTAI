@@ -821,26 +821,40 @@ function montar(root, d) {
     // Ponto de entrada (zona verde) é FIXO na margem de 30% sobre a âncora de 1 ano; os limites de
     // 3 e 5 anos (40%/50%) são só referências visuais marcadas na própria barra, como a MM200.
     const zO = C ? C.oportunidadeAte : zOport, zC = C ? C.caroAcima : zCara;
-    // os limites de 3/5 anos ou a MM200 podem cair fora da faixa mínima/máxima do período (ex.
-    // preço muito perto da mínima de 52 semanas, com o limite de 5 anos abaixo dela): estende a
-    // escala da barra com uma margem de 15% do intervalo oportunidade-cara, senão essas marcações
-    // caem fora da régua
-    const pontosEscala = C ? [zO, zC, tem(C.limite3a) ? C.limite3a : null, tem(C.limite5a) ? C.limite5a : null,
+    // a escala da barra estica além da faixa natural do período (mínima/máxima) pra caber todos os
+    // cortes e referências (oportunidade/cara, limite de 3/5 anos, mm200) - sem isso, um limite bem
+    // abaixo da mínima do período (ex. limite de 5 anos) nunca apareceria marcado na régua. A
+    // posição de cada um na tela (cor, traço e número) depois passa pelo afastar() (distância
+    // mínima de 17 pontos), senão, com vários pontos próximos no preço real (zona de oportunidade
+    // estreita), a cor mudaria num lugar e o número escrito em cima diria outro.
+    const pontosDisponiveis = C ? [zO, zC, tem(C.limite3a) ? C.limite3a : null, tem(C.limite5a) ? C.limite5a : null,
       tem(C.mm200) ? C.mm200 : null].filter(tem) : [];
-    const margemEscala = C ? Math.max(zC - zO, 1e-6) * 0.15 : 0;
-    const minEfetivo = C ? Math.min(fx.min, ...pontosEscala.map(v => v - margemEscala)) : fx.min;
-    const maxEfetivo = C ? Math.max(fx.max, ...pontosEscala.map(v => v + margemEscala)) : fx.max;
+    // a mínima/máxima da régua são sempre um dado real (nunca uma margem inventada): a mínima do
+    // período, ou o ponto real mais baixo (ex. limite de 5 anos) quando ele é menor que a mínima do
+    // período. Se o preço cair abaixo dessa mínima (ou subir acima da máxima), a bolinha fica
+    // encostada na borda (posicao() trava em 0%/100%) - não desaparece, só para de se mover.
+    const minEfetivo = C ? Math.min(fx.min, ...pontosDisponiveis) : fx.min;
+    const maxEfetivo = C ? Math.max(fx.max, ...pontosDisponiveis) : fx.max;
     const p = posicao(d.preco, minEfetivo, maxEfetivo), larg = maxEfetivo - minEfetivo;
-    const aBruto = larg > 0 ? (zO - minEfetivo) / larg * 100 : 30, bBruto = larg > 0 ? (zC - minEfetivo) / larg * 100 : 70;
-    const a = Math.max(0, Math.min(100, aBruto)), b = Math.max(a, Math.min(100, bBruto));
-    // referências extra, só visuais (não mudam a decisão): média de 200 dias, limite de 3 anos e
-    // de 5 anos, marcadas na mesma barra
-    const temMM = C && tem(C.mm200);
-    const aMM = temMM && larg > 0 ? Math.max(0, Math.min(100, (C.mm200 - minEfetivo) / larg * 100)) : null;
-    const tem3a = C && tem(C.limite3a);
-    const a3a = tem3a && larg > 0 ? Math.max(0, Math.min(100, (C.limite3a - minEfetivo) / larg * 100)) : null;
-    const tem5a = C && tem(C.limite5a);
-    const a5a = tem5a && larg > 0 ? Math.max(0, Math.min(100, (C.limite5a - minEfetivo) / larg * 100)) : null;
+    const posBruta = v => larg > 0 ? Math.max(0, Math.min(100, (v - minEfetivo) / larg * 100)) : 50;
+    const aBruta = posBruta(zO), bBruta = posBruta(zC);
+    const temMM = C && tem(C.mm200), aMMBruta = temMM ? posBruta(C.mm200) : null;
+    const tem3a = C && tem(C.limite3a), a3aBruta = tem3a ? posBruta(C.limite3a) : null;
+    const tem5a = C && tem(C.limite5a), a5aBruta = tem5a ? posBruta(C.limite5a) : null;
+    const pontosAjuste = [
+      tem5a ? { k: 'a5a', pos: a5aBruta } : null,
+      tem3a ? { k: 'a3a', pos: a3aBruta } : null,
+      { k: 'a', pos: aBruta },
+      temMM ? { k: 'mm', pos: aMMBruta } : null,
+      { k: 'b', pos: bBruta },
+    ].filter(Boolean).sort((x, y) => x.pos - y.pos);
+    const ajustadas = afastar(pontosAjuste.map(x => x.pos));
+    const mapa = {};
+    pontosAjuste.forEach((x, i) => { mapa[x.k] = ajustadas[i]; });
+    const a = mapa.a, b = mapa.b;
+    const aMM = temMM ? mapa.mm : null;
+    const a3a = tem3a ? mapa.a3a : null;
+    const a5a = tem5a ? mapa.a5a : null;
     // zona de oportunidade em 3 tons de verde: mais clara perto do ponto de entrada (15,21 no ex.
     // real da BBAS3) e mais forte quanto mais funda (perto do limite de 5 anos) - só visual, não
     // muda a classificação, que continua sempre pela margem de 30% sobre a âncora de 1 ano
@@ -851,9 +865,12 @@ function montar(root, d) {
     const faixaVerde = bordasVerde.slice(0, -1).map((ini, i) => `${coresVerde[i]} ${ini}% ${bordasVerde[i + 1]}%`).join(',');
     const fundo = `linear-gradient(90deg,${faixaVerde},var(--ardosia) ${a}% ${b}%,var(--ambar) ${b}% 100%)`;
     const titulo = C ? 'Valuation (preço médio de 1 ano)' : fx.rotulo;
-    const nota = C
-      ? `Preço teto (âncora) = preço médio dos últimos 12 meses: ${din(C.teto)}. Oportunidade até 30% abaixo (margem de segurança); zona neutra alargada até 30% acima (${din(C.caroAcima)}); cara daí pra cima. A barra mostra só onde o preço está dentro do período escolhido (1A, 5A ou Máx.); os cortes vêm do valuation, não do período.${temMM ? ` O traço laranja é a média de 200 dias (${din(C.mm200)}) - só referência, não entra na decisão.` : ''}${tem3a || tem5a ? ` Dentro da zona de oportunidade, o verde fica mais forte quanto mais fundo o preço: ${tem3a ? `até ${din(C.limite3a)} (margem de 40%, 3 anos)` : ''}${tem3a && tem5a ? ' e ' : ''}${tem5a ? `até ${din(C.limite5a)} (margem de 50%, 5 anos)` : ''} - só referência, o ponto de entrada continua em ${din(zO)}.` : ''}`
-      : `Mínima e máxima ${fx.curto === '52 semanas' ? 'das últimas 52 semanas' : fx.curto === 'todo o histórico' ? 'de todo o histórico' : `dos últimos ${fx.curto}`} nas pontas da barra. A faixa acompanha o período do gráfico (1A, 5A ou Máx.).`;
+    // a mínima/máxima da régua só aparecem na borda quando são um valor DIFERENTE do já marcado por
+    // um traço (senão repetiria o mesmo número duas vezes à toa) - nunca escondem o traço/corte em
+    // si, só evitam o texto redundante
+    const valorReal = { a5a: C && C.limite5a, a3a: C && C.limite3a, a: zO, mm: C && C.mm200, b: zC };
+    const repeteEsq = pontosAjuste.length > 0 && Math.abs(valorReal[pontosAjuste[0].k] - minEfetivo) < 1e-6;
+    const repeteDir = pontosAjuste.length > 0 && Math.abs(valorReal[pontosAjuste[pontosAjuste.length - 1].k] - maxEfetivo) < 1e-6;
     el.innerHTML = `<h2>Faixa de preço <small>${titulo}</small></h2>
       <div class="pilha">
         <div class="zona" style="--c:var(--verde)"><span class="rot">Zona de oportunidade</span><b class="num">até ${din(zO)}</b></div>
@@ -866,21 +883,15 @@ function montar(root, d) {
             <span style="color:var(--ambar)"><b>${100 - b < 11 ? '' : 'Cara'}</b></span>
           </div>
           <div class="marca-cima limites num">
-            <span class="esq">${f(minEfetivo)}</span>
+            <span class="esq">${repeteEsq ? '' : f(minEfetivo)}</span>
             ${(() => {
-              // rótulos afastados pra não colar (ex. ativo perto da mínima: zona de oportunidade
-              // estreita); o traço na régua embaixo continua na posição exata, só o texto se afasta
-              const pontos = [
-                aMM !== null ? { pos: aMM, html: f(C.mm200), cor: '#f2994a' } : null,
-                a3a !== null ? { pos: a3a, html: f(C.limite3a), cor: null } : null,
-                a5a !== null ? { pos: a5a, html: f(C.limite5a), cor: null } : null,
-                { pos: a, html: f(zO), cor: null },
-                { pos: b, html: f(zC), cor: null },
-              ].filter(Boolean).sort((x, y) => x.pos - y.pos);
-              const ajustadas = afastar(pontos.map(p => p.pos));
-              return pontos.map((p, i) => `<span style="left:${ajustadas[i]}%${p.cor ? `;color:${p.cor}` : ''}">${p.html}</span>`).join('');
+              // mesma posição (já afastada) usada na régua embaixo - número e corte sempre batem
+              const html = { a5a: a5a !== null ? f(C.limite5a) : '', a3a: a3a !== null ? f(C.limite3a) : '',
+                a: f(zO), mm: aMM !== null ? f(C.mm200) : '', b: f(zC) };
+              const cor = { mm: '#f2994a' };
+              return pontosAjuste.map(x => `<span style="left:${mapa[x.k]}%${cor[x.k] ? `;color:${cor[x.k]}` : ''}">${html[x.k]}</span>`).join('');
             })()}
-            <span class="dir">${f(maxEfetivo)}</span>
+            <span class="dir">${repeteDir ? '' : f(maxEfetivo)}</span>
           </div>
           <div class="regua" style="background:${fundo};margin-top:4px">
             ${aMM !== null ? `<span class="traco" style="left:${aMM}%;background:#f2994a"></span>` : ''}
@@ -890,7 +901,6 @@ function montar(root, d) {
             <span class="bola" style="left:${p}%"></span>
           </div>
           <div class="marca-baixo num"><span class="aqui-rot" style="${ancora(p)}"><b>${f(d.preco)}</b>Você está aqui</span></div>
-          <div class="nota" style="margin-top:6px">${nota}</div>
         </div>
       </div>`;
   }

@@ -193,12 +193,26 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   empresa, ex. MU antes do supercycle de IA). Sem 1 ano de histórico de preço (ticker recém-listado): sem teto -
   a tela cai para a faixa de 52 semanas como alternativa visual; nunca tem teste histórico ("SEM TESTE"), mesmo
   quando o valuation está disponível. Médias de 3 anos (margem de 40%: limite = 0,60 × média) e 5 anos (margem
-  de 50%: limite = 0,50 × média) NÃO travam a decisão - são só referências visuais. A média de 200 dias (mm200)
-  é marcada direto na barra (traço laranja, sempre visível). Os limites de 3 e 5 anos dividem a própria zona
-  de oportunidade em até 3 tons de verde, mais forte quanto mais fundo o preço (mais claro perto do ponto de
-  entrada de 1 ano, mais escuro perto do limite de 5 anos) - `--verde-claro` entre o limite de 3a e a
-  oportunidade, `--verde` entre o limite de 5a e o de 3a, `--verde-forte` abaixo do limite de 5a; com só um
-  dos dois limites disponível, usa só 2 tons, e sem nenhum, a zona toda fica na cor padrão (`--verde`). O
+  de 50%: limite = 0,50 × média) NÃO travam a decisão - são só referências visuais, sempre marcadas na régua
+  (a escala da barra estica além da mínima/máxima do período quando precisa, pra caber até o limite de 5 anos,
+  que costuma ficar abaixo da mínima de 52 semanas) - a mínima/máxima mostrada nas bordas da régua é sempre um
+  dado real (a mínima/máxima do período, ou o próprio ponto - ex. limite de 5 anos - quando ele é mais extremo
+  que o período; nunca uma margem inventada). Quando a borda coincide exatamente com um ponto já marcado por um
+  traço, só não repete o número (fica em branco na borda) - o traço e o valor continuam lá, só não duplica o
+  texto. Se o preço cair abaixo da mínima (ou subir acima da máxima) da régua, a bolinha encosta na borda e
+  para de se mover (não desaparece, só perde a precisão de mostrar o quanto passou). A média de 200 dias
+  (mm200) é marcada direto na barra
+  (traço laranja). Os limites de 3 e 5 anos dividem a própria zona de oportunidade em
+  até 3 tons de verde, mais forte quanto mais fundo o preço (mais claro perto do ponto de entrada de 1 ano, mais
+  escuro perto do limite de 5 anos) - `--verde-claro` entre o limite de 3a e a oportunidade, `--verde` entre o
+  limite de 5a e o de 3a, `--verde-forte` abaixo do limite de 5a; com só um dos dois limites disponível, usa só
+  2 tons, e sem nenhum, a zona toda fica na cor padrão (`--verde`). As posições na régua (cortes de cor, traços
+  e os próprios números) usam a mesma posição já afastada pelo `afastar()` (distância mínima de 17 pontos) -
+  nunca a posição linear crua: senão, quando os pontos ficam muito próximos no preço real (ex. zona de
+  oportunidade estreita), a cor mudaria num lugar e o número escrito em cima diria outro, parecendo que a faixa
+  verde "não chega" onde o próprio número diz que chega. O "Você está aqui" (bolinha do preço) continua na
+  posição linear real (não afastada), já que é o preço de verdade, não um corte. Sem texto explicativo embaixo
+  da régua (só os cartões Zona de oportunidade/neutra/cara acima já explicam os cortes). O
   PONTO DE ENTRADA (o texto "Ponto de oportunidade em") é sempre o alvo fixo de 30% sobre a âncora de 1 ano -
   não escala para os limites de 3/5 anos, que são só
   referência, nunca o ponto de entrada em si. Mesma âncora no gráfico pontilhado do modo Conservador (repete o
