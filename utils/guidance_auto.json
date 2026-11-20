@@ -39,5 +39,18 @@
     "ano": 2026,
     "metodo": "padrões de texto (SEC)",
     "trecho": "is change better reflects underlying operating performance and improves comparability across reporting periods ● FY2026 non-GAAP diluted EPS guidance updated to $5.42 to $5.48 solely to reflect the change MELVILLE,"
+  },
+  "TGT": {
+    "lpa_min": 10.65,
+    "lpa_max": 11.4,
+    "periodo": "2026",
+    "lucro_tipo": "LPA ajustado",
+    "fonte": "TARGET CORP, Form 8-K Exhibit 99.1 de 18/11/2026 (SEC)",
+    "data": "18/11/2026",
+    "url": "https://www.sec.gov/Archives/edgar/data/27419/000002741926000051/a2026q3ex-99.htm",
+    "documento": "https://www.sec.gov/Archives/edgar/data/27419/000002741926000051/a2026q3ex-99.htm",
+    "ano": 2026,
+    "metodo": "padrões de texto (SEC)",
+    "trecho": "including approximately 1.1 percentage points of benefit from tariff refunds recognized to date. • An updated GAAP and Adjusted EPS guidance range of $10.65 to $11.40, which includes approximately $2.14 in"
   }
 }
