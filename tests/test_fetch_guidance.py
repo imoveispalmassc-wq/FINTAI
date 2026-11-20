@@ -794,3 +794,48 @@ def test_fila_pula_erro_de_configuracao_sem_bloquear_o_ticker(tmp_path, monkeypa
     fg.processar_fila(HOJE, token="tok", listar=lambda tok: [{"ticker": "MSFT", "numero": 1, "pedidos": 1}],
                       fechar=lambda n, tok, c: fechadas.append(c), planejar_us=lambda t, h, a: erro)
     assert not fechadas and not (tmp_path / "nv.json").exists()
+
+
+# ------------------------------------------------------------ histórico (janela deslizante) da API do Claude
+def test_api_br_historico_consistente_e_propagado():
+    texto = "Guidance 2026: lucro líquido ajustado entre R$ 9 bilhões e R$ 11 bilhões, payout de 25%."
+    historico = [{"lucro_min": 18e9, "lucro_max": 22e9, "lpa_min": None, "lpa_max": None, "ano": 2026, "trecho_curto": "18 a 22"},
+                 {"lucro_min": 9e9, "lucro_max": 11e9, "lpa_min": None, "lpa_max": None, "ano": 2026, "trecho_curto": "9 a 11"}]
+    ex = fg.extrair_com_claude(b"", texto, 2026, chamar=lambda c: _json_api(
+        lucro_min=9e9, lucro_max=11e9, trecho="lucro líquido ajustado entre R$ 9 bilhões e R$ 11 bilhões", historico=historico))
+    assert ex.historico == historico
+    assert any("histórico" in m for m in ex.motivos)
+    n = {"lucro_min": 9e9, "lucro_max": 11e9, "acoes": 5.73e9, "payout": 0.25, "ano": 2026,
+        "metodo": "API do Claude", "fonte": "x", "url": "x", "trecho": "x", "historico": historico}
+    assert "18,0 a 22,0 bi" in fg.resumo_pr([{"ticker": "BBAS3", "novo": n, "anterior": None, "motivo": "x"}])
+
+
+def test_api_br_historico_inconsistente_descarta_leitura():
+    # a API devolveu 9-11 no topo, mas o último item do histórico é outra faixa: não bate, descarta
+    texto = "Guidance 2026: lucro líquido ajustado entre R$ 9 bilhões e R$ 11 bilhões, payout de 25%."
+    historico = [{"lucro_min": 18e9, "lucro_max": 22e9, "lpa_min": None, "lpa_max": None, "ano": 2026, "trecho_curto": "x"}]
+    assert fg.extrair_com_claude(b"", texto, 2026, chamar=lambda c: _json_api(
+        lucro_min=9e9, lucro_max=11e9, trecho="lucro líquido ajustado entre R$ 9 bilhões e R$ 11 bilhões",
+        historico=historico)) is None
+
+
+def test_api_eua_historico_consistente_e_inconsistente():
+    txt = "The Company expects full-year adjusted EPS in the range of $5.50 to $5.80."
+    bom = [{"lpa_min": 5.15, "lpa_max": 5.60, "lucro_min": None, "lucro_max": None, "ano": 2026, "trecho_curto": "x"},
+          {"lpa_min": 5.50, "lpa_max": 5.80, "lucro_min": None, "lucro_max": None, "ano": 2026, "trecho_curto": "y"}]
+    r = fg.extrair_eps_com_claude(txt, 2026, chamar=lambda c: _json_api(
+        lpa_min=5.5, lpa_max=5.8, trecho="full-year adjusted EPS in the range of $5.50 to $5.80", historico=bom))
+    assert r["historico"] == bom
+    ruim = [{"lpa_min": 1.0, "lpa_max": 2.0, "lucro_min": None, "lucro_max": None, "ano": 2026, "trecho_curto": "x"}]
+    assert fg.extrair_eps_com_claude(txt, 2026, chamar=lambda c: _json_api(
+        lpa_min=5.5, lpa_max=5.8, trecho="full-year adjusted EPS in the range of $5.50 to $5.80", historico=ruim)) is None
+
+
+def test_historico_txt_formata_do_mais_antigo_ao_mais_novo():
+    historico = [{"lucro_min": 18e9, "lucro_max": 22e9, "ano": 2026}, {"lpa_min": 9.9, "lpa_max": 10.65, "ano": 2026}]
+    assert fg._historico_txt(historico) == "R$ 18,0 a 22,0 bi (2026) -> LPA 9.90 a 10.65 (2026)"
+    assert fg._historico_txt([]) == ""
+
+
+def test_historico_sem_itens_nao_bloqueia_leitura_unica():
+    assert fg._historico_bate_com_atual([], 9e9, 11e9, "lucro") is True

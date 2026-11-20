@@ -116,6 +116,7 @@ class Extracao:
     motivos: list[str] = field(default_factory=list)
     candidatos: int = 0                  # faixas de lucro distintas encontradas
     faixas: list = field(default_factory=list)   # todas as faixas (mín., máx.) achadas no documento
+    historico: list = field(default_factory=list)   # até 4 guidances anteriores devolvidos pela API do Claude
 
 
 RE_LUCRO = re.compile(r"lucro\s+l[ií]quido(?:\s+(?:ajustado|recorrente|cont[áa]bil|gerencial))?", re.I)
@@ -217,24 +218,74 @@ ESQUEMA_CLAUDE = {
         "payout": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "trecho": {"type": "string"},
         "pagina": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+        "historico": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "lpa_min": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                    "lpa_max": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                    "lucro_min": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                    "lucro_max": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                    "ano": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+                    "trecho_curto": {"type": "string"}
+                },
+                "required": ["lpa_min", "lpa_max", "lucro_min", "lucro_max", "ano", "trecho_curto"],
+                "additionalProperties": False
+            }
+        }
     },
-    "required": ["tem_guidance", "ano", "lucro_min", "lucro_max", "lpa_min", "lpa_max", "payout", "trecho", "pagina"],
+    "required": ["tem_guidance", "ano", "lucro_min", "lucro_max", "lpa_min", "lpa_max", "payout", "trecho", "pagina", "historico"],
     "additionalProperties": False,
 }
 
 INSTRUCAO_CLAUDE = """Você lê um documento oficial de uma empresa ({origem}) e extrai o guidance (projeção oficial da própria empresa) de LUCRO para o ano {ano}. Responda só com o JSON pedido.
 
+REGRA DE OURO - HISTÓRICO ÚLTIMOS 4 / JANELA DESLIZANTE:
+1. Você sempre devolve o histórico dos últimos 4 guidances em ordem cronológica.
+2. Nunca reescreva o histórico antigo. Cada trimestre é um registro separado.
+3. Quando entra 1 novo, sai o mais antigo. Só o ÚLTIMO registro é o guidance atual.
+4. Os 3 anteriores servem SÓ para comparar se o pulo faz sentido.
+   Ex: $7.50 -> $9.90 -> $10.65 = subida gradual = OK
+   Ex: $8.00 -> $20.00 = pulo suspeito = NÃO CONFIRMAR
+5. Se o documento traz "previously expected $7.50 to $7.80, now expects $9.90 to $10.65",
+   então o histórico termina com [..., {{antigo: 7.50-7.80}}, {{novo: 9.90-10.65}}].
+6. Se o documento só traz 1 guidance, devolva historico com 1 item só. Não invente os outros 3.
+
 Regras:
 - Use só o que está escrito no documento. Não estime, não calcule e não complete nada.
 - Projeção de analistas, consenso de mercado ou resultado já realizado NÃO é guidance.
-- Se houver projeção anterior e revisada, use a VIGENTE (a mais recente/revisada).
+- Se houver projeção anterior e revisada, use a VIGENTE (a mais recente/revisada) como ÚLTIMO registro.
 - lucro_min / lucro_max: lucro líquido projetado, na moeda do documento e em unidades por extenso
   (R$ 9 bilhões = 9000000000). Se a empresa projeta lucro por ação, use lpa_min / lpa_max (ex.: 5.50 e 5.80)
   e deixe lucro_min / lucro_max como null. Valor único: repita nos dois campos.
 - payout: fração do lucro distribuída (30% = 0.30), só se o documento disser; senão null.
-- trecho: copie EXATAMENTE, palavra por palavra, a frase ou linha de tabela de onde tirou a faixa.
+- trecho: copie EXATAMENTE, palavra por palavra, a frase ou linha de tabela de onde tirou a faixa ATUAL.
 - pagina: número da página do PDF onde está o trecho (1 = primeira); null se não souber.
-- Sem guidance de lucro para {ano}: tem_guidance = false e todos os números null."""
+- historico: lista com até 4 itens. O último item TEM QUE SER igual ao guidance atual (lpa_min/lpa_max ou lucro_min/lucro_max).
+- Sem guidance de lucro para {ano}: tem_guidance = false e todos os números null, historico = []."""
+
+
+
+def _historico_txt(historico: list[dict]) -> str:
+    """"LPA 7.50 a 7.80 (2026) -> LPA 9.90 a 10.65 (2026)", do mais antigo para o mais novo."""
+    def item(h):
+        if h.get("lpa_min") is not None:
+            return f"LPA {h['lpa_min']:.2f} a {h['lpa_max']:.2f} ({h.get('ano')})"
+        if h.get("lucro_min") is not None:
+            return f"R$ {h['lucro_min'] / 1e9:.1f} a {h['lucro_max'] / 1e9:.1f} bi ({h.get('ano')})".replace(".", ",")
+        return "?"
+    return " -> ".join(item(h) for h in historico or [])
+
+
+def _historico_bate_com_atual(historico: list[dict], a: float, b: float, campo: str) -> bool:
+    """O último item do histórico devolvido pela API tem de ser o próprio guidance atual (mesma faixa);
+    senão a API não seguiu a própria regra e a leitura não é confiável."""
+    if not historico:
+        return True                     # schema aceita 0 itens quando tem_guidance é novo/único; nada para conferir
+    ultimo = historico[-1]
+    x, y = ultimo.get(f"{campo}_min"), ultimo.get(f"{campo}_max")
+    return x is not None and y is not None and abs(x - a) <= 0.01 * a and abs(y - b) <= 0.01 * b
 
 
 def _so_letras_numeros(texto: str) -> str:
@@ -315,19 +366,27 @@ def extrair_com_claude(pdf: bytes, texto: str, ano_alvo: int, faixas_do_document
     if not (a and b and 0 < a <= b <= a * 2):
         log.error("  API do Claude devolveu faixa de lucro inválida: %s a %s", a, b)
         return None
+    historico = dados.get("historico") or []
+    if not _historico_bate_com_atual(historico, a, b, "lucro"):
+        log.error("  API do Claude: o último item do histórico não bate com a faixa atual devolvida "
+                  "(%s): descartado", _historico_txt(historico))
+        return None
     # a faixa tem de estar no documento: sem isso, o número pode ter sido inventado
     conferido = _confere(float(a), float(b), texto, trecho, faixas_do_documento)
     if not conferido:
         log.error("  API do Claude leu R$ %.1f a %.1f bi, mas a faixa não foi encontrada no documento: descartado",
                   a / 1e9, b / 1e9)
         return None
-    log.info("  API do Claude leu R$ %.1f a %.1f bi (%s, página %s)", a / 1e9, b / 1e9, conferido, dados.get("pagina"))
+    log.info("  API do Claude leu R$ %.1f a %.1f bi (%s, página %s); histórico: %s", a / 1e9, b / 1e9,
+             conferido, dados.get("pagina"), _historico_txt(historico) or "só a faixa atual")
     payout = dados.get("payout")
+    motivos = [f"lido pela API do Claude ({conferido}, página {dados.get('pagina')}): precisa de revisão"]
+    if len(historico) > 1:
+        motivos.append(f"histórico devolvido pela API: {_historico_txt(historico)}")
     return Extracao(lucro_min=float(a), lucro_max=float(b),
                     payout=float(payout) if payout is not None and 0 < payout <= 1 else None,
                     ano=dados.get("ano"), trecho=trecho[:400], confianca="baixa", metodo="API do Claude",
-                    motivos=[f"lido pela API do Claude ({conferido}, página {dados.get('pagina')}): precisa de revisão"],
-                    candidatos=1)
+                    motivos=motivos, candidatos=1, historico=historico)
 
 
 def extrair_eps_com_claude(texto: str, ano_alvo: int, chamar=None) -> dict | None:
@@ -339,13 +398,19 @@ def extrair_eps_com_claude(texto: str, ano_alvo: int, chamar=None) -> dict | Non
     if not (a and b and 0 < a <= b <= a * 2):
         log.error("  API do Claude devolveu faixa de LPA inválida: %s a %s", a, b)
         return None
+    historico = dados.get("historico") or []
+    if not _historico_bate_com_atual(historico, a, b, "lpa"):
+        log.error("  API do Claude: o último item do histórico não bate com a faixa atual devolvida "
+                  "(%s): descartado", _historico_txt(historico))
+        return None
     pedaco = _so_letras_numeros(trecho)[:80]
     if len(pedaco) < 15 or pedaco not in _so_letras_numeros(texto):
         log.error("  API do Claude leu LPA %.2f a %.2f, mas o trecho não está no documento: descartado", a, b)
         return None
-    log.info("  API do Claude leu LPA %.2f a %.2f (trecho conferido)", a, b)
+    log.info("  API do Claude leu LPA %.2f a %.2f (trecho conferido); histórico: %s", a, b,
+             _historico_txt(historico) or "só a faixa atual")
     return {"lpa_min": float(a), "lpa_max": float(b), "ano": dados.get("ano") or ano_alvo, "trecho": trecho[:400],
-            "pagina": dados.get("pagina"), "payout": dados.get("payout")}
+            "pagina": dados.get("pagina"), "payout": dados.get("payout"), "historico": historico}
 
 
 # ------------------------------------------------------------ CVM (dados abertos)
@@ -692,6 +757,8 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
                 "fonte": f"{nome}, {doc['categoria'] or 'documento'} de {_data_br(doc['data'])} (CVM)",
                 "data": _data_br(doc["data"]), "url": doc["link"], "documento": doc["link"],
                 "ano": ex.ano, "metodo": ex.metodo, "trecho": ex.trecho[:400], "acoes_fonte": "Yahoo Finance"}
+        if ex.historico:
+            novo["historico"] = ex.historico
         if anterior and all(anterior.get(k) == novo[k] for k in ("lucro_min", "lucro_max", "payout", "ano")):
             item["motivo"] = "mesma faixa do guidance atual"
             return item
@@ -898,6 +965,8 @@ def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
                 "lucro_tipo": "LPA ajustado", "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {_data_br(doc['data'])} (SEC)",
                 "data": _data_br(doc["data"]), "url": link, "documento": link, "ano": ex["ano"],
                 "metodo": ex.get("metodo", "padrões de texto (SEC)"), "trecho": ex["trecho"][:400]}
+        if ex.get("historico"):
+            novo["historico"] = ex["historico"]
         if ex["dividendo"]:
             novo["dividendo"] = ex["dividendo"]
         if anterior and all(anterior.get(k) == novo.get(k) for k in ("lpa_min", "lpa_max", "dividendo", "ano")):
@@ -918,6 +987,8 @@ def planejar_ticker_eua(ticker: str, hoje: dt.date, anterior: dict | None, *,
                     "lucro_tipo": "LPA ajustado", "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {_data_br(doc['data'])} (SEC)",
                     "data": _data_br(doc["data"]), "url": link, "documento": link, "ano": lido["ano"],
                     "metodo": "API do Claude", "trecho": lido["trecho"]}
+            if lido.get("historico"):
+                novo["historico"] = lido["historico"]
             duvidas = [] if lido.get("ano") and int(lido["ano"]) >= hoje.year else [f"projeção para {lido.get('ano')}"]
             return _decidir(item, ticker, novo, referencia, texto, hoje, _data(doc["data"]), duvidas, buscar_mercado,
                             extras=[f"API do Claude, página {lido.get('pagina')}"])
@@ -1688,6 +1759,7 @@ def resumo_pr(itens: list[dict]) -> str:
                    *(["- **Travas:**", *_linhas_travas(i)] if i.get("travas") else []),
                    *(["- Já avisado antes (mesmo documento)."] if i.get("ja_avisado") else []),
                    f"- **Método:** {n['metodo']}",
+                   *([f"- **Histórico devolvido pela API:** {_historico_txt(n['historico'])}"] if n.get("historico") else []),
                    f"- **Fonte:** [{n['fonte']}]({n['url']})",
                    f"- **Trecho do documento:** \"{n['trecho']}\"", ""]
     linhas.append("Confira o trecho no documento original antes de aprovar. Se estiver errado, feche o PR sem juntar.")

@@ -28,6 +28,10 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   pagina). API falhou ou sem guidance: mantém o anterior e o log diz "sem guidance".
   A leitura da API só vale se a faixa estiver no documento (achada pelos padrões ou no trecho, sem
   contar espaços e separadores de tabela). Ticker não gravado vira aviso amarelo na execução do Actions.
+  Histórico (janela deslizante): a API sempre devolve os últimos 4 guidances do documento, do mais antigo
+  para o mais novo, só para o próprio modelo julgar se o pulo faz sentido (ex.: $7,50→$9,90→$10,65 é gradual,
+  $8,00→$20,00 é suspeito e não confirma). O código confere que o último item do histórico bate com a faixa
+  atual devolvida; se não bater, descarta a leitura. O histórico aparece no corpo do pull request, para revisão.
   AUTOMÁTICO COM PROTEÇÃO (`avaliar_travas`): publica sozinho (commit + issue "Guidance publicado sozinho")
   só se passar nas 4 travas: (1) fonte oficial (documento da empresa na CVM ou 8-K/6-K na SEC); (2) a mesma
   faixa aparece 2+ vezes no documento (texto + tabela); (3) LPA projetado muda no máximo 20% contra o guidance
