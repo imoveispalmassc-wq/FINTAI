@@ -10,6 +10,17 @@ const ret = v => sinal(v, tem(v) && Math.abs(v) >= 100 ? 0 : 1);
 const seta = v => (v >= 0 ? '▲' : '▼');
 const cor = v => (v >= 0 ? 'var(--verde)' : 'var(--vermelho)');
 const posicao = (v, min, max) => max <= min ? 50 : Math.max(0, Math.min(100, (v - min) / (max - min) * 100));
+// afasta rótulos que ficariam colados/sobrepostos numa régua 0-100% (ex. ativo perto da mínima de
+// 52 semanas, com a zona de oportunidade muito estreita): só move o texto, não o traço da zona
+const afastar = (posicoes, min = 17) => {
+  const p = posicoes.slice();
+  if (!p.length) return p;
+  if (p[0] < min) p[0] = min;
+  for (let i = 1; i < p.length; i++) if (p[i] - p[i - 1] < min) p[i] = p[i - 1] + min;
+  if (p[p.length - 1] > 100 - min) p[p.length - 1] = 100 - min;
+  for (let i = p.length - 2; i >= 0; i--) if (p[i + 1] - p[i] < min) p[i] = p[i + 1] - min;
+  return p;
+};
 const p2 = n => String(n).padStart(2, '0');
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 // os instantes chegam como horário local da bolsa gravado em UTC
@@ -459,15 +470,24 @@ function montar(root, d) {
         <div class="zona" style="--c:var(--ambar)"><span class="rot">Zona cara</span><b class="num">acima de ${din(zC)}</b></div>
         <div class="card">
           <div class="zonas-rot" style="grid-template-columns:${a}fr ${b - a}fr ${100 - b}fr">
-            <span style="color:var(--verde)"><b>Oportunidade</b></span>
-            <span style="color:#aab4c6"><b>Neutra</b></span>
-            <span style="color:var(--ambar)"><b>Cara</b></span>
+            <span style="color:var(--verde)"><b>${a < 11 ? '' : 'Oportunidade'}</b></span>
+            <span style="color:#aab4c6"><b>${b - a < 11 ? '' : 'Neutra'}</b></span>
+            <span style="color:var(--ambar)"><b>${100 - b < 11 ? '' : 'Cara'}</b></span>
           </div>
           <div class="marca-cima limites num">
             <span class="esq">${f(fx.min)}</span>
-            ${aMM !== null ? `<span style="left:${aMM}%;color:#f2994a">${f(C.mm200)}</span>` : ''}
-            <span style="left:${a}%">${f(zO)}</span>
-            <span style="left:${b}%">${f(zC)}</span><span class="dir">${f(fx.max)}</span>
+            ${(() => {
+              // rótulos afastados pra não colar (ex. ativo perto da mínima: zona de oportunidade
+              // estreita); o traço na régua embaixo continua na posição exata, só o texto se afasta
+              const pontos = [
+                aMM !== null ? { pos: aMM, html: f(C.mm200), cor: '#f2994a' } : null,
+                { pos: a, html: f(zO), cor: null },
+                { pos: b, html: f(zC), cor: null },
+              ].filter(Boolean).sort((x, y) => x.pos - y.pos);
+              const ajustadas = afastar(pontos.map(p => p.pos));
+              return pontos.map((p, i) => `<span style="left:${ajustadas[i]}%${p.cor ? `;color:${p.cor}` : ''}">${p.html}</span>`).join('');
+            })()}
+            <span class="dir">${f(fx.max)}</span>
           </div>
           <div class="regua" style="background:${fundo};margin-top:4px">
             ${aMM !== null ? `<span class="traco" style="left:${aMM}%;background:#f2994a"></span>` : ''}

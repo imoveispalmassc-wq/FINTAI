@@ -204,7 +204,11 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   continuam só como diagnóstico, não viram teto nem usam preço de fechamento por ano. A barra (mínima/máxima do
   período do gráfico e "Você está aqui") continua só mostrando onde o preço está; não define mais os cortes. A
   faixa de 52 semanas clássica (mínima + 30%) não aparece mais como referência extra na barra (tirada por ser um
-  número antigo e confundir com os cortes do valuation). LYNCH
+  número antigo e confundir com os cortes do valuation). Rótulos que ficariam colados (ativo perto da mínima/
+  máxima do período, ex. BBAS3 perto da mínima de 52 semanas: zona de oportunidade muito estreita) se afastam
+  automaticamente na régua de números (função `afastar`, distância mínima de 17 pontos); o nome da zona
+  (Oportunidade/Neutra/Cara) some quando a coluna fica estreita demais pra caber o texto sem quebrar palavra -
+  regra geral, vale pra qualquer ativo, não só pra casos específicos. LYNCH
   ignora a faixa e usa só a
   MM200: Oportunidade = MM200 −10% a +5%;
   abaixo de −10% = "Bem abaixo da MM200" (azul, separado, ainda COMPRAR); Neutro = +5% a +15%; Caro = +15% ou mais;
