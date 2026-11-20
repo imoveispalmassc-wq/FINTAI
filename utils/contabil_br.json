@@ -45,14 +45,71 @@
     ],
     "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado",
     "data": "13/11/2026",
-    "atualizado": "19/11/2026",
+    "atualizado": "20/11/2026",
     "lidos": {
       "4T25": 5.742,
       "1T26": 3.431,
       "2T26": 3.908,
       "3T26": 1.27
     },
-    "atualizado_em": "19/11 18:14",
+    "atualizado_em": "20/11 00:25",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "set/26"
+  },
+  "PETR4": {
+    "status": "ok",
+    "base": "ajustado",
+    "lucro_12m": 134116000000.0,
+    "acoes": 5446501379.0,
+    "lpa_12m": 24.6242,
+    "trimestres": [
+      {
+        "tri": "4T25",
+        "fim": "31/12/2025",
+        "lucro": 28651000000.0,
+        "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
+        "data": "05/03/2026",
+        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1486338&numSequencia=1011044&numVersao=1",
+        "leitura": "tabela do relatório"
+      },
+      {
+        "tri": "1T26",
+        "fim": "31/03/2026",
+        "lucro": 25743000000.0,
+        "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
+        "data": "13/05/2026",
+        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1521702&numSequencia=1046408&numVersao=1",
+        "leitura": "tabela do relatório"
+      },
+      {
+        "tri": "2T26",
+        "fim": "30/06/2026",
+        "lucro": 23909000000.0,
+        "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
+        "data": "06/08/2026",
+        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1553785&numSequencia=1078491&numVersao=1",
+        "leitura": "tabela do relatório"
+      },
+      {
+        "tri": "3T26",
+        "fim": "30/09/2026",
+        "lucro": 55813000000.0,
+        "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
+        "data": "10/11/2026",
+        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1587565&numSequencia=1112271&numVersao=1",
+        "leitura": "tabela do relatório"
+      }
+    ],
+    "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
+    "data": "10/11/2026",
+    "atualizado": "20/11/2026",
+    "lidos": {
+      "4T25": 28.651,
+      "1T26": 25.743,
+      "2T26": 23.909,
+      "3T26": 55.813
+    },
+    "atualizado_em": "20/11 00:25",
     "trimestre_ref": "3T26",
     "trimestre_data": "set/26"
   }
