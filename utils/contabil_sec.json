@@ -40,7 +40,10 @@
     "trimestres_gaap": 4,
     "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
     "data": "03/11/2026",
-    "atualizado": "20/11/2026"
+    "atualizado": "20/11/2026",
+    "atualizado_em": "20/11 10:34",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "set/26"
   },
   "ACM": {
     "status": "ok",
@@ -83,7 +86,10 @@
     "trimestres_gaap": 4,
     "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
     "data": "18/11/2026",
-    "atualizado": "20/11/2026"
+    "atualizado": "20/11/2026",
+    "atualizado_em": "20/11 10:34",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "set/26"
   },
   "ADM": {
     "status": "ok",
@@ -126,7 +132,10 @@
     "trimestres_gaap": 0,
     "fonte": "SEC 8-K Exhibit 99.1, LPA Ajustado",
     "data": "05/05/2026",
-    "atualizado": "20/11/2026"
+    "atualizado": "20/11/2026",
+    "atualizado_em": "20/11 10:34",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "set/26"
   },
   "AMZN": {
     "status": "ok",
@@ -169,7 +178,10 @@
     "trimestres_gaap": 4,
     "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
     "data": "30/10/2026",
-    "atualizado": "20/11/2026"
+    "atualizado": "20/11/2026",
+    "atualizado_em": "20/11 10:34",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "set/26"
   },
   "B3SA3": {
     "status": "incompleto",
@@ -216,7 +228,10 @@
     "trimestres_gaap": 4,
     "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
     "data": "29/10/2026",
-    "atualizado": "20/11/2026"
+    "atualizado": "20/11/2026",
+    "atualizado_em": "20/11 10:34",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "set/26"
   },
   "HSIC": {
     "status": "ok",
@@ -259,7 +274,10 @@
     "trimestres_gaap": 4,
     "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
     "data": "03/11/2026",
-    "atualizado": "20/11/2026"
+    "atualizado": "20/11/2026",
+    "atualizado_em": "20/11 10:34",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "set/26"
   },
   "META": {
     "status": "ok",
@@ -302,7 +320,10 @@
     "trimestres_gaap": 4,
     "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
     "data": "22/10/2026",
-    "atualizado": "20/11/2026"
+    "atualizado": "20/11/2026",
+    "atualizado_em": "20/11 10:34",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "set/26"
   },
   "MSFT": {
     "status": "ok",
@@ -345,7 +366,10 @@
     "trimestres_gaap": 4,
     "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
     "data": "28/10/2026",
-    "atualizado": "20/11/2026"
+    "atualizado": "20/11/2026",
+    "atualizado_em": "20/11 10:34",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "set/26"
   },
   "NVDA": {
     "status": "ok",
@@ -388,7 +412,10 @@
     "trimestres_gaap": 4,
     "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
     "data": "26/08/2026",
-    "atualizado": "20/11/2026"
+    "atualizado": "20/11/2026",
+    "atualizado_em": "20/11 10:34",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "jul/26"
   },
   "PANW": {
     "status": "ok",
@@ -431,7 +458,10 @@
     "trimestres_gaap": 4,
     "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
     "data": "19/11/2026",
-    "atualizado": "20/11/2026"
+    "atualizado": "20/11/2026",
+    "atualizado_em": "20/11 10:34",
+    "trimestre_ref": "4T26",
+    "trimestre_data": "out/26"
   },
   "TGT": {
     "status": "ok",
@@ -474,7 +504,10 @@
     "trimestres_gaap": 0,
     "fonte": "SEC 8-K Exhibit 99.1, LPA Ajustado",
     "data": "20/05/2026",
-    "atualizado": "20/11/2026"
+    "atualizado": "20/11/2026",
+    "atualizado_em": "20/11 10:34",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "ago/26"
   },
   "TSLA": {
     "status": "ok",
@@ -517,7 +550,10 @@
     "trimestres_gaap": 4,
     "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
     "data": "22/10/2026",
-    "atualizado": "20/11/2026"
+    "atualizado": "20/11/2026",
+    "atualizado_em": "20/11 10:34",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "set/26"
   },
   "XP": {
     "status": "incompleto",
