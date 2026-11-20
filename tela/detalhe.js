@@ -461,8 +461,9 @@ function montar(root, d) {
     // encostada na borda (posicao() trava em 0%/100%) - não desaparece, só para de se mover.
     const minEfetivo = C ? Math.min(fx.min, ...pontosDisponiveis) : fx.min;
     const maxEfetivo = C ? Math.max(fx.max, ...pontosDisponiveis) : fx.max;
-    const p = posicao(d.preco, minEfetivo, maxEfetivo), larg = maxEfetivo - minEfetivo;
+    const larg = maxEfetivo - minEfetivo;
     const posBruta = v => larg > 0 ? Math.max(0, Math.min(100, (v - minEfetivo) / larg * 100)) : 50;
+    const pBruta = posicao(d.preco, minEfetivo, maxEfetivo);
     const aBruta = posBruta(zO), bBruta = posBruta(zC);
     const temMM = C && tem(C.mm200), aMMBruta = temMM ? posBruta(C.mm200) : null;
     const tem3a = C && tem(C.limite3a), a3aBruta = tem3a ? posBruta(C.limite3a) : null;
@@ -481,6 +482,24 @@ function montar(root, d) {
     const aMM = temMM ? mapa.mm : null;
     const a3a = tem3a ? mapa.a3a : null;
     const a5a = tem5a ? mapa.a5a : null;
+    // a bolinha do preço passa pela MESMA transformação dos traços (interpolação entre os pares
+    // posição-crua/posição-afastada, com 0%/100% como âncoras quando não coincidem com nenhum
+    // ponto já afastado) - senão, com os traços espalhados pra não colar, a bolinha ficaria "presa"
+    // perto do traço errado (ex. preço de 14,30 bem perto de 14,65 aparecendo colado no 11,28)
+    const pares = pontosAjuste.map((x, i) => [x.pos, ajustadas[i]]);
+    if (!pares.length || pares[0][0] > 1e-6) pares.unshift([0, 0]);
+    if (pares[pares.length - 1][0] < 100 - 1e-6) pares.push([100, 100]);
+    const remapear = v => {
+      if (v <= pares[0][0]) return pares[0][1];
+      for (let i = 1; i < pares.length; i++) {
+        if (v <= pares[i][0]) {
+          const [r0, a0] = pares[i - 1], [r1, a1] = pares[i];
+          return r1 === r0 ? a0 : a0 + (a1 - a0) * (v - r0) / (r1 - r0);
+        }
+      }
+      return pares[pares.length - 1][1];
+    };
+    const p = remapear(pBruta);
     // zona de oportunidade em 3 tons de verde: mais clara perto do ponto de entrada (15,21 no ex.
     // real da BBAS3) e mais forte quanto mais funda (perto do limite de 5 anos) - só visual, não
     // muda a classificação, que continua sempre pela margem de 30% sobre a âncora de 1 ano

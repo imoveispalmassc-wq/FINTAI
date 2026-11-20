@@ -210,8 +210,11 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   e os próprios números) usam a mesma posição já afastada pelo `afastar()` (distância mínima de 17 pontos) -
   nunca a posição linear crua: senão, quando os pontos ficam muito próximos no preço real (ex. zona de
   oportunidade estreita), a cor mudaria num lugar e o número escrito em cima diria outro, parecendo que a faixa
-  verde "não chega" onde o próprio número diz que chega. O "Você está aqui" (bolinha do preço) continua na
-  posição linear real (não afastada), já que é o preço de verdade, não um corte. Sem texto explicativo embaixo
+  verde "não chega" onde o próprio número diz que chega. O "Você está aqui" (bolinha do preço) passa pela MESMA
+  transformação (interpolação entre a posição crua e a já afastada de cada ponto, com 0%/100% como âncoras) -
+  senão a bolinha ficaria "presa" perto do traço errado sempre que o preço real estiver perto de um ponto que
+  foi empurrado pro afastar() (ex. preço de R$14,30 bem perto do limite de 3 anos de R$14,65 apareceria colado
+  no traço do limite de 5 anos, bem mais longe). Sem texto explicativo embaixo
   da régua (só os cartões Zona de oportunidade/neutra/cara acima já explicam os cortes). O
   PONTO DE ENTRADA (o texto "Ponto de oportunidade em") é sempre o alvo fixo de 30% sobre a âncora de 1 ano -
   não escala para os limites de 3/5 anos, que são só
