@@ -276,9 +276,9 @@ def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]
 def lpa_anual_eua(ticker: str) -> list[dict]:
     """Histórico anual de LPA diluído (GAAP), direto da SEC (10-K) — qualquer ticker dos EUA, sem
     precisar estar cadastrado em utils/guidance_tickers.json. Substitui o income_stmt do Yahoo, que
-    já mostrou um valor impossível para a MU (confirmado em fonte externa). Lista vazia: ticker da
-    B3, sem o Secret SEC_CONTACT_EMAIL no Streamlit Cloud, ou a SEC sem o dado — nesses casos a tela
-    cai de volta no Yahoo, como antes (nunca trava, nunca inventa)."""
+    costuma trazer só ~4 anos; a SEC é a fonte primária e tem o histórico completo de 10-K. Lista
+    vazia: ticker da B3, sem o Secret SEC_CONTACT_EMAIL no Streamlit Cloud, ou a SEC sem o dado —
+    nesses casos a tela cai de volta no Yahoo, como antes (nunca trava, nunca inventa)."""
     if ticker.endswith(".SA"):
         return []
     email = (st.secrets.get("SEC_CONTACT_EMAIL") or "").strip() if hasattr(st, "secrets") else ""

@@ -106,9 +106,10 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   mês de fim de cada trimestre, já que a SEC não dá "3T26" pronto.
 - LPA anual histórico (EUA, cartão "Lucro por ação", Graham, médias de 5/10 anos e Faixa do Conservador): o app
   (não o robô) busca `app.lpa_anual_eua(ticker)` na hora, direto da SEC (10-K, EarningsPerShareDiluted), para
-  qualquer ticker dos EUA, sem precisar estar em guidance_tickers.json. Motivo: o `income_stmt` do Yahoo já
-  mostrou um valor impossível para a MU (confirmado contra fonte externa - lucro maior que a receita inteira da
-  empresa). Quando a SEC tem o dado, substitui 100% a série do Yahoo (nunca mistura as duas bases) e troca a
+  qualquer ticker dos EUA, sem precisar estar em guidance_tickers.json. Motivo: o `income_stmt` do Yahoo
+  normalmente só traz uns 4 anos e, em alguns casos, usa base diferente da que a empresa reporta à SEC - a SEC é
+  a fonte primária e tem o histórico completo de 10-K. Quando a SEC tem o dado, substitui 100% a série do Yahoo
+  (nunca mistura as duas bases) e troca a
   fonte da tela para "SEC 10-K, lucro por ação diluído (GAAP)"; sem a SEC (sem o Secret `SEC_CONTACT_EMAIL` no
   Streamlit Cloud, ticker não encontrado, ou sem o dado), cai de volta no Yahoo, como antes. Não tem limite de
   anos como o Yahoo (só ~4): usa todo o histórico de 10-K que a SEC tiver, o que ajuda a Média de 5/10 anos e a

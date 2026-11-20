@@ -1030,9 +1030,9 @@ CONTABIL_IDADE_MAX = 200    # último trimestre com mais de 200 dias: a SEC est�
 
 def lpa_anual_sec(fatos: dict) -> list[dict]:
     """LPA diluído (GAAP) de cada ano fiscal fechado, direto do 10-K na SEC — não passa pelo
-    income_stmt do Yahoo (que já mostrou valor impossível para algum ticker, ex. uma coluna de TTM
-    ou estimativa mal rotulada como ano fechado). Só ano fiscal completo (350-380 dias) de 10-K ou
-    10-K/A; reapresentação (10-K/A) mais recente ganha do 10-K original do mesmo ano.
+    income_stmt do Yahoo (que costuma trazer só ~4 anos). A SEC é a fonte primária. Só ano fiscal
+    completo (350-380 dias) de 10-K ou 10-K/A; reapresentação (10-K/A) mais recente ganha do 10-K
+    original do mesmo ano.
 
     Devolve [{"ano", "lpa", "fim" (DD/MM/AAAA), "form"}, ...], do mais antigo para o mais novo —
     sem limite de anos (a SEC costuma ter mais histórico que os ~4 anos do Yahoo gratuito)."""
