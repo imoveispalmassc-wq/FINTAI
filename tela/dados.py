@@ -511,6 +511,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "min30": _n(r.minimo_30d, 4), "max30": _n(r.maximo_30d, 4),
         "mm200": _n(r.mm200, 4), "tendencia": direcao, "forca": _n(r.ifr, 0),
         "lpaAnos": [{"ano": a, "lpa": _n(v, 4)} for a, v in lpa_anos],
+        "lpaAnualFonte": d.get("lpa_anual_fonte") or "",
         "regra": {"status": regra["status"], "media": _n(regra["media"], 4), "mensagem": regra["mensagem"]},
         "lpaMedia5a": _n(lpa_media_5a, 4), "lpaMedia10a": _n(lpa_media_10a, 4),
         "plConservador": _n(pl_conservador, 2), "tetoConservador": _n(teto_conservador, 2),

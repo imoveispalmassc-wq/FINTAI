@@ -937,3 +937,30 @@ def test_fallback_de_ano_nao_publica_sozinho_mesmo_batendo_com_ano_alvo(tmp_path
         buscar_docs=lambda c, h: docs, ler_pdf=lambda link: (b"%PDF", texto),
         buscar_acoes=lambda t: 5.73e9, ler_com_claude=lambda *a: None)
     assert item["acao"] == "erro" and "sem confiança" in item["motivo"]
+
+
+# ------------------------------------------------------------ LPA anual direto da SEC (histórico, não TTM)
+def test_lpa_anual_sec_so_pega_10k_completo_ignora_trimestre():
+    fatos = {"facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"USD/shares": [
+        {"form": "10-K", "start": "2022-09-01", "end": "2023-08-31", "val": -5.34, "filed": "2023-10-01"},
+        {"form": "10-K", "start": "2023-09-03", "end": "2024-08-29", "val": 0.70, "filed": "2024-10-01"},
+        {"form": "10-K", "start": "2024-08-30", "end": "2025-08-28", "val": 7.59, "filed": "2025-10-01"},
+        {"form": "10-Q", "start": "2025-09-01", "end": "2025-11-30", "val": 2.10, "filed": "2026-01-05"},
+    ]}}}}}
+    r = fg.lpa_anual_sec(fatos)
+    assert [x["ano"] for x in r] == [2023, 2024, 2025]
+    assert r[-1] == {"ano": 2025, "lpa": 7.59, "fim": "28/08/2025", "form": "10-K"}
+
+
+def test_lpa_anual_sec_reapresentacao_10ka_ganha_do_10k_original():
+    fatos = {"facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"USD/shares": [
+        {"form": "10-K", "start": "2023-09-03", "end": "2024-08-29", "val": 0.70, "filed": "2024-10-01"},
+        {"form": "10-K/A", "start": "2023-09-03", "end": "2024-08-29", "val": 0.68, "filed": "2024-11-15"},
+    ]}}}}}
+    r = fg.lpa_anual_sec(fatos)
+    assert len(r) == 1 and r[0]["lpa"] == 0.68 and r[0]["form"] == "10-K/A"
+
+
+def test_lpa_anual_sec_sem_fato_devolve_lista_vazia():
+    assert fg.lpa_anual_sec({}) == []
+    assert fg.lpa_anual_sec({"facts": {"us-gaap": {}}}) == []

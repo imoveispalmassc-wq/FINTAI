@@ -272,10 +272,41 @@ def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]
     return {k: todos[k] for k in ordem}, padrao
 
 
+@st.cache_data(ttl=86400, show_spinner=False)   # 10-K/10-Q não mudam mais que 1x por trimestre
+def lpa_anual_eua(ticker: str) -> list[dict]:
+    """Histórico anual de LPA diluído (GAAP), direto da SEC (10-K) — qualquer ticker dos EUA, sem
+    precisar estar cadastrado em utils/guidance_tickers.json. Substitui o income_stmt do Yahoo, que
+    já mostrou um valor impossível para a MU (confirmado em fonte externa). Lista vazia: ticker da
+    B3, sem o Secret SEC_CONTACT_EMAIL no Streamlit Cloud, ou a SEC sem o dado — nesses casos a tela
+    cai de volta no Yahoo, como antes (nunca trava, nunca inventa)."""
+    if ticker.endswith(".SA"):
+        return []
+    email = (st.secrets.get("SEC_CONTACT_EMAIL") or "").strip() if hasattr(st, "secrets") else ""
+    if not email or "@" not in email:
+        return []
+    import utils.fetch_guidance as fg
+
+    cab = {"User-Agent": f"fintai/1.0 (contato: {email})", "Accept-Encoding": "gzip, deflate"}
+    try:
+        empresa = fg.cik_do_ticker(ticker, cab)
+        if not empresa:
+            return []
+        fatos = fg._get_sec(f"{fg.SEC_DADOS}/api/xbrl/companyfacts/CIK{empresa[0]}.json", cab).json()
+        return fg.lpa_anual_sec(fatos)
+    except Exception:
+        return []
+
+
 @st.cache_data(ttl=60, show_spinner=False)   # mesmo ritmo de baixar() e do fragment: cotação mais dinâmica
 def pacote(ticker: str, versao: str = "") -> dict:
     """Tudo o que a tela de um ticker precisa, calculado uma única vez."""
     d = baixar(ticker)
+    sec_anual = lpa_anual_eua(ticker)
+    if sec_anual:
+        # troca a série do Yahoo pela da SEC: todo mundo que usa d["lpa_anual"] (Graham, médias,
+        # Faixa do Conservador, "cresceu de X para Y") passa a usar o dado verificado, sem misturar
+        d = {**d, "lpa_anual": pd.Series({pd.to_datetime(x["fim"], format="%d/%m/%Y"): x["lpa"] for x in sec_anual}),
+            "lpa_anual_fonte": "SEC 10-K, lucro por ação diluído (GAAP)"}
     hist = d["hist"]
     proventos = hist["Dividends"][hist["Dividends"] > 0] if "Dividends" in hist else None
     r = calcular(hist, proventos)

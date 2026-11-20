@@ -1383,9 +1383,10 @@ function montar(root, d) {
       const linhas = anos.map(a => `<div>${a.ano}<b style="color:${a.lpa < 0 ? 'var(--vermelho)' : 'inherit'}">${din(a.lpa)}</b></div>`).join('');
       const destaque = rg.status === 'ok' ? `Média de ${anos.length} ${anos.length === 1 ? 'ano' : 'anos'}: ${din(rg.media)}`
         : rg.status === 'excluido' ? 'Ano de prejuízo excluído' : rg.status === 'recorrente' ? rg.mensagem : INDISP;
-      const nota = rg.status === 'excluido' ? `Média dos anos com lucro: ${din(rg.media)}.`
+      const fonteAnual = d.lpaAnualFonte ? `Histórico de lucro por ação verificado na fonte oficial: ${d.lpaAnualFonte}. ` : '';
+      const nota = fonteAnual + (rg.status === 'excluido' ? `Média dos anos com lucro: ${din(rg.media)}.`
         : rg.status === 'recorrente' ? 'Dois ou mais anos de prejuízo nos últimos 3 anos.'
-        : rg.status === 'ok' ? 'Nenhum ano de prejuízo nos últimos 3 anos.' : 'O Yahoo Finance não traz o lucro anual deste ativo.';
+        : rg.status === 'ok' ? 'Nenhum ano de prejuízo nos últimos 3 anos.' : 'O Yahoo Finance não traz o lucro anual deste ativo.');
       // projeção: LPA estimado pelos analistas para o ano fiscal em curso (o seguinte ao último divulgado)
       const proj = d.lynch && d.lynch.futuro ? d.lynch.futuro.lpaEsteAno : null;
       // com guidance cadastrado, o período vem da empresa (ex.: FY2027); senão, o ano seguinte ao último divulgado

@@ -1028,6 +1028,28 @@ ARQ_CONTABIL = RAIZ / "utils" / "contabil_sec.json"
 CONTABIL_IDADE_MAX = 200    # último trimestre com mais de 200 dias: a SEC está atrasada/incompleta
 
 
+def lpa_anual_sec(fatos: dict) -> list[dict]:
+    """LPA diluído (GAAP) de cada ano fiscal fechado, direto do 10-K na SEC — não passa pelo
+    income_stmt do Yahoo (que já mostrou valor impossível para algum ticker, ex. uma coluna de TTM
+    ou estimativa mal rotulada como ano fechado). Só ano fiscal completo (350-380 dias) de 10-K ou
+    10-K/A; reapresentação (10-K/A) mais recente ganha do 10-K original do mesmo ano.
+
+    Devolve [{"ano", "lpa", "fim" (DD/MM/AAAA), "form"}, ...], do mais antigo para o mais novo —
+    sem limite de anos (a SEC costuma ter mais histórico que os ~4 anos do Yahoo gratuito)."""
+    eps = (((fatos.get("facts") or {}).get("us-gaap") or {}).get("EarningsPerShareDiluted") or {}).get("units", {}).get("USD/shares", [])
+    anuais: dict[dt.date, dict] = {}
+    for e in eps:
+        if e.get("form") not in ("10-K", "10-K/A") or "start" not in e or "end" not in e:
+            continue
+        ini, fim = _data(e["start"]), _data(e["end"])
+        if not ini or not fim or not 350 <= (fim - ini).days <= 380:
+            continue
+        if fim not in anuais or e.get("filed", "") > anuais[fim].get("filed", ""):
+            anuais[fim] = e
+    return [{"ano": fim.year, "lpa": round(float(anuais[fim]["val"]), 4), "fim": f"{fim:%d/%m/%Y}",
+            "form": anuais[fim].get("form", "")} for fim in sorted(anuais)]
+
+
 def lpa_ttm_sec(fatos: dict, hoje: dt.date) -> dict:
     """LPA diluído (GAAP) dos últimos 12 meses = soma dos últimos 4 trimestres dos 10-Q/10-K.
 

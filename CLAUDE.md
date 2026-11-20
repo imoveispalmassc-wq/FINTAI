@@ -104,6 +104,16 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   ou último com mais de 200 dias): Yahoo, "fonte: Yahoo - SEC incompleto". No fim de cada ticker o robô grava
   atualizado_em, trimestre_ref e trimestre_data, igual à B3 (ver abaixo) - calculando o trimestre a partir do
   mês de fim de cada trimestre, já que a SEC não dá "3T26" pronto.
+- LPA anual histórico (EUA, cartão "Lucro por ação", Graham, médias de 5/10 anos e Faixa do Conservador): o app
+  (não o robô) busca `app.lpa_anual_eua(ticker)` na hora, direto da SEC (10-K, EarningsPerShareDiluted), para
+  qualquer ticker dos EUA, sem precisar estar em guidance_tickers.json. Motivo: o `income_stmt` do Yahoo já
+  mostrou um valor impossível para a MU (confirmado contra fonte externa - lucro maior que a receita inteira da
+  empresa). Quando a SEC tem o dado, substitui 100% a série do Yahoo (nunca mistura as duas bases) e troca a
+  fonte da tela para "SEC 10-K, lucro por ação diluído (GAAP)"; sem a SEC (sem o Secret `SEC_CONTACT_EMAIL` no
+  Streamlit Cloud, ticker não encontrado, ou sem o dado), cai de volta no Yahoo, como antes. Não tem limite de
+  anos como o Yahoo (só ~4): usa todo o histórico de 10-K que a SEC tiver, o que ajuda a Média de 5/10 anos e a
+  Faixa a aparecerem com mais frequência. Precisa do mesmo e-mail de contato que o robô usa (SEC_CONTACT_EMAIL),
+  só que como Secret do Streamlit Cloud - são dois lugares diferentes, cada um com o seu Secret.
 - Contábil 12 meses (B3): tickers de utils/contabil_br_config.json (linha do lucro e nome da fonte; hoje só BBAS3, linha
   "Lucro Líquido Ajustado", fonte "BB, Divulgação de Resultados, Lucro Líquido Ajustado"). O robô lê o release de
   resultados de cada trimestre na CVM (trimestre = o último encerrado antes da entrega), extrai o lucro do trimestre
