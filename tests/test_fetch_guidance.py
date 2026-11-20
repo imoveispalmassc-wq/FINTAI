@@ -839,3 +839,18 @@ def test_historico_txt_formata_do_mais_antigo_ao_mais_novo():
 
 def test_historico_sem_itens_nao_bloqueia_leitura_unica():
     assert fg._historico_bate_com_atual([], 9e9, 11e9, "lucro") is True
+
+
+# ------------------------------------------------------------ B3SA3: dígito dentro do código (não só no fim)
+def test_b3sa3_e_roteada_para_cvm_nao_para_a_sec():
+    # antes do fix, [A-Z]{4}\d{1,2} não batia com B3SA3 (o "3" fica no meio) e caía na SEC por engano
+    item = fg.planejar_ticker("B3SA3", HOJE, None, set(),
+                              buscar_cnpj=lambda t, h: None)   # força "erro" só para provar que entrou no ramo BR
+    assert item["acao"] == "erro" and "CNPJ" in item["motivo"]
+
+
+def test_padrao_br_aceita_digito_no_meio_do_codigo_sem_confundir_eua():
+    import re
+    padrao = r"(?=.*[A-Z])[A-Z0-9]{4}\d{1,2}"
+    assert re.fullmatch(padrao, "B3SA3") and re.fullmatch(padrao, "PETR4") and re.fullmatch(padrao, "BOVA11")
+    assert not re.fullmatch(padrao, "AAPL") and not re.fullmatch(padrao, "TGT") and not re.fullmatch(padrao, "PANW")

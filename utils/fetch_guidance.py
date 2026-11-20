@@ -589,7 +589,7 @@ def mercado_yahoo(ticker: str) -> dict | None:
     """Cotação e P/L de 12 meses do Yahoo (B3 com .SA). None se o Yahoo não responder."""
     import yfinance as yf
 
-    simbolo = f"{ticker}.SA" if re.fullmatch(r"[A-Z]{4}\d{1,2}", ticker) else ticker
+    simbolo = f"{ticker}.SA" if re.fullmatch(r"(?=.*[A-Z])[A-Z0-9]{4}\d{1,2}", ticker) else ticker
     try:
         info = yf.Ticker(simbolo).info or {}
     except Exception:  # noqa: BLE001
@@ -704,7 +704,7 @@ def planejar_ticker(ticker: str, hoje: dt.date, anterior: dict | None, vistos: s
     referencia: guidance que está no app (o automático salvo ou o cadastro manual), base da trava de 20%."""
     referencia = referencia or anterior
     item = {"ticker": ticker, "acao": "nada", "motivo": "", "novo": None, "anterior": anterior}
-    if not re.fullmatch(r"[A-Z]{4}\d{1,2}", ticker):
+    if not re.fullmatch(r"(?=.*[A-Z])[A-Z0-9]{4}\d{1,2}", ticker):
         return planejar_ticker_eua(ticker, hoje, anterior, vistos=vistos, buscar_mercado=buscar_mercado,
                                    referencia=referencia)
     empresa = buscar_cnpj(ticker, hoje)
@@ -1493,7 +1493,7 @@ def planejar_inicial(ticker: str, hoje: dt.date, iniciais: dict) -> dict | None:
     ano = ano_alvo(ticker, hoje)
     if _tem_projecao((iniciais.get(ticker) or {}).get(ano)):
         return None                                      # já travada: nunca busca de novo
-    br = bool(re.fullmatch(r"[A-Z]{4}\d{1,2}", ticker))
+    br = bool(re.fullmatch(r"(?=.*[A-Z])[A-Z0-9]{4}\d{1,2}", ticker))
     novo, motivo = (buscar_inicial_br if br else buscar_inicial_eua)(ticker, ano)
     return {"ano": ano, "novo": novo, "motivo": motivo}
 
@@ -1543,7 +1543,7 @@ def processar_fila(hoje: dt.date | None = None, *, token: str | None = None, max
             fechar(item["numero"], token, "Ticker com formato inválido: ignorado, não processado.")
             continue
         try:
-            plano = (planejar_br(ticker, hoje, None, set()) if re.fullmatch(r"[A-Z]{4}\d{1,2}", ticker)
+            plano = (planejar_br(ticker, hoje, None, set()) if re.fullmatch(r"(?=.*[A-Z])[A-Z0-9]{4}\d{1,2}", ticker)
                      else planejar_us(ticker, hoje, None))
         except Exception as e:  # noqa: BLE001
             plano = {"acao": "erro", "motivo": f"{e.__class__.__name__}: {e}", "travas": []}
@@ -1606,7 +1606,7 @@ def planejar(hoje: dt.date | None = None) -> list[dict]:
             except Exception as e:  # noqa: BLE001
                 item["contabil_br"] = {"status": "pendente", "motivo": f"{e.__class__.__name__}: {e}"}
             log.info("  contábil B3: %s", item["contabil_br"].get("lpa_12m") or item["contabil_br"].get("motivo"))
-        if not re.fullmatch(r"[A-Z]{4}\d{1,2}", t):
+        if not re.fullmatch(r"(?=.*[A-Z])[A-Z0-9]{4}\d{1,2}", t):
             try:
                 item["contabil"] = contabil_eua(t, hoje)
             except Exception as e:  # noqa: BLE001

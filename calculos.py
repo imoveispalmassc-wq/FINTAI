@@ -10,7 +10,7 @@ import pandas as pd
 from utils.percentile import percentil_na_faixa
 
 # PETR4, VALE3, BOVA11, TAEE11, SANB11 ... => ação/FII/ETF da B3
-_PADRAO_B3 = re.compile(r"^[A-Z]{4}\d{1,2}[A-Z]?$")
+_PADRAO_B3 = re.compile(r"^(?=.*[A-Z])[A-Z0-9]{4}\d{1,2}[A-Z]?$")   # B3SA3: dígito dentro do próprio código
 
 
 def normalizar_ticker(texto: str) -> str:
