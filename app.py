@@ -87,7 +87,7 @@ def _linha(df, nomes):
     return None
 
 
-@st.cache_data(ttl=120, show_spinner=False)   # cotação mais dinâmica (o Yahoo gratuito já atrasa ~15min sozinho)
+@st.cache_data(ttl=60, show_spinner=False)   # mesmo ritmo do fragment de painel(): cotação mais dinâmica
 def baixar(ticker: str) -> dict:
     tk = yf.Ticker(ticker)
     hist = tk.history(period="max", interval="1d", auto_adjust=False)
@@ -272,7 +272,7 @@ def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]
     return {k: todos[k] for k in ordem}, padrao
 
 
-@st.cache_data(ttl=120, show_spinner=False)   # mesmo ritmo de baixar(): cotação mais dinâmica
+@st.cache_data(ttl=60, show_spinner=False)   # mesmo ritmo de baixar() e do fragment: cotação mais dinâmica
 def pacote(ticker: str, versao: str = "") -> dict:
     """Tudo o que a tela de um ticker precisa, calculado uma única vez."""
     d = baixar(ticker)
