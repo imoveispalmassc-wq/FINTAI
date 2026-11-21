@@ -1063,6 +1063,24 @@ def test_outlook_trimestral_sem_guidance_devolve_none():
     assert fg.extrair_outlook_trimestral_eua("Nada de guidance aqui, só resultados do trimestre passado.") is None
 
 
+TEXTO_OUTLOOK_ASML = (
+    "Outlook ASML expects Q4 2026 total net sales between 14.2 billion and 15.2 billion, and a "
+    "gross margin around 57% Full-year 2026 total net sales expected to be between 44 billion and "
+    "45 billion, with a gross margin around 56%"
+)
+
+
+def test_outlook_trimestral_asml_rotulo_q_abreviado_net_sales_e_between():
+    """ASML usa 'EMPRESA expects QN AAAA' (sem 'quarter' por extenso), 'net sales' em vez de
+    'Revenue', e a faixa em 'between X and Y' - três formatos que PANW/MU/NVDA/AMD não usam.
+    Não dá guidance de LPA (só receita/margem)."""
+    r = fg.extrair_outlook_trimestral_eua(TEXTO_OUTLOOK_ASML)
+    assert r["periodo"] == "4T FY2026"
+    assert r["receita_min"] == 14_200_000_000.0 and r["receita_max"] == 15_200_000_000.0
+    assert r["margem_bruta"] == 57.0
+    assert r["lpa_min"] is None and r["lpa_max"] is None
+
+
 def test_atualizar_outlook_trimestral_eua_nao_apaga_valor_bom_sem_achar_de_novo(tmp_path, monkeypatch):
     arq = tmp_path / "guidance_trimestral_eua.json"
     arq.write_text('{"MU": {"periodo": "4T FY2026"}}', encoding="utf-8")

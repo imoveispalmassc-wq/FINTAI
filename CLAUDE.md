@@ -143,10 +143,12 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   travados, o card delas nunca apareceria sozinho) e tenta achar a tabela/lista de "Business Outlook"/"Financial
   Outlook" só por padrões de texto (sem API do Claude, sem travas - a faixa extraída é usada tal como está no
   documento, nunca inventada). Reconhece hoje: "guidance for the Nth quarter of year", "'s outlook for the Nth
-  quarter of fiscal year", "for the fiscal Nth quarter year, we expect" e "for the Nth quarter of year, EMPRESA
-  expects" (ex.: AMD); faixas em "X ± Y", "X to Y" e "X, plus or minus Z%"; margem em "Approximately X%" ou
-  "between X% and Y%" (nesse caso o ponto médio). Nem toda empresa dá guidance de LPA (ex. NVIDIA e AMD só dão
-  receita/margem) nem usa um desses formatos (ex. Apple não dá guidance numérico formal) - sem achar um formato
+  quarter of fiscal year", "for the fiscal Nth quarter year, we expect", "for the Nth quarter of year, EMPRESA
+  expects" (ex.: AMD) e "EMPRESA expects QN AAAA" (abreviado, sem "quarter" por extenso - ex.: ASML); faixas em
+  "X ± Y", "X to Y", "X, plus or minus Z%" e "between X and Y" (ex.: ASML); rótulo de receita "Revenue" ou "net
+  sales"/"total net sales" (ex.: ASML); margem em "Approximately X%" ou "between X% and Y%" (nesse caso o ponto
+  médio). Nem toda empresa dá guidance de LPA (ex. NVIDIA, AMD e ASML só dão receita/margem) nem usa um desses
+  formatos (ex. Apple não dá guidance numérico formal) - sem achar um formato
   reconhecido, o campo correspondente fica "Sem dado" e, sem nada achado, o card simplesmente não aparece (nunca
   trava o ticker como "não validado": isso é só do guidance ANUAL). Não calcula margem líquida por fora (ex.:
   LPA × ações do Yahoo ÷ receita) mesmo quando dá para estimar: o LPA de guidance costuma ser non-GAAP e as

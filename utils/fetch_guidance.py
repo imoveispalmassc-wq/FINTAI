@@ -988,9 +988,11 @@ RE_OUTLOOK_TRI = re.compile(
     r"(?:(?:guidance\s+for\s+the|(?:’s|'s)\s+outlook\s+for\s+the)\s+(first|second|third|fourth)\s+quarter"
     r"\s+of\s+(?:fiscal\s+)?(\d{4}))"
     r"|(?:for\s+the\s+fiscal\s+(first|second|third|fourth)\s+quarter\s+(\d{4}),?\s+we\s+expect)"
-    r"|(?:for\s+the\s+(first|second|third|fourth)\s+quarter\s+of\s+(?:fiscal\s+)?(\d{4}),?\s+[A-Z][\w.&]*\s+expects)",
+    r"|(?:for\s+the\s+(first|second|third|fourth)\s+quarter\s+of\s+(?:fiscal\s+)?(\d{4}),?\s+[A-Z][\w.&]*\s+expects)"
+    # "ASML expects Q4 2026 total net sales..." (abreviado "QN AAAA", sem "quarter" por extenso - ex. ASML)
+    r"|(?:[A-Z][\w.&]*\s+expects\s+Q([1-4])\s+(\d{4}))",
     re.I)
-_ORDINAL_TRI = {"first": 1, "second": 2, "third": 3, "fourth": 4}
+_ORDINAL_TRI = {"first": 1, "second": 2, "third": 3, "fourth": 4, "1": 1, "2": 2, "3": 3, "4": 4}
 _NUM_TRI = r"\$?\s*([\d][\d,]*\.?\d*)"
 _ESCALA_TRI = {"billion": 1e9, "million": 1e6}
 
@@ -1017,6 +1019,14 @@ def _faixa_tri(rotulo: str, texto: str, unidade: bool = False) -> tuple[float, f
     m = re.search(rf"{rotulo}\D{{0,25}}{_NUM_TRI}{pad_unid}\s*(?:to|-|–)\s*{_NUM_TRI}", texto, re.I)
     if m:
         unid = m.group(2) if unidade else None
+        b_i = 3 if unidade else 2
+        a, b = float(m.group(1).replace(",", "")), float(m.group(b_i).replace(",", ""))
+        fator = _ESCALA_TRI.get(unid, 1)
+        return min(a, b) * fator, max(a, b) * fator
+    # "between X [bilhão] and Y [bilhão]" (ex.: ASML) - unidade pode repetir em cada lado
+    m = re.search(rf"{rotulo}\D{{0,25}}between\s+{_NUM_TRI}{pad_unid}\s+and\s+{_NUM_TRI}{pad_unid}", texto, re.I)
+    if m:
+        unid = (m.group(2) or m.group(4)) if unidade else None
         b_i = 3 if unidade else 2
         a, b = float(m.group(1).replace(",", "")), float(m.group(b_i).replace(",", ""))
         fator = _ESCALA_TRI.get(unid, 1)
@@ -1049,10 +1059,10 @@ def extrair_outlook_trimestral_eua(texto: str) -> dict | None:
     m = RE_OUTLOOK_TRI.search(texto)
     if not m:
         return None
-    ordinal, ano_txt = next((m.group(i), m.group(i + 1)) for i in (1, 3, 5) if m.group(i))
+    ordinal, ano_txt = next((m.group(i), m.group(i + 1)) for i in (1, 3, 5, 7) if m.group(i))
     tri, ano = _ORDINAL_TRI[ordinal.lower()], int(ano_txt)
     janela = texto[m.end(): m.end() + 2000]   # a tabela/lista de outlook vem logo depois do título
-    receita = _faixa_tri(r"Revenue", janela, unidade=True)
+    receita = _faixa_tri(r"(?:Revenue|[Tt]otal net sales|[Nn]et sales)", janela, unidade=True)
     lpa = _faixa_tri(r"Diluted(?:\s+non-GAAP)?\s+(?:net income per share|earnings per share)", janela)
     if not receita and not lpa:
         return None
