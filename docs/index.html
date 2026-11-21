@@ -71,6 +71,9 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
 .escalas .vela[aria-pressed="true"] { color: var(--texto); border-color: var(--azul); }
 .legenda-var { color: var(--suave); font-size: 12px; margin-top: 8px; }
 .legenda-var b { font-weight: 600; }
+.legenda-zonas { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 10px; }
+.legenda-zonas span { display: flex; align-items: center; gap: 5px; color: var(--suave); font-size: 11.5px; }
+.legenda-zonas i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
 
 /* seções */
 .sec { margin-top: 30px; }
@@ -555,7 +558,8 @@ function montar(root, d) {
         ${ESCALAS.map(([k, r]) => `<button class="e" data-e="${k}" aria-pressed="${k === escala}" ${series[k] ? '' : 'disabled'}>${r}</button>`).join('')}
         <button class="vela" id="gvela" aria-pressed="false" aria-label="Alternar entre linha e candles"><svg class="i" viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M8 3v4M8 15v6M16 3v6M16 17v4"/><rect x="5.5" y="7" width="5" height="8" rx="1"/><rect x="13.5" y="9" width="5" height="8" rx="1"/></svg></button>
       </div>
-      <div class="legenda-var num"><span id="gvar"></span> · <button class="link" data-folha="grafico">Ver como calculamos</button></div>`;
+      <div class="legenda-var num"><span id="gvar"></span></div>
+      <div class="legenda-zonas" id="glegenda"></div>`;
 
     const cv = $('gcanvas'), ctx = cv.getContext('2d');
     const css = n => getComputedStyle(app).getPropertyValue(n).trim();
@@ -628,7 +632,7 @@ function montar(root, d) {
       rotulos.sort((a, b) => b.y - a.y);
       rotulos.forEach((r, k) => { if (k && rotulos[k - 1].y - r.y < 12) r.y = rotulos[k - 1].y - 12; });
       ctx.textAlign = 'left'; ctx.font = '10.5px Inter, system-ui, sans-serif';
-      rotulos.forEach(r => { ctx.fillStyle = r.c; ctx.fillText(r.t, r.y > yPlot - 48 ? x0 + 92 : x0 + 6, r.y); });
+      rotulos.forEach(r => { ctx.fillStyle = r.c; ctx.fillText(r.t, x0 + 6, r.y); });
       ctx.font = '11px Inter, system-ui, sans-serif';
       ctx.restore();
       }
@@ -688,15 +692,17 @@ function montar(root, d) {
         ultimo = txt;
       });
 
-      // mini-legenda das zonas
-      if (modo !== 'simons') {
-      ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.font = '10px Inter, system-ui, sans-serif';
-      const legL = [['Caro', '#f06a6a'], ['Neutro', '#8c99b0'], ['Oportunidade', '#2fbf8a'], ...(modo === 'lynch' && d.lynch && d.lynch.preco ? [['Bem abaixo', '#7aa2f7']] : [])];
-      ctx.fillStyle = '#0e1420cc'; ctx.beginPath(); ctx.roundRect(x0 + 1, yPlot - 7 - legL.length * 12, 84, legL.length * 12 + 6, 7); ctx.fill();
-      legL.forEach(([t, c], k) => {
-        const y = yPlot - legL.length * 12 + 2 + k * 12; ctx.fillStyle = c; ctx.fillRect(x0 + 6, y - 3, 6, 6);
-        ctx.fillStyle = css('--suave'); ctx.fillText(t, x0 + 16, y);
-      });
+      // legenda das zonas: HTML normal, fora da posição do gráfico (embaixo dele), não mais
+      // desenhada em cima do canvas - evita colidir com qualquer linha/rótulo do próprio gráfico
+      const elLeg = $('glegenda');
+      if (elLeg) {
+        const temMMLeg = (modo === 'lynch' && d.lynch && d.lynch.preco && tem(d.lynch.preco.mm200))
+          || (modo === 'graham' && d.conservadorFaixa && tem(d.conservadorFaixa.mm200));
+        const legL = modo === 'simons' ? [] : [['Oportunidade', '#2fbf8a'],
+          ...(modo === 'lynch' && d.lynch && d.lynch.preco ? [['Bem abaixo', '#7aa2f7']] : []),
+          ...(temMMLeg ? [['Média 200d', '#f2994a']] : []),
+          ['Neutro', '#8c99b0'], ['Caro', '#f06a6a']];
+        elLeg.innerHTML = legL.map(([t, c]) => `<span><i style="background:${c}"></i>${t}</span>`).join('');
       }
 
       // modo Simons, passos 1 e 2: MM200 e limites da faixa, iguais ao painel; valores no eixo da direita
@@ -787,12 +793,6 @@ function montar(root, d) {
     const ro = new ResizeObserver(desenhar); ro.observe(cv);
     limpar.push(() => { ro.disconnect(); cancelAnimationFrame(raf); });
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(desenhar);
-    FOLHAS.grafico = () => ['Variação no gráfico', `
-      <p>O gráfico mostra só a variação do preço, sem dividendos: último preço do período dividido pelo primeiro, menos 1.</p>
-      ${tem(d.preco1AnoAtras) ? `<p><b>Escala 1A</b></p><code>Retorno só preço: (${f(d.preco)} - ${f(d.preco1AnoAtras)}) / ${f(d.preco1AnoAtras)} = ${f((d.preco / d.preco1AnoAtras - 1) * 100)}%</code>
-      <p>Preço em ${d.data1AnoAtras}: <b>${din(d.preco1AnoAtras)}</b>. Preço em ${d.data}: <b>${din(d.preco)}</b>.</p>` : ''}
-      <p>Na escala "Hoje", a variação é em relação ao fechamento do pregão anterior.</p>
-      <p>O retorno com dividendos fica na seção Retorno acumulado.</p>${fonte}`];
     legenda(); desenhar();
     aoMudarModo = () => {
       const b10 = el.querySelector('[data-e="10d"]');

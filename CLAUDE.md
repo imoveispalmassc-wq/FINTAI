@@ -224,7 +224,12 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   período mostrado, senão as linhas ficariam espremidas perto do fundo do gráfico (mesmo problema e mesma
   solução da régua). Sem a antiga linha "Média dos métodos ... não validado" (média do Conservador/P/L
   histórico/Bazin): tirada do gráfico por não ser validada e confundir com os cortes reais do valuation; os 3
-  métodos continuam no card "Preço justo", sem relação com a Faixa de preço.
+  métodos continuam no card "Preço justo", sem relação com a Faixa de preço. A legenda das zonas (Caro/Neutro/
+  Oportunidade, mais Média 200d quando ela aparece) é HTML normal em linha, fora do gráfico (embaixo dele) - não
+  é mais desenhada em cima do canvas, pra nunca colidir com nenhuma linha/rótulo do próprio gráfico; ordem
+  Oportunidade/Média/Neutro/Caro, com espaço curto entre os itens (agrupados à esquerda, não esticados pela
+  largura toda - isso empurraria o último pra quase fora da tela em celular). Sem o link "Ver como calculamos" da variação do
+  gráfico (perto do "Variação em X: -Y% só preço"): só a variação em si continua.
   Mais reativo a mudança de cenário do que usar um LPA médio de vários anos (que reage devagar) e
   menos sujeito a 1 ano isolado distorcer tudo (diferente de olhar só o LPA do último ano). O card de Lucro por
   ação continua exigindo exatamente 10 anos ("Sem dado" sem isso) para "Média 5/10 anos" e o Graham ali, com
