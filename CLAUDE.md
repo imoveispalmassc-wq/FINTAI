@@ -324,8 +324,15 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 - "Tendência e força": os cards de Direção/Força da tendência (distância preço÷MM200) e Força (IFR 14 dias)
   ficam num único bloco. Cada um mostra, além do valor de hoje (bolinha cheia), uma bolinha vazada marcando
   onde estava 7 pregões atrás (`calculos.calcular` → `dist_mm200_7d`/`ifr_7d`, calculados em `indicadores()`,
-  não um valor aproximado), pra dar pra ver pra que lado a tendência/força está indo sem comparar números -
-  com menos de 8 pregões de histórico, fica "Sem dado" (não mostra a bolinha vazada, nunca inventa).
+  não um valor aproximado), com o rótulo "-7 dias" logo embaixo dela (não o número - a posição da bolinha já
+  mostra pra que lado a tendência/força está indo, sem precisar comparar números) - com menos de 8 pregões de
+  histórico, fica "Sem dado" (não mostra a bolinha vazada nem o rótulo, nunca inventa). Na barra de Força da
+  tendência, a distância de hoje e "Média 200d" ficam na MESMA linha, logo abaixo da régua (não cada uma na sua
+  própria linha, que afastava demais da barra) - só se afastam uma da outra o mínimo necessário pra não
+  sobrepor (mesma função `afastar()`/folga pela largura do rótulo da Faixa de preço), senão cada uma fica
+  exatamente no seu próprio ponto. Os textos "Perdeu força"/"Alta" e "Precisa subir"/"Cai" mostram só o
+  percentual relevante (ex. "Perdeu força. 20,94% abaixo da média de 200 dias." e "Precisa subir 26,5% para
+  voltar à média."), sem repetir a mesma distância numa segunda frase ("Preço X está Y% abaixo da média de Z").
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 

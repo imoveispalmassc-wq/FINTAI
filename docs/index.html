@@ -952,13 +952,14 @@ function montar(root, d) {
       : v <= FORTE ? W_NEG + W_FRACA + W_MEDIA * (v - FRACA) / (FORTE - FRACA)
       : W_NEG + W_FRACA + W_MEDIA + W_FORTE * Math.min(1, (v - FORTE) / (RMAX - FORTE));
     const fundoT = `linear-gradient(90deg,var(--vermelho) 0 ${pt(0)}%,var(--ambar) ${pt(0)}% ${pt(FRACA)}%,var(--ardosia) ${pt(FRACA)}% ${pt(FORTE)}%,var(--verde) ${pt(FORTE)}% 100%)`;
-    let textoT = '', ondeT = '';
+    let textoT = '', notaSubirCairT = '';
     if (tem(dist)) {
       const cair = (d.preco - d.mm200) / d.preco * 100, subir = (d.mm200 / d.preco - 1) * 100;
       const grau = dist > FORTE ? 'forte' : dist >= FRACA ? 'média' : 'fraca';
-      textoT = dist < 0 ? `Perdeu força. A ${f(Math.abs(dist))}% abaixo da média de 200d. Precisa subir ${f(subir, 1)}% para voltar acima dela.`
-        : `Alta ${grau}. A ${f(dist)}% acima da média de 200d. Se cair ${f(cair, 1)}% perde a tendência.`;
-      ondeT = `Preço ${f(d.preco)} está ${f(Math.abs(dist))}% ${dist >= 0 ? 'ACIMA' : 'ABAIXO'} da média de 200d de ${f(d.mm200)}`;
+      textoT = dist < 0 ? `Perdeu força. ${f(Math.abs(dist))}% abaixo da média de 200 dias.`
+        : `Alta ${grau}. ${f(dist)}% acima da média de 200 dias.`;
+      notaSubirCairT = dist < 0 ? `Precisa subir ${f(subir, 1)}% para voltar à média.`
+        : `Cai ${f(cair, 1)}% para perder a tendência.`;
     }
     // mesmo desenho da barra de zonas: nomes em cima de cada cor, limites com traço e valor,
     // distância e média de 200 dias embaixo da barra, cada uma sempre alinhada com o próprio ponto
@@ -970,7 +971,22 @@ function montar(root, d) {
     const p7T = tem(d.dist200d7d) ? Math.max(0, Math.min(100, pt(d.dist200d7d))) : null;
     const estreita = pt(FRACA) - pt(0) < 11;          // faixa Fraca sem espaço para nome e valor
     const pct = v => `${v > 0 ? '+' : ''}${f(v, 0)}%`;
-    const media = `<span style="${ancora(pZero)};color:var(--suave);font-weight:500;font-size:11px">Média 200d<b style="color:var(--texto)">${f(d.mm200)}</b></span>`;
+    // distância e "Média 200d" na MESMA linha, bem perto da barra (não numa linha própria lá embaixo)
+    // - só se afastam um do outro o mínimo necessário (mesma função afastar() da Faixa de preço, com
+    // a folga calculada pela largura real de cada rótulo), senão ficam cada um no próprio ponto
+    const largadorPxT = n => n * 7.3 + 6;
+    const largContainerT = Math.max(el.clientWidth - 28, 200);
+    const pxParaPctT = px => px / largContainerT * 100;
+    const txtDistT = sinal(dist);
+    const largMediaT = Math.max('Média 200d'.length, f(d.mm200).length);
+    const pontosDM = [{ k: 'dist', pos: pDist, folga: pxParaPctT(largadorPxT(txtDistT.length)) / 2 },
+                      { k: 'media', pos: pZero, folga: pxParaPctT(largadorPxT(largMediaT)) / 2 }].sort((a, b) => a.pos - b.pos);
+    const ajustadasDM = afastar(pontosDM.map(x => x.pos), pontosDM.map(x => x.folga));
+    const mapaDM = {}; pontosDM.forEach((x, i) => { mapaDM[x.k] = ajustadasDM[i]; });
+    const linhaDistMedia = `<div class="marca-baixo num">
+          <span style="${ancora(mapaDM.dist)}">${txtDistT}</span>
+          <span style="${ancora(mapaDM.media)};color:var(--suave);font-weight:500;font-size:11px">Média 200d<b style="color:var(--texto)">${f(d.mm200)}</b></span>
+        </div>`;
     const divisor = 'margin-top:14px;padding-top:14px;border-top:1px solid var(--borda)';
     const barraT = !tem(dist) ? '' : `<div style="${divisor}">
           <span class="rot">Força da tendência</span>
@@ -989,12 +1005,11 @@ function montar(root, d) {
             ${p7T !== null ? `<span class="bola-7d" style="left:${p7T}%"></span>` : ''}
             <span class="bola" style="left:${pDist}%"></span>
           </div>
-          <div class="marca-baixo num"><span style="${ancora(pDist)}">${sinal(dist)}</span></div>
-          <div class="marca-baixo num" style="margin-top:0">${media}</div>
-          ${p7T !== null ? `<div class="nota" style="margin-top:6px">Últimos 7 pregões: ${sinal(d.dist200d7d)}</div>` : ''}
+          ${p7T !== null ? `<div class="marca-baixo so-valor num"><span style="${ancora(p7T)};color:var(--suave);font-weight:500;font-size:10.5px">-7 dias</span></div>` : ''}
+          ${linhaDistMedia}
           ${estreita ? '<div class="nota">Faixa Fraca: de 0% a +3% acima da média de 200 dias.</div>' : ''}
           <div class="destaque num">${textoT}</div>
-          <div class="nota num">${ondeT}</div>
+          <div class="nota num">${notaSubirCairT}</div>
         </div>`;
     el.innerHTML = `<h2>Tendência e força</h2>
       <div class="card">
@@ -1016,7 +1031,7 @@ function montar(root, d) {
             ${tem(d.forca7d) ? `<span class="bola-7d" style="left:${d.forca7d}%"></span>` : ''}
             <span class="bola" style="left:${d.forca}%"></span>
           </div>
-          ${tem(d.forca7d) ? `<div class="nota" style="margin-top:6px;text-align:center">Últimos 7 pregões: ${f(d.forca7d, 0)}</div>` : ''}
+          ${tem(d.forca7d) ? `<div class="marca-baixo so-valor num"><span style="${ancora(d.forca7d)};color:var(--suave);font-weight:500;font-size:10.5px">-7 dias</span></div>` : ''}
           <div class="destaque" style="text-align:center">${leitura}</div>` : `<div class="nota" style="margin-top:8px">${INDISP}</div>`}
         </div>
       </div>`;
