@@ -127,6 +127,21 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   esse ticker", "SEC sem o dado...", "SEC falhou (...)" ou "SEC OK"); quando a SEC não é usada (ticker dos EUA),
   o motivo aparece na nota do card "Lucro por ação" (ex.: "Yahoo Finance (SEC não usada: SEC sem e-mail
   configurado...)"), pra diagnosticar na própria tela sem precisar olhar o código ou os logs.
+  Emissora estrangeira (ex. ASML): arquiva 20-F na SEC, não 10-K, e o LPA fica em EUR/shares, não USD/shares -
+  `lpa_anual_sec` aceita 20-F/20-F/A além de 10-K/10-K/A e marca `moeda: "EUR"` nesse caso, junto com o campo
+  "anuncio" (data em que a empresa arquivou/anunciou aquele resultado na SEC - a 20-F sempre repete 2-3 anos de
+  comparativo nos filings seguintes, com o MESMO valor; "anuncio" guarda a data do anúncio ORIGINAL, não a da
+  reapresentação mais recente, senão o câmbio ficaria preso ao filing mais novo mesmo pra um ano antigo). Só
+  um valor realmente diferente do mesmo ano/moeda (reapresentação de verdade, ex. 10-K/A corrigindo o número)
+  troca o "anuncio" pela data dessa correção. `app.lpa_anual_eua` então converte cada ano pra dólar com
+  `utils.fetch_guidance.converter_lpa_anual_para_usd`, usando o câmbio EUR→USD da DATA DO ANÚNCIO de cada ano
+  (`taxa_cambio_historica_eur_usd`, Yahoo Finance, ticker EURUSD=X, fechamento do dia ou do último pregão
+  anterior) - é a cotação que valia quando aquele número saiu, nunca o câmbio de hoje aplicado retroativamente
+  nem o do fim do ano fiscal (a empresa não converte pelo câmbio de 31/12), o que distorceria Graham/médias/
+  Faixa do Conservador de anos passados. Ano sem câmbio encontrado fica de fora da série (nunca mistura euro
+  com dólar). Com conversão, a fonte da tela vira "SEC 20-F, lucro por ação diluído (GAAP) - convertido de
+  euro pelo câmbio histórico do ano, Yahoo Finance". O mesmo vale pro guidance TRIMESTRAL em euro (ex. ASML,
+  ver acima): o câmbio usado é o da data do anúncio/release (não o de hoje nem o do fim do trimestre).
   `tela/dados.py._pontos_anuais` não corta mais em 4 anos (cortava sempre, pensando só no limite do Yahoo - com
   a SEC disponível, isso travava "Média 5/10 anos" em "Sem dado" mesmo com histórico de sobra); o corte de ~4
   anos continua só onde é pra valer (crescimento de lucro/receita do Lynch, que quer a tendência recente, não

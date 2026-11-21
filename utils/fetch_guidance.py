@@ -1091,23 +1091,62 @@ def extrair_outlook_trimestral_eua(texto: str) -> dict | None:
             "trecho": texto[m.start(): m.end() + 300].strip()[:400]}
 
 
-def taxa_cambio_eur_usd() -> tuple[float, str] | None:
-    """Câmbio EUR->USD do Yahoo Finance (ticker EURUSD=X, mesmo fechamento usado em todo o resto do
-    app), pro guidance trimestral em euro (ex.: ASML) virar dólar antes de aparecer na tela - nunca
-    um câmbio fixo/chutado no código. Falhou: None, e quem chamar mantém o valor em euro sem
-    converter (nunca mistura moeda errada com o rótulo "US$")."""
+def taxa_cambio_historica_eur_usd(datas: list[dt.date]) -> dict[dt.date, tuple[float, str]]:
+    """Câmbio EUR->USD do Yahoo Finance (ticker EURUSD=X) na(s) data(s) pedida(s) - normalmente a data
+    do anúncio/release de cada guidance ou resultado em euro (nunca a data de hoje aplicada
+    retroativamente, que distorceria um número antigo: é a cotação que valia quando aquele número
+    saiu). Usa o fechamento do próprio dia ou do último pregão anterior (cobre fim de semana/
+    feriado). Busca o intervalo inteiro (de todas as datas pedidas) em 1 chamada só. Data sem
+    cotação nos 10 dias anteriores fica de fora do resultado (quem usar trata como "sem dado" -
+    nunca inventa um câmbio)."""
     import yfinance as yf
 
+    if not datas:
+        return {}
     try:
-        h = yf.Ticker("EURUSD=X").history(period="5d", interval="1d", auto_adjust=False)
-        if h is None or h.empty:
-            return None
-        c = h["Close"].dropna()
-        if not len(c):
-            return None
-        return float(c.iloc[-1]), _data_br(c.index[-1].strftime("%Y-%m-%d"))
+        h = yf.Ticker("EURUSD=X").history(start=min(datas) - dt.timedelta(days=10), end=max(datas) + dt.timedelta(days=2),
+                                          interval="1d", auto_adjust=False)
     except Exception:
-        return None
+        return {}
+    if h is None or h.empty:
+        return {}
+    c = h["Close"].dropna()
+    if c.index.tz is not None:
+        c.index = c.index.tz_localize(None)
+    datas_disp = [ts.date() for ts in c.index]
+    resultado = {}
+    for data in datas:
+        candidatos = [(d, v) for d, v in zip(datas_disp, c.values) if d <= data]
+        if candidatos:
+            d_usada, valor = max(candidatos, key=lambda x: x[0])
+            resultado[data] = (float(valor), f"{d_usada:%d/%m/%Y}")
+    return resultado
+
+
+def converter_lpa_anual_para_usd(anos: list[dict], buscar_taxas=taxa_cambio_historica_eur_usd) -> list[dict]:
+    """Converte os anos em euro (emissora estrangeira em 20-F, ex. ASML - ver lpa_anual_sec) pra
+    dólar, cada um pelo câmbio EUR->USD do DIA EM QUE A EMPRESA ANUNCIOU/ARQUIVOU esse resultado na
+    SEC (campo "anuncio", não o fim do ano fiscal) - é a cotação que o mercado realmente usou pra
+    converter o número quando ele saiu, nunca o câmbio de hoje aplicado a um ano antigo nem o do
+    fechamento do balanço (que a empresa nem usa pra converter). Ano sem câmbio encontrado fica de
+    fora do resultado (nunca mistura euro com dólar, melhor um ano a menos do que um valor errado).
+    Sem nenhum ano em euro, devolve a lista como veio (caso comum: já em dólar)."""
+    if not any(a.get("moeda") == "EUR" for a in anos):
+        return anos
+    datas = [dt.datetime.strptime(a.get("anuncio") or a["fim"], "%d/%m/%Y").date() for a in anos if a.get("moeda") == "EUR"]
+    taxas = buscar_taxas(datas)
+    convertidos = []
+    for a in anos:
+        if a.get("moeda") != "EUR":
+            convertidos.append(a)
+            continue
+        data = dt.datetime.strptime(a.get("anuncio") or a["fim"], "%d/%m/%Y").date()
+        if data not in taxas:
+            continue
+        taxa, data_taxa = taxas[data]
+        convertidos.append({**a, "lpa_eur": a["lpa"], "lpa": round(a["lpa"] * taxa, 4),
+                            "moeda": "USD", "taxa_cambio": round(taxa, 4), "taxa_cambio_data": data_taxa})
+    return convertidos
 
 
 def converter_outlook_para_usd(dados: dict, taxa: float, data_taxa: str) -> dict:
@@ -1128,7 +1167,7 @@ def converter_outlook_para_usd(dados: dict, taxa: float, data_taxa: str) -> dict
 
 def atualizar_outlook_trimestral_eua(tickers: list[str] | None = None, *, cabecalho=cabecalho_sec,
                                      buscar_cik=cik_do_ticker, buscar_docs=documentos_sec,
-                                     ler_anexo=anexo_sec, buscar_taxa=taxa_cambio_eur_usd,
+                                     ler_anexo=anexo_sec, buscar_taxas=taxa_cambio_historica_eur_usd,
                                      max_docs: int = 3) -> dict[str, dict]:
     """Guidance TRIMESTRAL (receita, margem, LPA do próximo trimestre) de cada ticker dos EUA já
     cadastrado em guidance_tickers.json OU já travado em queue_nao_validado.json (sem guidance ANUAL
@@ -1149,7 +1188,6 @@ def atualizar_outlook_trimestral_eua(tickers: list[str] | None = None, *, cabeca
         log.warning("outlook trimestral: sem SEC_CONTACT_EMAIL (Secret do GitHub): pulado")
         return tab
     mudou = False
-    cambio = None   # busca só 1x no run inteiro, só quando algum ticker realmente precisar (ex.: ASML)
     for t in tickers:
         try:
             empresa = buscar_cik(t, cab)
@@ -1176,12 +1214,13 @@ def atualizar_outlook_trimestral_eua(tickers: list[str] | None = None, *, cabeca
             link, texto = anexo
             dados = extrair_outlook_trimestral_eua(texto)
             if dados and dados.get("moeda") == "EUR":
-                if cambio is None:
-                    cambio = buscar_taxa() or False   # False = já tentou e falhou, não tenta de novo no run
-                if cambio:
-                    dados = converter_outlook_para_usd(dados, cambio[0], cambio[1])
+                data_doc = _data(doc["data"])
+                taxas = buscar_taxas([data_doc]) if data_doc else {}
+                if data_doc in taxas:
+                    taxa, data_taxa = taxas[data_doc]
+                    dados = converter_outlook_para_usd(dados, taxa, data_taxa)
                 else:
-                    log.info("  outlook %s: guidance em euro mas câmbio EUR->USD indisponível (mantido em euro)", t)
+                    log.info("  outlook %s: guidance em euro mas câmbio EUR->USD indisponível na data do anúncio (mantido em euro)", t)
                     dados = None   # nunca mostra valor em euro como se fosse dólar
             if dados:
                 achou = {**dados, "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {_data_br(doc['data'])} (SEC)",
@@ -1289,25 +1328,47 @@ CONTABIL_IDADE_MAX = 200    # último trimestre com mais de 200 dias: a SEC est�
 
 
 def lpa_anual_sec(fatos: dict) -> list[dict]:
-    """LPA diluído (GAAP) de cada ano fiscal fechado, direto do 10-K na SEC — não passa pelo
-    income_stmt do Yahoo (que costuma trazer só ~4 anos). A SEC é a fonte primária. Só ano fiscal
-    completo (350-380 dias) de 10-K ou 10-K/A; reapresentação (10-K/A) mais recente ganha do 10-K
-    original do mesmo ano.
+    """LPA diluído (GAAP) de cada ano fiscal fechado, direto da SEC — não passa pelo income_stmt do
+    Yahoo (que costuma trazer só ~4 anos). A SEC é a fonte primária. Só ano fiscal completo (350-380
+    dias) de 10-K/10-K/A (empresa dos EUA, valor em USD/shares) ou 20-F/20-F/A (emissora estrangeira,
+    ex. ASML - valor normalmente em EUR/shares); reapresentação mais recente ganha da original do
+    mesmo ano e mesma moeda.
 
-    Devolve [{"ano", "lpa", "fim" (DD/MM/AAAA), "form"}, ...], do mais antigo para o mais novo —
-    sem limite de anos (a SEC costuma ter mais histórico que os ~4 anos do Yahoo gratuito)."""
-    eps = (((fatos.get("facts") or {}).get("us-gaap") or {}).get("EarningsPerShareDiluted") or {}).get("units", {}).get("USD/shares", [])
-    anuais: dict[dt.date, dict] = {}
-    for e in eps:
-        if e.get("form") not in ("10-K", "10-K/A") or "start" not in e or "end" not in e:
-            continue
-        ini, fim = _data(e["start"]), _data(e["end"])
-        if not ini or not fim or not 350 <= (fim - ini).days <= 380:
-            continue
-        if fim not in anuais or e.get("filed", "") > anuais[fim].get("filed", ""):
-            anuais[fim] = e
-    return [{"ano": fim.year, "lpa": round(float(anuais[fim]["val"]), 4), "fim": f"{fim:%d/%m/%Y}",
-            "form": anuais[fim].get("form", "")} for fim in sorted(anuais)]
+    Devolve [{"ano", "lpa", "fim" (DD/MM/AAAA, fim do ano fiscal), "anuncio" (DD/MM/AAAA, data em que
+    a empresa arquivou/anunciou esse resultado na SEC), "form", "moeda"}, ...], do mais antigo para o
+    mais novo — sem limite de anos (a SEC costuma ter mais histórico que os ~4 anos do Yahoo
+    gratuito). "moeda" é None quando o valor já está em dólar (USD/shares) ou "EUR" quando está em
+    euro (EUR/shares) - nesse caso, quem usar precisa converter pra dólar antes de misturar com
+    preço/VPA do Yahoo, pelo câmbio da DATA DO ANÚNCIO (não do fim do ano fiscal - ver
+    converter_lpa_anual_para_usd/taxa_cambio_historica_eur_usd)."""
+    unidades = (((fatos.get("facts") or {}).get("us-gaap") or {}).get("EarningsPerShareDiluted") or {}).get("units", {})
+    anuais: dict[tuple[dt.date, str], dict] = {}
+    for unidade, moeda in (("USD/shares", None), ("EUR/shares", "EUR")):
+        for e in unidades.get(unidade, []):
+            if e.get("form") not in ("10-K", "10-K/A", "20-F", "20-F/A") or "start" not in e or "end" not in e:
+                continue
+            ini, fim = _data(e["start"]), _data(e["end"])
+            if not ini or not fim or not 350 <= (fim - ini).days <= 380:
+                continue
+            chave = (fim, unidade)
+            filed, val = e.get("filed", ""), round(float(e["val"]), 4)
+            atual = anuais.get(chave)
+            if atual is None:
+                anuais[chave] = {**e, "moeda": moeda, "primeiro_filed": filed}
+            elif val != round(float(atual["val"]), 4):
+                # valor diferente do mesmo ano = reapresentação real (ex. 10-K/A corrigindo o número);
+                # a versão mais recente ganha, e o anúncio PASSA a ser o da própria reapresentação
+                if filed > atual.get("filed", ""):
+                    anuais[chave] = {**e, "moeda": moeda, "primeiro_filed": filed}
+            elif filed and filed < atual.get("primeiro_filed", filed):
+                # mesmo valor reaparecendo como comparativo num 20-F/10-K de ano(s) seguinte(s) (comum
+                # em emissoras estrangeiras, que sempre repetem 2-3 anos de comparativo) - guarda a
+                # data do anúncio ORIGINAL pro câmbio EUR->USD, não a da reapresentação mais recente
+                atual["primeiro_filed"] = filed
+    return [{"ano": fim.year, "lpa": round(float(anuais[(fim, unidade)]["val"]), 4), "fim": f"{fim:%d/%m/%Y}",
+            "anuncio": _data_br(anuais[(fim, unidade)].get("primeiro_filed", "")) or f"{fim:%d/%m/%Y}",
+            "form": anuais[(fim, unidade)].get("form", ""), "moeda": anuais[(fim, unidade)]["moeda"]}
+            for fim, unidade in sorted(anuais)]
 
 
 def lpa_ttm_sec(fatos: dict, hoje: dt.date) -> dict:

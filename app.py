@@ -305,7 +305,7 @@ def lpa_anual_eua(ticker: str) -> tuple[list[dict], str]:
         if not empresa:
             return [], "SEC não encontrou esse ticker"
         fatos = fg._get_sec(f"{fg.SEC_DADOS}/api/xbrl/companyfacts/CIK{empresa[0]}.json", cab).json()
-        anos = fg.lpa_anual_sec(fatos)
+        anos = fg.converter_lpa_anual_para_usd(fg.lpa_anual_sec(fatos))
         return anos, ("SEC OK" if anos else "SEC sem o dado de lucro por ação pra esse ticker")
     except Exception as e:
         return [], f"SEC falhou ({e})"
@@ -343,10 +343,12 @@ def outlook_trimestral_eua(ticker: str, max_docs: int = 3) -> dict | None:
             link, texto = anexo
             dados = fg.extrair_outlook_trimestral_eua(texto)
             if dados and dados.get("moeda") == "EUR":
-                cambio = fg.taxa_cambio_eur_usd()
-                if not cambio:
+                data_doc = fg._data(doc["data"])
+                taxas = fg.taxa_cambio_historica_eur_usd([data_doc]) if data_doc else {}
+                if data_doc not in taxas:
                     continue   # nunca mostra valor em euro como se fosse dólar
-                dados = fg.converter_outlook_para_usd(dados, cambio[0], cambio[1])
+                taxa, data_taxa = taxas[data_doc]
+                dados = fg.converter_outlook_para_usd(dados, taxa, data_taxa)
             if dados:
                 return {**dados, "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {fg._data_br(doc['data'])} (SEC)",
                         "data": fg._data_br(doc["data"]), "url": link}
@@ -363,8 +365,12 @@ def pacote(ticker: str, versao: str = "") -> dict:
     if sec_anual:
         # troca a série do Yahoo pela da SEC: todo mundo que usa d["lpa_anual"] (Graham, médias,
         # Faixa do Conservador, "cresceu de X para Y") passa a usar o dado verificado, sem misturar
+        is_20f = any(x.get("form", "").startswith("20-F") for x in sec_anual)
+        convertido = any(x.get("taxa_cambio") for x in sec_anual)
+        fonte = ("SEC 20-F, lucro por ação diluído (GAAP)" + (" - convertido de euro pelo câmbio histórico do ano, Yahoo Finance" if convertido else ""))\
+            if is_20f else "SEC 10-K, lucro por ação diluído (GAAP)"
         d = {**d, "lpa_anual": pd.Series({pd.to_datetime(x["fim"], format="%d/%m/%Y"): x["lpa"] for x in sec_anual}),
-            "lpa_anual_fonte": "SEC 10-K, lucro por ação diluído (GAAP)"}
+            "lpa_anual_fonte": fonte}
     elif not ticker.endswith(".SA"):
         # SEC não foi usada pra esse ticker dos EUA: mostra o motivo na tela, pra diagnosticar sem
         # precisar olhar o código (ex.: Secret SEC_CONTACT_EMAIL do app ainda não configurado)

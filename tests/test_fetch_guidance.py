@@ -949,7 +949,7 @@ def test_lpa_anual_sec_so_pega_10k_completo_ignora_trimestre():
     ]}}}}}
     r = fg.lpa_anual_sec(fatos)
     assert [x["ano"] for x in r] == [2023, 2024, 2025]
-    assert r[-1] == {"ano": 2025, "lpa": 7.59, "fim": "28/08/2025", "form": "10-K"}
+    assert r[-1] == {"ano": 2025, "lpa": 7.59, "fim": "28/08/2025", "anuncio": "01/10/2025", "form": "10-K", "moeda": None}
 
 
 def test_lpa_anual_sec_reapresentacao_10ka_ganha_do_10k_original():
@@ -964,6 +964,43 @@ def test_lpa_anual_sec_reapresentacao_10ka_ganha_do_10k_original():
 def test_lpa_anual_sec_sem_fato_devolve_lista_vazia():
     assert fg.lpa_anual_sec({}) == []
     assert fg.lpa_anual_sec({"facts": {"us-gaap": {}}}) == []
+
+
+def test_lpa_anual_sec_aceita_20f_em_euro_emissora_estrangeira():
+    """ASML (e outras emissoras estrangeiras) arquiva 20-F, não 10-K, com o LPA em EUR/shares, não
+    USD/shares - sem isso, o histórico da SEC nunca aparecia pra elas e caía sempre no Yahoo (só ~4
+    anos). Marca moeda="EUR" pra quem usar saber que precisa converter antes de misturar com dólar."""
+    fatos = {"facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"EUR/shares": [
+        {"form": "20-F", "start": "2023-01-01", "end": "2023-12-31", "val": 20.09, "filed": "2024-02-14"},
+        {"form": "20-F", "start": "2024-01-01", "end": "2024-12-31", "val": 17.86, "filed": "2025-02-12"},
+    ]}}}}}
+    r = fg.lpa_anual_sec(fatos)
+    assert [x["ano"] for x in r] == [2023, 2024]
+    assert r[0] == {"ano": 2023, "lpa": 20.09, "fim": "31/12/2023", "anuncio": "14/02/2024", "form": "20-F", "moeda": "EUR"}
+
+
+def test_lpa_anual_sec_usa_a_data_do_anuncio_original_nao_do_comparativo_repetido():
+    """Emissora estrangeira (ex. ASML) repete o mesmo valor de um ano como comparativo em 2-3 20-F
+    seguintes - sem isso, "anuncio" viraria a data do filing mais recente (anos depois), e o câmbio
+    EUR->USD usado pra converter esse LPA ficaria errado (câmbio de hoje aplicado a um ano antigo,
+    exatamente o que essa regra deveria evitar)."""
+    fatos = {"facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"EUR/shares": [
+        {"form": "20-F", "start": "2023-01-01", "end": "2023-12-31", "val": 19.89, "filed": "2024-02-14"},
+        {"form": "20-F", "start": "2023-01-01", "end": "2023-12-31", "val": 19.89, "filed": "2025-03-05"},
+        {"form": "20-F", "start": "2023-01-01", "end": "2023-12-31", "val": 19.89, "filed": "2026-02-25"},
+    ]}}}}}
+    r = fg.lpa_anual_sec(fatos)
+    assert len(r) == 1 and r[0]["anuncio"] == "14/02/2024"   # a 1ª vez que o número saiu, não a 3ª
+
+
+def test_lpa_anual_sec_combina_usd_e_eur_sem_misturar_o_mesmo_ano():
+    fatos = {"facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {
+        "USD/shares": [{"form": "10-K", "start": "2024-01-01", "end": "2024-12-31", "val": 5.0, "filed": "2025-02-01"}],
+        "EUR/shares": [{"form": "20-F", "start": "2023-01-01", "end": "2023-12-31", "val": 20.0, "filed": "2024-02-01"}],
+    }}}}}
+    r = fg.lpa_anual_sec(fatos)
+    assert r == [{"ano": 2023, "lpa": 20.0, "fim": "31/12/2023", "anuncio": "01/02/2024", "form": "20-F", "moeda": "EUR"},
+                {"ano": 2024, "lpa": 5.0, "fim": "31/12/2024", "anuncio": "01/02/2025", "form": "10-K", "moeda": None}]
 
 
 def test_cik_do_ticker_com_mapa_nao_baixa_lista_de_novo():
@@ -1099,36 +1136,62 @@ def test_outlook_trimestral_asml_no_ceo_statement_quarter_composto():
     assert r["lpa_min"] is None and r["lpa_max"] is None
 
 
-def test_taxa_cambio_eur_usd_usa_fechamento_do_yahoo(monkeypatch):
-    """Câmbio real do Yahoo Finance (ticker EURUSD=X): valor e data do último fechamento, sem nada
-    fixo no código. Regressão de um bug real: passar um datetime (em vez de string) pra _data_br
-    estourava TypeError, caído pelo except genérico e sempre devolvendo None (nunca convertia)."""
-    import sys
-    import types
-
-    import pandas as pd
-
-    idx = pd.to_datetime(["2026-11-19", "2026-11-20"], utc=True)
-    close = pd.Series([1.0950, 1.0970], index=idx, name="Close")
-
-    class FakeTicker:
-        def __init__(self, s):
-            assert s == "EURUSD=X"
-
-        def history(self, period=None, interval=None, auto_adjust=None):
-            return pd.DataFrame({"Close": close})
-
-    fake_yf = types.SimpleNamespace(Ticker=FakeTicker)
-    monkeypatch.setitem(sys.modules, "yfinance", fake_yf)
-    taxa, data = fg.taxa_cambio_eur_usd()
-    assert taxa == pytest.approx(1.0970) and data == "20/11/2026"
-
-
 def test_extrair_outlook_marca_moeda_euro_quando_tem_simbolo():
     r = fg.extrair_outlook_trimestral_eua(TEXTO_OUTLOOK_ASML)
     assert r["moeda"] == "EUR"
     r2 = fg.extrair_outlook_trimestral_eua(TEXTO_OUTLOOK_MU)
     assert r2["moeda"] is None   # MU dá em dólar, sem símbolo - não marca nenhuma moeda (já é USD)
+
+
+def test_converter_lpa_anual_para_usd_converte_pela_data_do_anuncio_nao_do_fim_do_ano():
+    anos = [{"ano": 2023, "lpa": 20.09, "fim": "31/12/2023", "anuncio": "14/02/2024", "form": "20-F", "moeda": "EUR"},
+            {"ano": 2024, "lpa": 7.0, "fim": "31/12/2024", "anuncio": "01/02/2025", "form": "10-K", "moeda": None}]
+    datas_pedidas = []
+
+    def fake_buscar_taxas(datas):
+        datas_pedidas.extend(datas)
+        return {dt.date(2024, 2, 14): (1.10, "14/02/2024")}   # câmbio na data do anúncio, não do fim do ano (31/12)
+
+    r = fg.converter_lpa_anual_para_usd(anos, buscar_taxas=fake_buscar_taxas)
+    assert datas_pedidas == [dt.date(2024, 2, 14)]
+    assert r[0]["lpa"] == pytest.approx(20.09 * 1.10) and r[0]["lpa_eur"] == 20.09 and r[0]["moeda"] == "USD"
+    assert r[0]["taxa_cambio"] == 1.10 and r[0]["taxa_cambio_data"] == "14/02/2024"
+    assert r[1] == anos[1]   # intocado (já em dólar)
+
+
+def test_converter_lpa_anual_para_usd_sem_cambio_descarta_o_ano():
+    anos = [{"ano": 2023, "lpa": 20.09, "fim": "31/12/2023", "anuncio": "14/02/2024", "form": "20-F", "moeda": "EUR"}]
+    r = fg.converter_lpa_anual_para_usd(anos, buscar_taxas=lambda datas: {})
+    assert r == []
+
+
+def test_converter_lpa_anual_para_usd_sem_nenhum_ano_em_euro_nao_chama_cambio():
+    anos = [{"ano": 2024, "lpa": 7.0, "fim": "31/12/2024", "anuncio": "01/02/2025", "form": "10-K", "moeda": None}]
+    chamou = []
+    r = fg.converter_lpa_anual_para_usd(anos, buscar_taxas=lambda datas: chamou.append(datas) or {})
+    assert r == anos and chamou == []
+
+
+def test_taxa_cambio_historica_eur_usd_pega_fechamento_do_dia_ou_anterior(monkeypatch):
+    """Fim de semana/feriado: usa o último pregão anterior à data pedida, nunca um valor futuro."""
+    import sys
+    import types
+
+    import pandas as pd
+
+    idx = pd.to_datetime(["2023-12-28", "2023-12-29", "2024-01-02"], utc=True)
+    close = pd.Series([1.10, 1.105, 1.10], index=idx)
+
+    class FakeTicker:
+        def __init__(self, s):
+            assert s == "EURUSD=X"
+
+        def history(self, start=None, end=None, interval=None, auto_adjust=None):
+            return pd.DataFrame({"Close": close})
+
+    monkeypatch.setitem(sys.modules, "yfinance", types.SimpleNamespace(Ticker=FakeTicker))
+    r = fg.taxa_cambio_historica_eur_usd([dt.date(2023, 12, 31)])   # domingo, sem pregão
+    assert r[dt.date(2023, 12, 31)] == (1.105, "29/12/2023")   # último pregão antes do domingo
 
 
 def test_converter_outlook_para_usd():
@@ -1148,23 +1211,31 @@ def test_converter_outlook_para_usd_nao_mexe_quando_ja_e_dolar():
 
 def test_atualizar_outlook_trimestral_eua_converte_euro_para_dolar(tmp_path, monkeypatch):
     """ASML dá o outlook em euro (símbolo €); o robô precisa converter pra dólar antes de gravar,
-    senão a tela mostraria "US$ 14,20 bi" quando na verdade é € 14,20 bi (moeda errada)."""
+    senão a tela mostraria "US$ 14,20 bi" quando na verdade é € 14,20 bi (moeda errada). O câmbio
+    usado é o da DATA DO ANÚNCIO (data do próprio documento, 14/10/2026), não o de hoje."""
     arq = tmp_path / "guidance_trimestral_eua.json"
     monkeypatch.setattr(fg, "ARQ_OUTLOOK_TRI", arq)
+    datas_pedidas = []
+
+    def fake_buscar_taxas(datas):
+        datas_pedidas.extend(datas)
+        return {dt.date(2026, 10, 14): (1.08, "14/10/2026")}
+
     tab = fg.atualizar_outlook_trimestral_eua(
         tickers=["ASML"], cabecalho=lambda: {"User-Agent": "x"},
         buscar_cik=lambda t, cab: ("0000937966", "ASML Holding N.V."),
         buscar_docs=lambda cik, cab: [{"form": "6-K", "data": "2026-10-14", "acc": "1", "cik": cik}],
         ler_anexo=lambda doc, cab: ("http://x", TEXTO_OUTLOOK_ASML_CEO),
-        buscar_taxa=lambda: (1.08, "20/11/2026"))
+        buscar_taxas=fake_buscar_taxas)
+    assert datas_pedidas == [dt.date(2026, 10, 14)]   # câmbio da data do anúncio, não de hoje
     assert tab["ASML"]["receita_min"] == pytest.approx(14.2e9 * 1.08)
     assert tab["ASML"]["moeda"] == "USD" and tab["ASML"]["moeda_original"] == "EUR"
-    assert tab["ASML"]["taxa_cambio"] == 1.08
+    assert tab["ASML"]["taxa_cambio"] == 1.08 and tab["ASML"]["taxa_cambio_data"] == "14/10/2026"
 
 
 def test_atualizar_outlook_trimestral_eua_sem_cambio_nao_grava_em_euro(tmp_path, monkeypatch):
-    """Câmbio indisponível (Yahoo falhou): nunca grava o valor em euro como se já fosse dólar -
-    melhor não gravar nada do que mostrar número errado."""
+    """Câmbio indisponível na data do anúncio (Yahoo falhou): nunca grava o valor em euro como se já
+    fosse dólar - melhor não gravar nada do que mostrar número errado."""
     arq = tmp_path / "guidance_trimestral_eua.json"
     monkeypatch.setattr(fg, "ARQ_OUTLOOK_TRI", arq)
     tab = fg.atualizar_outlook_trimestral_eua(
@@ -1172,7 +1243,7 @@ def test_atualizar_outlook_trimestral_eua_sem_cambio_nao_grava_em_euro(tmp_path,
         buscar_cik=lambda t, cab: ("0000937966", "ASML Holding N.V."),
         buscar_docs=lambda cik, cab: [{"form": "6-K", "data": "2026-10-14", "acc": "1", "cik": cik}],
         ler_anexo=lambda doc, cab: ("http://x", TEXTO_OUTLOOK_ASML_CEO),
-        buscar_taxa=lambda: None)
+        buscar_taxas=lambda datas: {})
     assert "ASML" not in tab
 
 
