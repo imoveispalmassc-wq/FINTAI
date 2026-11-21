@@ -1064,21 +1064,116 @@ def test_outlook_trimestral_sem_guidance_devolve_none():
 
 
 TEXTO_OUTLOOK_ASML = (
-    "Outlook ASML expects Q4 2026 total net sales between 14.2 billion and 15.2 billion, and a "
-    "gross margin around 57% Full-year 2026 total net sales expected to be between 44 billion and "
-    "45 billion, with a gross margin around 56%"
+    "Outlook ASML expects Q4 2026 total net sales between €14.2 billion and €15.2 billion, and a "
+    "gross margin around 57% Full-year 2026 total net sales expected to be between €44 billion and "
+    "€45 billion, with a gross margin around 56%"
+)
+
+TEXTO_OUTLOOK_ASML_CEO = (
+    "CEO statement and outlook In the third quarter we reported a record total net sales. "
+    "We expect fourth-quarter 2026 total net sales between €14.2 billion and €15.2 billion, with "
+    "a gross margin around 57%. We expect R&D costs of around €1.2 billion. We expect total net "
+    "sales for 2026 to be between €44 billion and €45 billion, with a gross margin around 56%."
 )
 
 
 def test_outlook_trimestral_asml_rotulo_q_abreviado_net_sales_e_between():
     """ASML usa 'EMPRESA expects QN AAAA' (sem 'quarter' por extenso), 'net sales' em vez de
-    'Revenue', e a faixa em 'between X and Y' - três formatos que PANW/MU/NVDA/AMD não usam.
-    Não dá guidance de LPA (só receita/margem)."""
+    'Revenue', faixa em 'between X and Y' e valores em euro (símbolo € antes do número) - formatos
+    que PANW/MU/NVDA/AMD não usam. Não dá guidance de LPA (só receita/margem)."""
     r = fg.extrair_outlook_trimestral_eua(TEXTO_OUTLOOK_ASML)
     assert r["periodo"] == "4T FY2026"
     assert r["receita_min"] == 14_200_000_000.0 and r["receita_max"] == 15_200_000_000.0
     assert r["margem_bruta"] == 57.0
     assert r["lpa_min"] is None and r["lpa_max"] is None
+
+
+def test_outlook_trimestral_asml_no_ceo_statement_quarter_composto():
+    """No corpo do release (CEO statement), a ASML também usa 'We expect fourth-quarter 2026'
+    (composto com hífen, sem 'Q4' abreviado) - formato real do 6-K, diferente do resumo em bullet
+    no topo do documento (coberto pelo teste acima)."""
+    r = fg.extrair_outlook_trimestral_eua(TEXTO_OUTLOOK_ASML_CEO)
+    assert r["periodo"] == "4T FY2026"
+    assert r["receita_min"] == 14_200_000_000.0 and r["receita_max"] == 15_200_000_000.0
+    assert r["margem_bruta"] == 57.0
+    assert r["lpa_min"] is None and r["lpa_max"] is None
+
+
+def test_taxa_cambio_eur_usd_usa_fechamento_do_yahoo(monkeypatch):
+    """Câmbio real do Yahoo Finance (ticker EURUSD=X): valor e data do último fechamento, sem nada
+    fixo no código. Regressão de um bug real: passar um datetime (em vez de string) pra _data_br
+    estourava TypeError, caído pelo except genérico e sempre devolvendo None (nunca convertia)."""
+    import sys
+    import types
+
+    import pandas as pd
+
+    idx = pd.to_datetime(["2026-11-19", "2026-11-20"], utc=True)
+    close = pd.Series([1.0950, 1.0970], index=idx, name="Close")
+
+    class FakeTicker:
+        def __init__(self, s):
+            assert s == "EURUSD=X"
+
+        def history(self, period=None, interval=None, auto_adjust=None):
+            return pd.DataFrame({"Close": close})
+
+    fake_yf = types.SimpleNamespace(Ticker=FakeTicker)
+    monkeypatch.setitem(sys.modules, "yfinance", fake_yf)
+    taxa, data = fg.taxa_cambio_eur_usd()
+    assert taxa == pytest.approx(1.0970) and data == "20/11/2026"
+
+
+def test_extrair_outlook_marca_moeda_euro_quando_tem_simbolo():
+    r = fg.extrair_outlook_trimestral_eua(TEXTO_OUTLOOK_ASML)
+    assert r["moeda"] == "EUR"
+    r2 = fg.extrair_outlook_trimestral_eua(TEXTO_OUTLOOK_MU)
+    assert r2["moeda"] is None   # MU dá em dólar, sem símbolo - não marca nenhuma moeda (já é USD)
+
+
+def test_converter_outlook_para_usd():
+    dados = {"receita_min": 14.2e9, "receita_max": 15.2e9, "lpa_min": None, "lpa_max": None, "moeda": "EUR"}
+    c = fg.converter_outlook_para_usd(dados, 1.08, "20/11/2026")
+    assert c["moeda"] == "USD" and c["moeda_original"] == "EUR"
+    assert c["receita_min"] == pytest.approx(14.2e9 * 1.08) and c["receita_max"] == pytest.approx(15.2e9 * 1.08)
+    assert c["receita_min_eur"] == 14.2e9 and c["receita_max_eur"] == 15.2e9   # original preservado pra nota
+    assert c["taxa_cambio"] == 1.08 and c["taxa_cambio_data"] == "20/11/2026"
+    assert c["taxa_cambio_fonte"] == "Yahoo Finance (EURUSD=X)"
+
+
+def test_converter_outlook_para_usd_nao_mexe_quando_ja_e_dolar():
+    dados = {"receita_min": 1e9, "receita_max": 2e9, "moeda": None}
+    assert fg.converter_outlook_para_usd(dados, 1.08, "20/11/2026") == dados
+
+
+def test_atualizar_outlook_trimestral_eua_converte_euro_para_dolar(tmp_path, monkeypatch):
+    """ASML dá o outlook em euro (símbolo €); o robô precisa converter pra dólar antes de gravar,
+    senão a tela mostraria "US$ 14,20 bi" quando na verdade é € 14,20 bi (moeda errada)."""
+    arq = tmp_path / "guidance_trimestral_eua.json"
+    monkeypatch.setattr(fg, "ARQ_OUTLOOK_TRI", arq)
+    tab = fg.atualizar_outlook_trimestral_eua(
+        tickers=["ASML"], cabecalho=lambda: {"User-Agent": "x"},
+        buscar_cik=lambda t, cab: ("0000937966", "ASML Holding N.V."),
+        buscar_docs=lambda cik, cab: [{"form": "6-K", "data": "2026-10-14", "acc": "1", "cik": cik}],
+        ler_anexo=lambda doc, cab: ("http://x", TEXTO_OUTLOOK_ASML_CEO),
+        buscar_taxa=lambda: (1.08, "20/11/2026"))
+    assert tab["ASML"]["receita_min"] == pytest.approx(14.2e9 * 1.08)
+    assert tab["ASML"]["moeda"] == "USD" and tab["ASML"]["moeda_original"] == "EUR"
+    assert tab["ASML"]["taxa_cambio"] == 1.08
+
+
+def test_atualizar_outlook_trimestral_eua_sem_cambio_nao_grava_em_euro(tmp_path, monkeypatch):
+    """Câmbio indisponível (Yahoo falhou): nunca grava o valor em euro como se já fosse dólar -
+    melhor não gravar nada do que mostrar número errado."""
+    arq = tmp_path / "guidance_trimestral_eua.json"
+    monkeypatch.setattr(fg, "ARQ_OUTLOOK_TRI", arq)
+    tab = fg.atualizar_outlook_trimestral_eua(
+        tickers=["ASML"], cabecalho=lambda: {"User-Agent": "x"},
+        buscar_cik=lambda t, cab: ("0000937966", "ASML Holding N.V."),
+        buscar_docs=lambda cik, cab: [{"form": "6-K", "data": "2026-10-14", "acc": "1", "cik": cik}],
+        ler_anexo=lambda doc, cab: ("http://x", TEXTO_OUTLOOK_ASML_CEO),
+        buscar_taxa=lambda: None)
+    assert "ASML" not in tab
 
 
 def test_atualizar_outlook_trimestral_eua_nao_apaga_valor_bom_sem_achar_de_novo(tmp_path, monkeypatch):

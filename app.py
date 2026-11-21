@@ -342,6 +342,11 @@ def outlook_trimestral_eua(ticker: str, max_docs: int = 3) -> dict | None:
                 continue
             link, texto = anexo
             dados = fg.extrair_outlook_trimestral_eua(texto)
+            if dados and dados.get("moeda") == "EUR":
+                cambio = fg.taxa_cambio_eur_usd()
+                if not cambio:
+                    continue   # nunca mostra valor em euro como se fosse dólar
+                dados = fg.converter_outlook_para_usd(dados, cambio[0], cambio[1])
             if dados:
                 return {**dados, "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {fg._data_br(doc['data'])} (SEC)",
                         "data": fg._data_br(doc["data"]), "url": link}
@@ -377,7 +382,9 @@ def pacote(ticker: str, versao: str = "") -> dict:
             dados = {**dados, "outlookTrimestral": {
                 "periodo": ao_vivo.get("periodo"), "receitaMin": ao_vivo.get("receita_min"), "receitaMax": ao_vivo.get("receita_max"),
                 "margemBruta": ao_vivo.get("margem_bruta"), "lpaMin": ao_vivo.get("lpa_min"), "lpaMax": ao_vivo.get("lpa_max"),
-                "fonte": ao_vivo.get("fonte") or "", "data": ao_vivo.get("data") or "", "url": ao_vivo.get("url") or ""}}
+                "fonte": ao_vivo.get("fonte") or "", "data": ao_vivo.get("data") or "", "url": ao_vivo.get("url") or "",
+                "moedaOriginal": ao_vivo.get("moeda_original") or "", "taxaCambio": ao_vivo.get("taxa_cambio"),
+                "taxaCambioData": ao_vivo.get("taxa_cambio_data") or ""}}
     return dados
 
 

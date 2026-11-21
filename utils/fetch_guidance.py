@@ -990,17 +990,32 @@ RE_OUTLOOK_TRI = re.compile(
     r"|(?:for\s+the\s+fiscal\s+(first|second|third|fourth)\s+quarter\s+(\d{4}),?\s+we\s+expect)"
     r"|(?:for\s+the\s+(first|second|third|fourth)\s+quarter\s+of\s+(?:fiscal\s+)?(\d{4}),?\s+[A-Z][\w.&]*\s+expects)"
     # "ASML expects Q4 2026 total net sales..." (abreviado "QN AAAA", sem "quarter" por extenso - ex. ASML)
-    r"|(?:[A-Z][\w.&]*\s+expects\s+Q([1-4])\s+(\d{4}))",
+    r"|(?:[A-Z][\w.&]*\s+expects\s+Q([1-4])\s+(\d{4}))"
+    # "We expect fourth-quarter 2026 total net sales..." (composto com hífen, ex. ASML no CEO statement)
+    r"|(?:[Ww]e\s+expect\s+(first|second|third|fourth)-quarter\s+(\d{4}))",
     re.I)
 _ORDINAL_TRI = {"first": 1, "second": 2, "third": 3, "fourth": 4, "1": 1, "2": 2, "3": 3, "4": 4}
-_NUM_TRI = r"\$?\s*([\d][\d,]*\.?\d*)"
+_NUM_TRI = r"[\$€]?\s*([\d][\d,]*\.?\d*)"
 _ESCALA_TRI = {"billion": 1e9, "million": 1e6}
 
 
-def _faixa_tri(rotulo: str, texto: str, unidade: bool = False) -> tuple[float, float] | None:
+_SIMBOLO_MOEDA_TRI = {"€": "EUR"}   # hoje só euro->dólar (ver converter_outlook_para_usd); $/sem símbolo = USD
+
+
+def _moeda_tri(trecho: str) -> str | None:
+    """Moeda do trecho casado pela regex, pelo símbolo logo antes do número: "€" -> EUR, "$" ou sem
+    símbolo -> None (USD, já na moeda da tela - não precisa converter nem marcar)."""
+    for simbolo, moeda in _SIMBOLO_MOEDA_TRI.items():
+        if simbolo in trecho:
+            return moeda
+    return None
+
+
+def _faixa_tri(rotulo: str, texto: str, unidade: bool = False) -> tuple[float, float, str | None] | None:
     """Acha a faixa de 'rotulo' logo depois do rótulo, em qualquer um destes formatos:
     'X ± Y [bilhão/milhão]', 'X to Y [bilhão/milhão]', ou 'X, plus or minus Z%' (faixa por
-    percentual do valor central). Devolve já convertido pela unidade (bilhão/milhão), se houver."""
+    percentual do valor central). Devolve já convertido pela unidade (bilhão/milhão), se houver, e a
+    moeda do valor original (None = USD; ex. "EUR" quando o documento usa "€" - ver _moeda_tri)."""
     pad_unid = r"\s*(billion|million)?" if unidade else ""
     m = re.search(rf"{rotulo}\D{{0,25}}{_NUM_TRI}{pad_unid}\s*±\s*{_NUM_TRI}", texto, re.I)
     if m:
@@ -1008,21 +1023,21 @@ def _faixa_tri(rotulo: str, texto: str, unidade: bool = False) -> tuple[float, f
         delta_i = 3 if unidade else 2
         meio, delta = float(m.group(1).replace(",", "")), float(m.group(delta_i).replace(",", ""))
         fator = _ESCALA_TRI.get(unid, 1)
-        return (meio - delta) * fator, (meio + delta) * fator
+        return (meio - delta) * fator, (meio + delta) * fator, _moeda_tri(m.group(0))
     m = re.search(rf"{rotulo}\D{{0,25}}{_NUM_TRI}{pad_unid}\s*,?\s*plus or minus\s*([\d.]+)\s*%", texto, re.I)
     if m:
         unid = m.group(2) if unidade else None
         pct_i = 3 if unidade else 2
         meio, pct = float(m.group(1).replace(",", "")), float(m.group(pct_i)) / 100
         fator = _ESCALA_TRI.get(unid, 1)
-        return meio * (1 - pct) * fator, meio * (1 + pct) * fator
+        return meio * (1 - pct) * fator, meio * (1 + pct) * fator, _moeda_tri(m.group(0))
     m = re.search(rf"{rotulo}\D{{0,25}}{_NUM_TRI}{pad_unid}\s*(?:to|-|–)\s*{_NUM_TRI}", texto, re.I)
     if m:
         unid = m.group(2) if unidade else None
         b_i = 3 if unidade else 2
         a, b = float(m.group(1).replace(",", "")), float(m.group(b_i).replace(",", ""))
         fator = _ESCALA_TRI.get(unid, 1)
-        return min(a, b) * fator, max(a, b) * fator
+        return min(a, b) * fator, max(a, b) * fator, _moeda_tri(m.group(0))
     # "between X [bilhão] and Y [bilhão]" (ex.: ASML) - unidade pode repetir em cada lado
     m = re.search(rf"{rotulo}\D{{0,25}}between\s+{_NUM_TRI}{pad_unid}\s+and\s+{_NUM_TRI}{pad_unid}", texto, re.I)
     if m:
@@ -1030,7 +1045,7 @@ def _faixa_tri(rotulo: str, texto: str, unidade: bool = False) -> tuple[float, f
         b_i = 3 if unidade else 2
         a, b = float(m.group(1).replace(",", "")), float(m.group(b_i).replace(",", ""))
         fator = _ESCALA_TRI.get(unid, 1)
-        return min(a, b) * fator, max(a, b) * fator
+        return min(a, b) * fator, max(a, b) * fator, _moeda_tri(m.group(0))
     return None
 
 
@@ -1053,13 +1068,15 @@ def extrair_outlook_trimestral_eua(texto: str) -> dict | None:
     simplesmente não mostra o card - nunca inventa um número. Nem toda empresa dá guidance de LPA
     (algumas só dão receita/margem): o que não for achado fica None, sem travar o resto.
 
-    Devolve {"periodo", "receita_min", "receita_max" (em dólares, já convertido pela unidade),
-    "margem_bruta" (%, opcional), "lpa_min", "lpa_max", "trecho"} ou None."""
+    Devolve {"periodo", "receita_min", "receita_max" (na moeda original, já convertido pela unidade),
+    "margem_bruta" (%, opcional), "lpa_min", "lpa_max", "moeda" (None = USD; "EUR" quando o documento
+    usa "€" - ver converter_outlook_para_usd para converter pra dólar antes de mostrar na tela),
+    "trecho"} ou None."""
     texto = normalizar(texto)
     m = RE_OUTLOOK_TRI.search(texto)
     if not m:
         return None
-    ordinal, ano_txt = next((m.group(i), m.group(i + 1)) for i in (1, 3, 5, 7) if m.group(i))
+    ordinal, ano_txt = next((m.group(i), m.group(i + 1)) for i in (1, 3, 5, 7, 9) if m.group(i))
     tri, ano = _ORDINAL_TRI[ordinal.lower()], int(ano_txt)
     janela = texto[m.end(): m.end() + 2000]   # a tabela/lista de outlook vem logo depois do título
     receita = _faixa_tri(r"(?:Revenue|[Tt]otal net sales|[Nn]et sales)", janela, unidade=True)
@@ -1070,12 +1087,49 @@ def extrair_outlook_trimestral_eua(texto: str) -> dict | None:
             "receita_min": receita[0] if receita else None, "receita_max": receita[1] if receita else None,
             "margem_bruta": _margem_tri(janela),
             "lpa_min": lpa[0] if lpa else None, "lpa_max": lpa[1] if lpa else None,
+            "moeda": (receita[2] if receita else None) or (lpa[2] if lpa else None),
             "trecho": texto[m.start(): m.end() + 300].strip()[:400]}
+
+
+def taxa_cambio_eur_usd() -> tuple[float, str] | None:
+    """Câmbio EUR->USD do Yahoo Finance (ticker EURUSD=X, mesmo fechamento usado em todo o resto do
+    app), pro guidance trimestral em euro (ex.: ASML) virar dólar antes de aparecer na tela - nunca
+    um câmbio fixo/chutado no código. Falhou: None, e quem chamar mantém o valor em euro sem
+    converter (nunca mistura moeda errada com o rótulo "US$")."""
+    import yfinance as yf
+
+    try:
+        h = yf.Ticker("EURUSD=X").history(period="5d", interval="1d", auto_adjust=False)
+        if h is None or h.empty:
+            return None
+        c = h["Close"].dropna()
+        if not len(c):
+            return None
+        return float(c.iloc[-1]), _data_br(c.index[-1].strftime("%Y-%m-%d"))
+    except Exception:
+        return None
+
+
+def converter_outlook_para_usd(dados: dict, taxa: float, data_taxa: str) -> dict:
+    """Converte receita/LPA de EUR pra USD com a taxa já buscada (taxa_cambio_eur_usd) - função pura,
+    fácil de testar sem rede. Se `dados["moeda"]` não for "EUR", devolve o dicionário sem mudar nada
+    (já está em dólar). Guarda os valores originais em euro e a taxa usada, pra nota de transparência
+    na tela (nunca esconde que o número veio convertido)."""
+    if dados.get("moeda") != "EUR":
+        return dados
+    conv = {**dados, "moeda": "USD", "moeda_original": "EUR",
+            "taxa_cambio": round(taxa, 4), "taxa_cambio_data": data_taxa, "taxa_cambio_fonte": "Yahoo Finance (EURUSD=X)"}
+    for campo in ("receita_min", "receita_max", "lpa_min", "lpa_max"):
+        if conv.get(campo) is not None:
+            conv[f"{campo}_eur"] = conv[campo]
+            conv[campo] = conv[campo] * taxa
+    return conv
 
 
 def atualizar_outlook_trimestral_eua(tickers: list[str] | None = None, *, cabecalho=cabecalho_sec,
                                      buscar_cik=cik_do_ticker, buscar_docs=documentos_sec,
-                                     ler_anexo=anexo_sec, max_docs: int = 3) -> dict[str, dict]:
+                                     ler_anexo=anexo_sec, buscar_taxa=taxa_cambio_eur_usd,
+                                     max_docs: int = 3) -> dict[str, dict]:
     """Guidance TRIMESTRAL (receita, margem, LPA do próximo trimestre) de cada ticker dos EUA já
     cadastrado em guidance_tickers.json OU já travado em queue_nao_validado.json (sem guidance ANUAL
     confirmado) - só informativo (ver extrair_outlook_trimestral_eua: não participa do P/L nem do
@@ -1095,6 +1149,7 @@ def atualizar_outlook_trimestral_eua(tickers: list[str] | None = None, *, cabeca
         log.warning("outlook trimestral: sem SEC_CONTACT_EMAIL (Secret do GitHub): pulado")
         return tab
     mudou = False
+    cambio = None   # busca só 1x no run inteiro, só quando algum ticker realmente precisar (ex.: ASML)
     for t in tickers:
         try:
             empresa = buscar_cik(t, cab)
@@ -1120,6 +1175,14 @@ def atualizar_outlook_trimestral_eua(tickers: list[str] | None = None, *, cabeca
                 continue
             link, texto = anexo
             dados = extrair_outlook_trimestral_eua(texto)
+            if dados and dados.get("moeda") == "EUR":
+                if cambio is None:
+                    cambio = buscar_taxa() or False   # False = já tentou e falhou, não tenta de novo no run
+                if cambio:
+                    dados = converter_outlook_para_usd(dados, cambio[0], cambio[1])
+                else:
+                    log.info("  outlook %s: guidance em euro mas câmbio EUR->USD indisponível (mantido em euro)", t)
+                    dados = None   # nunca mostra valor em euro como se fosse dólar
             if dados:
                 achou = {**dados, "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {_data_br(doc['data'])} (SEC)",
                         "data": _data_br(doc["data"]), "url": link}

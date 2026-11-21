@@ -110,7 +110,9 @@ def outlook_trimestral_eua(ticker: str) -> dict | None:
         return None
     return {"periodo": c.get("periodo"), "receitaMin": _n(c.get("receita_min"), 2), "receitaMax": _n(c.get("receita_max"), 2),
             "margemBruta": _n(c.get("margem_bruta"), 2), "lpaMin": _n(c.get("lpa_min"), 4), "lpaMax": _n(c.get("lpa_max"), 4),
-            "fonte": c.get("fonte") or "", "data": c.get("data") or "", "url": c.get("url") or ""}
+            "fonte": c.get("fonte") or "", "data": c.get("data") or "", "url": c.get("url") or "",
+            "moedaOriginal": c.get("moeda_original") or "", "taxaCambio": _n(c.get("taxa_cambio"), 4),
+            "taxaCambioData": c.get("taxa_cambio_data") or ""}
 
 
 ARQ_CONTABIL_BR = Path(__file__).resolve().parent.parent / "utils" / "contabil_br.json"

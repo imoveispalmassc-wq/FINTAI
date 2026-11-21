@@ -144,16 +144,26 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Outlook" só por padrões de texto (sem API do Claude, sem travas - a faixa extraída é usada tal como está no
   documento, nunca inventada). Reconhece hoje: "guidance for the Nth quarter of year", "'s outlook for the Nth
   quarter of fiscal year", "for the fiscal Nth quarter year, we expect", "for the Nth quarter of year, EMPRESA
-  expects" (ex.: AMD) e "EMPRESA expects QN AAAA" (abreviado, sem "quarter" por extenso - ex.: ASML); faixas em
-  "X ± Y", "X to Y", "X, plus or minus Z%" e "between X and Y" (ex.: ASML); rótulo de receita "Revenue" ou "net
-  sales"/"total net sales" (ex.: ASML); margem em "Approximately X%" ou "between X% and Y%" (nesse caso o ponto
-  médio). Nem toda empresa dá guidance de LPA (ex. NVIDIA, AMD e ASML só dão receita/margem) nem usa um desses
-  formatos (ex. Apple não dá guidance numérico formal) - sem achar um formato
+  expects" (ex.: AMD), "EMPRESA expects QN AAAA" (abreviado, sem "quarter" por extenso - ex.: ASML, no resumo em
+  bullet no topo do release) e "We expect Nth-quarter AAAA" (composto com hífen, sem abreviar - ex.: ASML, no
+  corpo do CEO statement do mesmo release); faixas em "X ± Y", "X to Y", "X, plus or minus Z%" e "between X and Y"
+  (ex.: ASML), em dólar ou em outra moeda com o símbolo antes do número (ex.: €14.2 billion, ASML); rótulo de
+  receita "Revenue" ou "net sales"/"total net sales" (ex.: ASML); margem em "Approximately X%" ou "between X% and
+  Y%" (nesse caso o ponto médio). Nem toda empresa dá guidance de LPA (ex. NVIDIA, AMD e ASML só dão receita/
+  margem) nem usa um desses formatos (ex. Apple não dá guidance numérico formal) - sem achar um formato
   reconhecido, o campo correspondente fica "Sem dado" e, sem nada achado, o card simplesmente não aparece (nunca
   trava o ticker como "não validado": isso é só do guidance ANUAL). Não calcula margem líquida por fora (ex.:
   LPA × ações do Yahoo ÷ receita) mesmo quando dá para estimar: o LPA de guidance costuma ser non-GAAP e as
   ações do Yahoo podem não bater com a base da empresa - mostra só o que a empresa realmente divulgou. Grava
   em utils/guidance_trimestral_eua.json; uma tentativa sem sucesso nunca apaga um valor bom já gravado.
+  Moeda: empresa estrangeira em 6-K que divulga em outra moeda (ex. ASML em euro, símbolo "€" antes do número)
+  tem receita/LPA convertidos pra dólar antes de gravar/mostrar (`converter_outlook_para_usd`), pelo câmbio do
+  próprio Yahoo Finance (ticker EURUSD=X, `taxa_cambio_eur_usd` - mesma fonte de tudo o mais no app, nunca um
+  câmbio fixo no código). Câmbio indisponível no momento: não grava nem mostra o valor em euro como se já fosse
+  dólar (moeda errada é pior que "Sem dado" por enquanto) - só tenta de novo no próximo ciclo. Convertido, a
+  nota da fonte no card mostra "Convertido de euro pelo câmbio EUR→USD de [data] (Yahoo Finance): [taxa]", pra
+  nunca esconder que o número passou por conversão; os valores originais em euro ficam guardados
+  (receita_min_eur/receita_max_eur) para quem for conferir.
   O app (não só o robô) também busca ao vivo (`app.outlook_trimestral_eua(ticker)`, cache de 1 dia) quando o
   robô ainda não gravou nada pro ticker - mesmos padrões de texto, sem API do Claude, pra não depender do
   próximo ciclo do robô (6 em 6 horas) nem de intervenção manual toda vez que um ticker novo cai nessa mesma

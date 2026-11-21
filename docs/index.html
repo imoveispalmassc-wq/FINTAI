@@ -1473,6 +1473,8 @@ function montar(root, d) {
         + `<div>P/L Conservador<b>${tem(d.plConservador) ? f(d.plConservador) : 'Sem dado'}</b></div>`
         + `<div>Preço teto conservador<b>${tem(d.tetoConservador) ? din(d.tetoConservador) : 'Sem dado'}</b></div>`;
       const OT = d.outlookTrimestral;
+      const cambioOT = OT && OT.moedaOriginal === 'EUR' && tem(OT.taxaCambio)
+        ? ` Convertido de euro pelo câmbio EUR→USD de ${OT.taxaCambioData} (Yahoo Finance): ${f(OT.taxaCambio, 4)}.` : '';
       const outlookHtml = OT ? `<div class="card" style="margin-top:12px">
           <span class="rot">Guidance da empresa para o próximo trimestre</span>
           <div class="nota" style="margin-top:4px">${OT.periodo} · informativo: não entra no P/L nem na Previsão atual acima (que é guidance ANUAL)</div>
@@ -1481,7 +1483,7 @@ function montar(root, d) {
             <div>Margem bruta<b>${tem(OT.margemBruta) ? `${f(OT.margemBruta, 1)}%` : 'Sem dado'}</b></div>
             <div>LPA projetado<b>${tem(OT.lpaMin) && tem(OT.lpaMax) ? `${din(OT.lpaMin)} a ${din(OT.lpaMax)}` : 'Sem dado'}</b></div>
           </div>
-          <div class="nota" style="margin-top:8px">Fonte: ${OT.fonte ? `<a class="link" href="" target="_blank" rel="noopener" id="ot-fonte"></a>` : '<span id="ot-fonte"></span>'} (${OT.data})</div>
+          <div class="nota" style="margin-top:8px">Fonte: ${OT.fonte ? `<a class="link" href="" target="_blank" rel="noopener" id="ot-fonte"></a>` : '<span id="ot-fonte"></span>'} (${OT.data})${cambioOT}</div>
         </div>` : '';
       const avisoAnualHtml = d.avisoGuidanceAnual ? `<div class="aviso" style="margin-bottom:10px">${d.avisoGuidanceAnual}</div>` : '';
       el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>
