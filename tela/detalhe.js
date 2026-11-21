@@ -558,8 +558,8 @@ function montar(root, d) {
   (function TrendStrength(el) {
     const corT = { Alta: 'var(--verde)', Baixa: 'var(--vermelho)' }[d.tendencia] || 'var(--texto)';
     const dist = tem(d.mm200) ? (d.preco / d.mm200 - 1) * 100 : null;
-    const leitura = !tem(d.forca) ? '' : d.forca >= 70 ? 'Sobrecomprada. Subiu rápido demais, pode corrigir.'
-      : d.forca <= 30 ? 'Sobrevendida. Caiu rápido demais, pode repicar.' : 'Neutra. Sem pressão de compra nem de venda.';
+    const leitura = !tem(d.forca) ? '' : d.forca >= 70 ? 'Sobrecomprada. Subiu rápido demais.'
+      : d.forca <= 30 ? 'Sobrevendida. Caiu rápido demais.' : 'Neutra. Sem pressão de compra nem de venda.';
     const fundo = 'linear-gradient(90deg,var(--verde) 0 30%,var(--ardosia) 30% 70%,var(--ambar) 70% 100%)';
     // Força da tendência: distância do preço até a média de 200 dias, numa escala de -5% a +15%.
     // O zero (a própria média) fica no início da faixa Fraca: tudo à direita dele está ACIMA da média.
@@ -584,17 +584,18 @@ function montar(root, d) {
       ondeT = `Preço ${f(d.preco)} está ${f(Math.abs(dist))}% ${dist >= 0 ? 'ACIMA' : 'ABAIXO'} da média de 200d de ${f(d.mm200)}`;
     }
     // mesmo desenho da barra de zonas: nomes em cima de cada cor, limites com traço e valor,
-    // distância embaixo da bolinha e o valor da média de 200 dias embaixo do traço do 0%
+    // distância e média de 200 dias embaixo da barra, cada uma sempre alinhada com o próprio ponto
+    // (bolinha/traço do 0%) - em linhas separadas, pra nunca precisar empurrar uma pro lado quando
+    // ficam perto uma da outra (ex. preço bem perto da própria média de 200 dias)
     const pDist = Math.max(0, Math.min(100, pt(dist))), pZero = pt(0);
+    // marcador (bolinha vazada) de onde a Força da tendência estava há 7 pregões, pra dar pra ver
+    // pra que lado ela está indo (sem precisar comparar números) - None quando não tem histórico
+    const p7T = tem(d.dist200d7d) ? Math.max(0, Math.min(100, pt(d.dist200d7d))) : null;
     const estreita = pt(FRACA) - pt(0) < 11;          // faixa Fraca sem espaço para nome e valor
     const pct = v => `${v > 0 ? '+' : ''}${f(v, 0)}%`;
-    // Embaixo da barra: a distância sob a bolinha e o valor da média de 200 dias sob o traço do 0%.
-    // Se os dois ficarem perto, cada um se alinha para o seu lado do traço, sem se sobrepor.
-    const perto = Math.abs(pDist - pZero) < 22, direita = pDist >= pZero;
-    const posDist = !perto ? ancora(pDist) : direita ? `left:${pDist}%;transform:translateX(4px);text-align:left` : `left:${pDist}%;transform:translateX(calc(-100% - 4px));text-align:right`;
-    const posMedia = !perto ? ancora(pZero) : direita ? `left:${pZero}%;transform:translateX(calc(-100% - 6px));text-align:right` : `left:${pZero}%;transform:translateX(6px);text-align:left`;
-    const media = `<span style="${posMedia};color:var(--suave);font-weight:500;font-size:11px">Média 200d<b style="color:var(--texto)">${f(d.mm200)}</b></span>`;
-    const barraT = !tem(dist) ? '' : `<div class="card">
+    const media = `<span style="${ancora(pZero)};color:var(--suave);font-weight:500;font-size:11px">Média 200d<b style="color:var(--texto)">${f(d.mm200)}</b></span>`;
+    const divisor = 'margin-top:14px;padding-top:14px;border-top:1px solid var(--borda)';
+    const barraT = !tem(dist) ? '' : `<div style="${divisor}">
           <span class="rot">Força da tendência</span>
           <div class="zonas-rot" style="grid-template-columns:${pt(0)}fr ${pt(FRACA) - pt(0)}fr ${pt(FORTE) - pt(FRACA)}fr ${100 - pt(FORTE)}fr">
             <span style="color:var(--vermelho)"><b>Perdeu força</b></span>
@@ -608,21 +609,23 @@ function montar(root, d) {
           </div>
           <div class="regua" style="background:${fundoT};margin-top:4px">
             <span class="traco" style="left:${pt(0)}%"></span><span class="traco" style="left:${pt(FRACA)}%"></span><span class="traco" style="left:${pt(FORTE)}%"></span>
+            ${p7T !== null ? `<span class="bola-7d" style="left:${p7T}%"></span>` : ''}
             <span class="bola" style="left:${pDist}%"></span>
           </div>
-          <div class="marca-baixo num"><span style="${posDist}">${sinal(dist)}</span>${media}</div>
+          <div class="marca-baixo num"><span style="${ancora(pDist)}">${sinal(dist)}</span></div>
+          <div class="marca-baixo num" style="margin-top:0">${media}</div>
+          ${p7T !== null ? `<div class="nota" style="margin-top:6px">Últimos 7 pregões: ${sinal(d.dist200d7d)}</div>` : ''}
           ${estreita ? '<div class="nota">Faixa Fraca: de 0% a +3% acima da média de 200 dias.</div>' : ''}
           <div class="destaque num">${textoT}</div>
           <div class="nota num">${ondeT}</div>
         </div>`;
     el.innerHTML = `<h2>Tendência e força</h2>
-      <div class="pilha">
-        <div class="card duas"><div class="esq"><span class="rot">Direção da tendência</span><small>${!tem(d.mm200) ? INDISP : d.tendencia === 'Alta' ? 'preço acima da média de 200 dias' : 'preço abaixo da média de 200 dias'}</small></div><div class="dir" style="color:${corT}">${tem(d.mm200) ? d.tendencia : '—'}</div></div>
+      <div class="card">
+        <div class="duas"><div class="esq"><span class="rot">Direção da tendência</span></div><div class="dir" style="color:${corT}">${tem(d.mm200) ? d.tendencia : '—'}</div></div>
         ${barraT}
-        <div class="card duas"><div class="esq"><span class="rot">Média de 200 dias</span><small class="num">${tem(dist) ? `preço ${sinal(dist)} da média` : INDISP}</small></div><div class="dir num">${din(d.mm200)}</div></div>
-        <div class="card forca">
-          <div class="cab"><div><strong>Força</strong><div class="nota">Últimos 14 dias</div></div><button class="link" data-folha="forca">Ver como calculamos</button></div>
-          ${tem(d.forca) ? `<div class="zonas-rot" style="grid-template-columns:30fr 40fr 30fr">
+        <div style="${divisor}">
+          <strong>Força</strong><div class="nota">Últimos 14 dias</div>
+          ${tem(d.forca) ? `<div class="zonas-rot" style="grid-template-columns:30fr 40fr 30fr;margin-top:8px">
             <span style="color:var(--verde)"><b>Muita venda</b></span>
             <span style="color:#aab4c6;text-align:center"><b>Equilíbrio</b></span>
             <span style="color:var(--ambar)"><b>Muita compra</b></span>
@@ -630,22 +633,16 @@ function montar(root, d) {
           <div class="marca-cima limites num">
             <span class="esq">0</span><span style="left:30%">30</span><span style="left:70%">70</span><span class="dir">100</span>
           </div>
+          <div class="marca-cima so-valor num"><span style="${ancora(d.forca)};color:var(--azul);font-weight:600;font-size:12px">${f(d.forca, 0)}</span></div>
           <div class="regua" style="background:${fundo};margin-top:4px">
             <span class="traco" style="left:30%"></span><span class="traco" style="left:70%"></span>
+            ${tem(d.forca7d) ? `<span class="bola-7d" style="left:${d.forca7d}%"></span>` : ''}
             <span class="bola" style="left:${d.forca}%"></span>
           </div>
-          <div class="marca-baixo so-valor num"><span style="${ancora(d.forca)}">${f(d.forca, 0)}</span></div>
-          <div class="destaque">${leitura}</div>` : `<div class="nota" style="margin-top:8px">${INDISP}</div>`}
+          ${tem(d.forca7d) ? `<div class="nota" style="margin-top:6px;text-align:center">Últimos 7 pregões: ${f(d.forca7d, 0)}</div>` : ''}
+          <div class="destaque" style="text-align:center">${leitura}</div>` : `<div class="nota" style="margin-top:8px">${INDISP}</div>`}
         </div>
       </div>`;
-    FOLHAS.forca = () => ['Como calculamos a força', `
-      <p>A força é o <b>IFR (RSI) de 14 dias</b>: compara o tamanho das altas com o das quedas nos últimos 14 pregões, numa escala de 0 a 100.</p>
-      <ul><li><b>Até 30:</b> sobrevendida (muita venda).</li><li><b>De 30 a 70:</b> neutra (equilíbrio).</li><li><b>Acima de 70:</b> sobrecomprada (muita compra).</li></ul>
-      <code>IFR = 100 − 100 ÷ (1 + média das altas ÷ média das quedas)</code>
-      ${tem(d.forca) ? `<p>Valor de hoje: <b>${f(d.forca, 0)}</b>.</p>` : ''}
-      <p><b>Direção da tendência:</b> Alta com o preço acima da média de 200 dias; Baixa com o preço abaixo.</p>
-      <p><b>Força da tendência:</b> distância do preço até a média de 200 dias. Abaixo da média: perdeu força. De 0% a 3% acima: fraca. De 3% a 10%: média. Mais de 10%: forte.</p>
-      ${tem(d.mm200) ? `<code>(${f(d.preco)} − ${f(d.mm200)}) ÷ ${f(d.mm200)} = ${sinal((d.preco / d.mm200 - 1) * 100)}</code>` : ''}${fonte}`];
   })($('tendencia'));
 
   /* ---------------- mínimo, máximo e ponto médio */

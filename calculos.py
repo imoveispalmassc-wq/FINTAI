@@ -60,6 +60,9 @@ class Resultado:
     inclinacao_mm200: float | None   # variação % da MM200 em ~3 meses
     ifr: float | None
     tendencia: str       # Alta / Baixa / Lateral / —
+    # marcador de 7 pregões atrás, pra saber pra que lado a tendência/força está indo
+    dist_mm200_7d: float | None   # (preço ÷ MM200 - 1) × 100 de 7 pregões atrás
+    ifr_7d: float | None
     # ano corrente
     maxima_ano: float
     minima_ano: float
@@ -430,10 +433,22 @@ def calcular(hist: pd.DataFrame, dividendos: pd.Series | None) -> Resultado:
 
     ponto_medio = (media_min + media_max) / 2
 
-    ind = indicadores(hist).iloc[-1]
+    ind_full = indicadores(hist)
+    ind = ind_full.iloc[-1]
 
     def _ou_none(v):
         return None if pd.isna(v) else float(v)
+
+    # marcador de 7 pregões atrás (direção da Força da tendência/Força no gráfico): mesma distância
+    # preço÷MM200 e o mesmo IFR, só que de 7 pregões antes do último - precisa do preço e da MM200
+    # daquele pregão, não só do IFR (a distância não é guardada em "ind", é calculada na hora)
+    ifr_7d = dist_mm200_7d = None
+    if len(ind_full) > 7:
+        linha7 = ind_full.iloc[-8]
+        ifr_7d = _ou_none(linha7["ifr"])
+        mm200_7 = linha7["mm200"]
+        if pd.notna(mm200_7) and mm200_7:
+            dist_mm200_7d = (float(hist["Close"].iloc[-8]) / float(mm200_7) - 1) * 100
 
     # ---- ano corrente
     do_ano = hist[hist.index >= pd.Timestamp(year=fim.year, month=1, day=1)]
@@ -474,6 +489,8 @@ def calcular(hist: pd.DataFrame, dividendos: pd.Series | None) -> Resultado:
         inclinacao_mm200=_ou_none(ind["incl"]),
         ifr=_ou_none(ind["ifr"]),
         tendencia=tendencia(preco, _ou_none(ind["mm200"]), _ou_none(ind["incl"])),
+        dist_mm200_7d=dist_mm200_7d,
+        ifr_7d=ifr_7d,
         maxima_ano=float(do_ano["High"].max()),
         minima_ano=float(do_ano["Low"].min()),
         retorno_1a=_retorno(serie_ret, 1),

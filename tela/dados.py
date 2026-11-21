@@ -545,6 +545,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "min52": _n(r.minimo_1a, 4), "max52": _n(r.maximo_1a, 4),
         "min30": _n(r.minimo_30d, 4), "max30": _n(r.maximo_30d, 4),
         "mm200": _n(r.mm200, 4), "tendencia": direcao, "forca": _n(r.ifr, 0),
+        "dist200d7d": _n(r.dist_mm200_7d, 2), "forca7d": _n(r.ifr_7d, 0),
         "lpaAnos": [{"ano": a, "lpa": _n(v, 4)} for a, v in lpa_anos],
         "lpaAnualFonte": d.get("lpa_anual_fonte") or "",
         "lpaAnualSecMotivo": d.get("lpa_anual_sec_motivo") or "",

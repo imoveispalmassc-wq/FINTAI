@@ -75,3 +75,27 @@ def test_calcular_media_fech_3a_5a_sem_historico_suficiente_e_none():
                          "Volume": 1000, "Dividends": 0.0, "Stock Splits": 0.0})
     r = calcular(hist, None)
     assert r.media_fech_3a is None and r.media_fech_5a is None
+
+
+def test_calcular_marcador_7_pregoes_bate_com_indicadores_de_7_pregoes_atras():
+    """Marcador que mostra pra que lado a Força da tendência/Força (IFR) estão indo: o mesmo IFR e a
+    mesma distância preço÷MM200 de 7 pregões atrás, não do dia de hoje."""
+    from calculos import indicadores
+
+    hist = _hist_longa()
+    r = calcular(hist, None)
+    ind = indicadores(hist)
+    linha7 = ind.iloc[-8]   # 7 pregões antes do último (índice -1)
+    assert r.ifr_7d == pytest.approx(linha7["ifr"])
+    preco7 = float(hist["Close"].iloc[-8])
+    esperado_dist = (preco7 / float(linha7["mm200"]) - 1) * 100
+    assert r.dist_mm200_7d == pytest.approx(esperado_dist)
+
+
+def test_calcular_marcador_7_pregoes_sem_historico_suficiente_e_none():
+    idx = pd.bdate_range("2026-01-01", periods=5)   # menos de 8 pregões
+    c = pd.Series([10.0, 10.5, 11.0, 10.8, 10.9], index=idx)
+    hist = pd.DataFrame({"Open": c, "High": c, "Low": c, "Close": c, "Adj Close": c,
+                         "Volume": 1000, "Dividends": 0.0, "Stock Splits": 0.0})
+    r = calcular(hist, None)
+    assert r.ifr_7d is None and r.dist_mm200_7d is None

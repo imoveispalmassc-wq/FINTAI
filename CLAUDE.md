@@ -321,6 +321,11 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   MM200: Oportunidade = MM200 −10% a +5%;
   abaixo de −10% = "Bem abaixo da MM200" (azul, separado, ainda COMPRAR); Neutro = +5% a +15%; Caro = +15% ou mais;
   ponto de oportunidade = MM200 × 1,05.
+- "Tendência e força": os cards de Direção/Força da tendência (distância preço÷MM200) e Força (IFR 14 dias)
+  ficam num único bloco. Cada um mostra, além do valor de hoje (bolinha cheia), uma bolinha vazada marcando
+  onde estava 7 pregões atrás (`calculos.calcular` → `dist_mm200_7d`/`ifr_7d`, calculados em `indicadores()`,
+  não um valor aproximado), pra dar pra ver pra que lado a tendência/força está indo sem comparar números -
+  com menos de 8 pregões de histórico, fica "Sem dado" (não mostra a bolinha vazada, nunca inventa).
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 

@@ -90,6 +90,7 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
 .regua .bola { position: absolute; top: -4px; width: 18px; height: 18px; transform: translateX(-9px); border-radius: 50%; background: var(--texto);
   border: 3px solid var(--azul); box-shadow: 0 0 0 4px #5b8def33; }
 .regua button.bola { cursor: pointer; }
+.regua .bola-7d { position: absolute; top: -1px; width: 10px; height: 10px; transform: translateX(-5px); border-radius: 50%; background: var(--card); border: 2px solid var(--suave); }
 .regua .aqui { position: absolute; top: -22px; transform: translateX(-50%); font-size: 10.5px; font-weight: 700; letter-spacing: .05em; color: var(--azul); white-space: nowrap; }
 .regua .balao { position: absolute; top: -30px; transform: translateX(-50%); background: var(--claro); color: var(--tinta); font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 999px; }
 .pontas { display: flex; justify-content: space-between; gap: 8px; color: var(--suave); font-size: 12px; }
@@ -241,6 +242,7 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .proj b { color: var(--azul) !important; }
 .tag-proj { display: inline-block; padding: 0 6px; border-radius: 999px; border: 1px solid var(--azul); color: var(--azul); font-size: 10.5px; margin-left: 4px; vertical-align: 1px; }
 .marca-baixo.so-valor { height: 22px; }
+.marca-cima.so-valor { height: 20px; margin-top: 4px; }
 .marca-cima span.esq { left: 0; transform: none; text-align: left; }
 .marca-cima span.dir { left: auto; right: 0; transform: none; text-align: right; }
 .marca-cima.limites { height: 18px; margin-top: 2px; }
