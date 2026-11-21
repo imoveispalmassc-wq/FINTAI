@@ -386,14 +386,21 @@ const seta = v => (v >= 0 ? '▲' : '▼');
 const cor = v => (v >= 0 ? 'var(--verde)' : 'var(--vermelho)');
 const posicao = (v, min, max) => max <= min ? 50 : Math.max(0, Math.min(100, (v - min) / (max - min) * 100));
 // afasta rótulos que ficariam colados/sobrepostos numa régua 0-100% (ex. ativo perto da mínima de
-// 52 semanas, com a zona de oportunidade muito estreita): só move o texto, não o traço da zona
-const afastar = (posicoes, min = 17) => {
+// 52 semanas, com a zona de oportunidade muito estreita, ou rótulos largos de ativos com preço na
+// casa dos milhares): só move o texto, não o traço da zona. `folgas` é a distância mínima que CADA
+// ponto precisa do vizinho (ex. metade da largura do próprio rótulo, se ele for centralizado) -
+// não um valor fixo igual pra todos, já que rótulos mais largos (ex. "1.999,96") precisam de mais
+// espaço do que rótulos curtos (ex. "14,65"). `folgaEsq`/`folgaDir` são a folga extra precisada só
+// nas pontas (0%/100%), pelos rótulos fixos da borda (ex. mínima/máxima da régua).
+const afastar = (posicoes, folgas, folgaEsq = 0, folgaDir = 0) => {
   const p = posicoes.slice();
   if (!p.length) return p;
-  if (p[0] < min) p[0] = min;
-  for (let i = 1; i < p.length; i++) if (p[i] - p[i - 1] < min) p[i] = p[i - 1] + min;
-  if (p[p.length - 1] > 100 - min) p[p.length - 1] = 100 - min;
-  for (let i = p.length - 2; i >= 0; i--) if (p[i + 1] - p[i] < min) p[i] = p[i + 1] - min;
+  const g = folgas || posicoes.map(() => 8.5);   // sem folgas por rótulo: mantém o antigo padrão (17 ÷ 2)
+  if (p[0] < folgaEsq + g[0]) p[0] = folgaEsq + g[0];
+  for (let i = 1; i < p.length; i++) { const precisa = g[i - 1] + g[i]; if (p[i] - p[i - 1] < precisa) p[i] = p[i - 1] + precisa; }
+  const ult = p.length - 1;
+  if (p[ult] > 100 - folgaDir - g[ult]) p[ult] = 100 - folgaDir - g[ult];
+  for (let i = p.length - 2; i >= 0; i--) { const precisa = g[i] + g[i + 1]; if (p[i + 1] - p[i] < precisa) p[i] = p[i + 1] - precisa; }
   return p;
 };
 const p2 = n => String(n).padStart(2, '0');
@@ -808,9 +815,10 @@ function montar(root, d) {
     // a escala da barra estica além da faixa natural do período (mínima/máxima) pra caber todos os
     // cortes e referências (oportunidade/cara, limite de 3/5 anos, mm200) - sem isso, um limite bem
     // abaixo da mínima do período (ex. limite de 5 anos) nunca apareceria marcado na régua. A
-    // posição de cada um na tela (cor, traço e número) depois passa pelo afastar() (distância
-    // mínima de 17 pontos), senão, com vários pontos próximos no preço real (zona de oportunidade
-    // estreita), a cor mudaria num lugar e o número escrito em cima diria outro.
+    // posição de cada um na tela (cor, traço e número) depois passa pelo afastar() (gap mínimo
+    // escalado pela largura real do rótulo de cada um - ver abaixo), senão, com vários pontos
+    // próximos no preço real (zona de oportunidade estreita), a cor mudaria num lugar e o número
+    // escrito em cima diria outro.
     const pontosDisponiveis = C ? [zO, zC, tem(C.limite3a) ? C.limite3a : null, tem(C.limite5a) ? C.limite5a : null,
       tem(C.mm200) ? C.mm200 : null].filter(tem) : [];
     // a mínima/máxima da régua são sempre um dado real (nunca uma margem inventada): a mínima do
@@ -833,7 +841,25 @@ function montar(root, d) {
       temMM ? { k: 'mm', pos: aMMBruta } : null,
       { k: 'b', pos: bBruta },
     ].filter(Boolean).sort((x, y) => x.pos - y.pos);
-    const ajustadas = afastar(pontosAjuste.map(x => x.pos));
+    // a mínima/máxima da régua só aparecem na borda quando são um valor DIFERENTE do já marcado por
+    // um traço (senão repetiria o mesmo número duas vezes à toa) - nunca escondem o traço/corte em
+    // si, só evitam o texto redundante
+    const valorReal = { a5a: C && C.limite5a, a3a: C && C.limite3a, a: zO, mm: C && C.mm200, b: zC };
+    const repeteEsq = pontosAjuste.length > 0 && Math.abs(valorReal[pontosAjuste[0].k] - minEfetivo) < 1e-6;
+    const repeteDir = pontosAjuste.length > 0 && Math.abs(valorReal[pontosAjuste[pontosAjuste.length - 1].k] - maxEfetivo) < 1e-6;
+    const textoEsq = repeteEsq ? '' : f(minEfetivo), textoDir = repeteDir ? '' : f(maxEfetivo);
+    // ativos com preço na casa dos milhares (ex. US$ 1.999,96) têm rótulos bem mais largos do que
+    // ativos de preço baixo (ex. 14,65) - um gap fixo de 17 pontos (bom pra rótulos curtos) não é
+    // suficiente pra eles e os números ficam colados/sobrepostos (ex.: zona Cara e a borda direita
+    // da régua). O gap mínimo agora escala com a largura real de cada rótulo (estimada pelo nº de
+    // caracteres, já que são sempre números formatados no mesmo padrão), convertida em % da largura
+    // do card - assim funciona pra qualquer ativo, não só pros de poucos dígitos.
+    const largadorPx = txt => txt ? txt.length * 7.3 + 6 : 0;
+    const largContainer = Math.max(el.clientWidth - 28, 200);   // -28 = padding do .card (14px dos 2 lados)
+    const pxParaPct = px => px / largContainer * 100;
+    const folgas = pontosAjuste.map(x => pxParaPct(largadorPx(f(valorReal[x.k]))) / 2);   // metade: rótulo é centralizado
+    const folgaEsq = pxParaPct(largadorPx(textoEsq)), folgaDir = pxParaPct(largadorPx(textoDir));
+    const ajustadas = afastar(pontosAjuste.map(x => x.pos), folgas, folgaEsq, folgaDir);
     const mapa = {};
     pontosAjuste.forEach((x, i) => { mapa[x.k] = ajustadas[i]; });
     const a = mapa.a, b = mapa.b;
@@ -868,12 +894,6 @@ function montar(root, d) {
     const faixaVerde = bordasVerde.slice(0, -1).map((ini, i) => `${coresVerde[i]} ${ini}% ${bordasVerde[i + 1]}%`).join(',');
     const fundo = `linear-gradient(90deg,${faixaVerde},var(--ardosia) ${a}% ${b}%,var(--ambar) ${b}% 100%)`;
     const titulo = C ? 'Valuation (preço médio de 1 ano)' : fx.rotulo;
-    // a mínima/máxima da régua só aparecem na borda quando são um valor DIFERENTE do já marcado por
-    // um traço (senão repetiria o mesmo número duas vezes à toa) - nunca escondem o traço/corte em
-    // si, só evitam o texto redundante
-    const valorReal = { a5a: C && C.limite5a, a3a: C && C.limite3a, a: zO, mm: C && C.mm200, b: zC };
-    const repeteEsq = pontosAjuste.length > 0 && Math.abs(valorReal[pontosAjuste[0].k] - minEfetivo) < 1e-6;
-    const repeteDir = pontosAjuste.length > 0 && Math.abs(valorReal[pontosAjuste[pontosAjuste.length - 1].k] - maxEfetivo) < 1e-6;
     el.innerHTML = `<h2>Faixa de preço <small>${titulo}</small></h2>
       <div class="pilha">
         <div class="zona" style="--c:var(--verde)"><span class="rot">Zona de oportunidade</span><b class="num">até ${din(zO)}</b></div>
@@ -886,7 +906,7 @@ function montar(root, d) {
             <span style="color:var(--ambar)"><b>${100 - b < 11 ? '' : 'Cara'}</b></span>
           </div>
           <div class="marca-cima limites num">
-            <span class="esq">${repeteEsq ? '' : f(minEfetivo)}</span>
+            <span class="esq">${textoEsq}</span>
             ${(() => {
               // mesma posição (já afastada) usada na régua embaixo - número e corte sempre batem
               const html = { a5a: a5a !== null ? f(C.limite5a) : '', a3a: a3a !== null ? f(C.limite3a) : '',
@@ -894,7 +914,7 @@ function montar(root, d) {
               const cor = { mm: '#f2994a' };
               return pontosAjuste.map(x => `<span style="left:${mapa[x.k]}%${cor[x.k] ? `;color:${cor[x.k]}` : ''}">${html[x.k]}</span>`).join('');
             })()}
-            <span class="dir">${repeteDir ? '' : f(maxEfetivo)}</span>
+            <span class="dir">${textoDir}</span>
           </div>
           <div class="regua" style="background:${fundo};margin-top:4px">
             ${aMM !== null ? `<span class="traco" style="left:${aMM}%;background:#f2994a"></span>` : ''}

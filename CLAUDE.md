@@ -268,10 +268,16 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   escuro perto do limite de 5 anos) - `--verde-claro` entre o limite de 3a e a oportunidade, `--verde` entre o
   limite de 5a e o de 3a, `--verde-forte` abaixo do limite de 5a; com só um dos dois limites disponível, usa só
   2 tons, e sem nenhum, a zona toda fica na cor padrão (`--verde`). As posições na régua (cortes de cor, traços
-  e os próprios números) usam a mesma posição já afastada pelo `afastar()` (distância mínima de 17 pontos) -
-  nunca a posição linear crua: senão, quando os pontos ficam muito próximos no preço real (ex. zona de
-  oportunidade estreita), a cor mudaria num lugar e o número escrito em cima diria outro, parecendo que a faixa
-  verde "não chega" onde o próprio número diz que chega. O "Você está aqui" (bolinha do preço) passa pela MESMA
+  e os próprios números) usam a mesma posição já afastada pelo `afastar()` - nunca a posição linear crua: senão,
+  quando os pontos ficam muito próximos no preço real (ex. zona de oportunidade estreita), a cor mudaria num
+  lugar e o número escrito em cima diria outro, parecendo que a faixa verde "não chega" onde o próprio número
+  diz que chega. O gap mínimo entre dois rótulos não é um valor fixo: escala com a largura real de cada um
+  (estimada pelo nº de caracteres, convertida em % da largura do card) - um ativo com preço na casa dos milhares
+  (ex. "1.999,96") tem rótulo bem mais largo que um de preço baixo (ex. "14,65"), e um gap fixo (17 pontos, bom
+  só pros casos curtos) deixava os números colados/sobrepostos nesses ativos (ex.: fim da Zona Cara colado na
+  borda direita da régua). `afastar(posicoes, folgas, folgaEsq, folgaDir)` recebe a folga de cada ponto (metade
+  da largura do próprio rótulo, já que é centralizado) e a folga extra nas pontas (rótulos de mínima/máxima da
+  régua, que são ancorados na borda, não centralizados). O "Você está aqui" (bolinha do preço) passa pela MESMA
   transformação (interpolação entre a posição crua e a já afastada de cada ponto, com 0%/100% como âncoras) -
   senão a bolinha ficaria "presa" perto do traço errado sempre que o preço real estiver perto de um ponto que
   foi empurrado pro afastar() (ex. preço de R$14,30 bem perto do limite de 3 anos de R$14,65 apareceria colado
@@ -307,7 +313,8 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   faixa de 52 semanas clássica (mínima + 30%) não aparece mais como referência extra na barra (tirada por ser um
   número antigo e confundir com os cortes do valuation). Rótulos que ficariam colados (ativo perto da mínima/
   máxima do período, ex. BBAS3 perto da mínima de 52 semanas: zona de oportunidade muito estreita) se afastam
-  automaticamente na régua de números (função `afastar`, distância mínima de 17 pontos); o nome da zona
+  automaticamente na régua de números (função `afastar`, gap mínimo escalado pela largura real de cada rótulo -
+  ver acima); o nome da zona
   (Oportunidade/Neutra/Cara) some quando a coluna fica estreita demais pra caber o texto sem quebrar palavra -
   regra geral, vale pra qualquer ativo, não só pra casos específicos. LYNCH
   ignora a faixa e usa só a
