@@ -612,27 +612,30 @@ function montar(root, d) {
       }
       if (LPg) { ctx.fillStyle = '#5b8def1a'; ctx.fillRect(x0, Y(LPg.bemAbaixoAte), x1 - x0, 4000); }
       ctx.fillStyle = '#f06a6a1a'; ctx.fillRect(x0, Y(zCara) - 4000, x1 - x0, 4000);
-      // tracejados das zonas, com o valor de cada limite
-      const tracejado = (y, c) => { ctx.setLineDash([5, 4]); ctx.strokeStyle = c; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke(); ctx.setLineDash([]); };
-      tracejado(Y(zOport), '#2fbf8a'); tracejado(Y(zCara), '#8c99b0');
-      if (LPg) { tracejado(Y(LPg.bemAbaixoAte), '#7aa2f7'); }
-      if (tem(mm200Ref)) { tracejado(Y(mm200Ref), '#f2994a'); }
-      if (lim3aRef) { tracejado(Y(lim3aRef), '#8fe3c4'); }
-      if (lim5aRef) { tracejado(Y(lim5aRef), '#1f9d72'); }
-      const rotulos = [
-        { y: Y(zOport) - 9, t: `Oportunidade até ${f(zOport)}`, c: '#2fbf8a' },
-        { y: Y(zCara) + 9, t: `Neutro até ${f(zCara)}`, c: '#aab4c6' },
-        { y: Y(zCara) - 9, t: `Caro acima de ${f(zCara)}`, c: '#f06a6a' },
-        ...(LPg ? [{ y: Y(LPg.bemAbaixoAte) + 9, t: `Bem abaixo de ${f(LPg.bemAbaixoAte)}`, c: '#7aa2f7' }] : []),
-        ...(tem(mm200Ref) ? [{ y: Y(mm200Ref) - 9, t: `Média 200d ${f(mm200Ref)}`, c: '#f2994a' }] : []),
-        ...(lim3aRef ? [{ y: Y(lim3aRef) - 9, t: `Limite 3 anos ${f(lim3aRef)}`, c: '#8fe3c4' }] : []),
-        ...(lim5aRef ? [{ y: Y(lim5aRef) - 9, t: `Limite 5 anos ${f(lim5aRef)}`, c: '#1f9d72' }] : []),
+      // tracejados das zonas: título e valor com espaço maior entre si, e a linha só começa depois
+      // do próprio texto (nunca passa atrás dele). Todas numa única lista, cada uma com folga
+      // mínima de 12px das outras (de baixo pra cima), pra nunca uma cair bem em cima da outra
+      // quando os valores são próximos (ex. Oportunidade 1 e 2) ou iguais (Neutro e Caro, que
+      // descrevem o mesmo valor de dois lados)
+      const linhas = [
+        { y: Y(zCara), t: 'Neutro até', v: f(zCara), c: '#aab4c6' },
+        { y: Y(zCara), t: 'Caro acima de', v: f(zCara), c: '#f06a6a' },
+        ...(LPg ? [{ y: Y(LPg.bemAbaixoAte), t: 'Bem abaixo de', v: f(LPg.bemAbaixoAte), c: '#7aa2f7' }] : []),
+        ...(tem(mm200Ref) ? [{ y: Y(mm200Ref), t: 'Média 200d', v: f(mm200Ref), c: '#f2994a' }] : []),
+        { y: Y(zOport), t: 'Oportunidade 1', v: f(zOport), c: '#2fbf8a' },
+        ...(lim3aRef ? [{ y: Y(lim3aRef), t: 'Oportunidade 2', v: f(lim3aRef), c: '#8fe3c4' }] : []),
+        ...(lim5aRef ? [{ y: Y(lim5aRef), t: 'Oportunidade 3', v: f(lim5aRef), c: '#1f9d72' }] : []),
       ];
-      // todos à esquerda; de baixo para cima, afasta os que ficariam um em cima do outro
-      rotulos.sort((a, b) => b.y - a.y);
-      rotulos.forEach((r, k) => { if (k && rotulos[k - 1].y - r.y < 12) r.y = rotulos[k - 1].y - 12; });
+      linhas.sort((a, b) => a.y - b.y);
+      linhas.forEach((r, k) => { if (k && r.y - linhas[k - 1].y < 12) r.y = linhas[k - 1].y + 12; });
       ctx.textAlign = 'left'; ctx.font = '10.5px Inter, system-ui, sans-serif';
-      rotulos.forEach(r => { ctx.fillStyle = r.c; ctx.fillText(r.t, x0 + 6, r.y); });
+      linhas.forEach(r => {
+        const texto = `${r.t}    ${r.v}`;
+        const largura = ctx.measureText(texto).width;
+        ctx.setLineDash([5, 4]); ctx.strokeStyle = r.c; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(x0 + 10 + largura, r.y); ctx.lineTo(x1, r.y); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = r.c; ctx.fillText(texto, x0 + 6, r.y);
+      });
       ctx.font = '11px Inter, system-ui, sans-serif';
       ctx.restore();
       }

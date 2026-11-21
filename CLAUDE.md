@@ -219,10 +219,17 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   PONTO DE ENTRADA (o texto "Ponto de oportunidade em") é sempre o alvo fixo de 30% sobre a âncora de 1 ano -
   não escala para os limites de 3/5 anos, que são só
   referência, nunca o ponto de entrada em si. O gráfico pontilhado do modo Conservador repete as mesmas 3 faixas
-  de verde da barra (oportunidade/limite de 3 anos/limite de 5 anos, cada uma com sua linha e cor), além da
-  mm200 - a escala do eixo Y também estica pra caber o limite de 5 anos quando ele fica abaixo da mínima do
-  período mostrado, senão as linhas ficariam espremidas perto do fundo do gráfico (mesmo problema e mesma
-  solução da régua). Sem a antiga linha "Média dos métodos ... não validado" (média do Conservador/P/L
+  de verde da barra, rotuladas Oportunidade 1 (o próprio ponto de entrada), Oportunidade 2 (limite de 3 anos) e
+  Oportunidade 3 (limite de 5 anos), sem "anos" no texto, além da mm200 - a escala do eixo Y também estica pra
+  caber o limite de 5 anos quando ele fica abaixo da mínima do período mostrado, senão as linhas ficariam
+  espremidas perto do fundo do gráfico (mesmo problema e mesma solução da régua). TODAS as linhas do gráfico
+  (Oportunidade 1/2/3, Neutro, Caro, Média 200d, Bem abaixo no Lynch) seguem o mesmo desenho: título e valor com
+  espaço bem maior entre si (ex. "Oportunidade 2    14,65"), e a linha tracejada só começa depois do próprio
+  texto (nunca passa atrás dele, só do fim do texto até a borda direita) - cada uma na sua própria altura, com
+  folga mínima de 12px das outras (de baixo pra cima), pra nunca uma cair bem em cima da outra quando os valores
+  são próximos (ex. Oportunidade 1 e 2) ou iguais (Neutro e Caro, que descrevem o mesmo valor dos dois lados).
+  Sem a antiga linha
+  "Média dos métodos ... não validado" (média do Conservador/P/L
   histórico/Bazin): tirada do gráfico por não ser validada e confundir com os cortes reais do valuation; os 3
   métodos continuam no card "Preço justo", sem relação com a Faixa de preço. A legenda das zonas (Caro/Neutro/
   Oportunidade, mais Média 200d quando ela aparece) é HTML normal em linha, fora do gráfico (embaixo dele) - não
