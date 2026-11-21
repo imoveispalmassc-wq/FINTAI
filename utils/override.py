@@ -57,6 +57,9 @@ OVERRIDE: dict[str, dict] = {
     "ACM": {"lpa_min": 6.15, "lpa_max": 6.35, "periodo": "FY2027", "lucro_tipo": "LPA ajustado",
             "dividendo": 1.36, "fonte": "AECOM Form 8-K fiscal Q4 2026", "data": "16/11/2026"},
     # XP: sem guidance novo. Não cadastrar.
+    # MOG-A, MOG-B, BJ, ESE: sem cadastro manual de propósito - já estão na fila pública
+    # (Issues "Fila: MOG-A/MOG-B/BJ/ESE") pro robô validar sozinho com as 4 travas do AUTOMÁTICO
+    # COM PROTEÇÃO, em vez de entrar pela mão aqui.
 }
 
 # Cadastro automático, gravado pelo robô diário (utils/fetch_guidance.py).

@@ -49,7 +49,12 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Toda decisão vai para `utils/guidance_log.json`; toda sexta (`.github/workflows/resumo-semanal.yml`)
   sai uma issue com o publicado sozinho e o travado na semana. Nunca chuta número.
   Nunca usa documento mais antigo que o mais novo com faixa de lucro, nem mais antigo que o guidance já
-  salvo (descarta). Cadastro manual em override.py ganha do automático. EUA: User-Agent "fintai/1.0 (contato: ...)" com o e-mail só do Secret SEC_CONTACT_EMAIL
+  salvo (descarta). Cadastro manual em override.py ganha do automático. Todo ticker cadastrado manualmente em
+  OVERRIDE também precisa entrar em `utils/guidance_tickers.json` na mesma mudança (vale igual pra B3 e EUA) -
+  senão o robô diário nunca passa a acompanhar esse ticker sozinho (fica parado no guidance manual pra sempre) e
+  a tela mostra "Guidance ANUAL ainda não verificado" pra um ticker que já tem guidance oficial cadastrado.
+  `tests/test_override.py` tem um teste que falha se algum ticker de OVERRIDE estiver faltando em
+  guidance_tickers.json, pra nunca esquecer disso de novo. EUA: User-Agent "fintai/1.0 (contato: ...)" com o e-mail só do Secret SEC_CONTACT_EMAIL
   (nunca no código); sem o Secret, os tickers dos EUA ficam de fora com aviso. Leitura pela API passa pelas mesmas 4 travas.
   Duas faixas de LPA no mesmo comunicado: ignora a perto de previously/prior/previous/earlier e fica com a perto de
   updated/revised/now expects/raising/lowering; se ainda sobrarem duas, não grava (aviso amarelo).

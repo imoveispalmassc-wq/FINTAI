@@ -82,6 +82,20 @@ def test_guidance_em_lucro_por_acao_com_dividendo_da_empresa():
     assert validar("X", {"lpa_min": 6, "lpa_max": 7, "data": "d"}) == ["falta o campo 'fonte'"]
 
 
+def test_todo_cadastro_manual_tambem_entra_em_guidance_tickers_json():
+    """Qualquer ticker com guidance manual em OVERRIDE precisa estar em guidance_tickers.json,
+    senão o robô diário nunca passa a acompanhar (fica só no cadastro manual, parado no tempo) e a
+    tela mostra "ainda não verificado" pra um ticker que já tem guidance oficial - vale igual pra
+    B3 e EUA (antes só a B3 recebia esse cuidado por hábito)."""
+    import json
+    from pathlib import Path
+
+    tickers = set(json.loads(Path(__file__).parent.parent.joinpath("utils", "guidance_tickers.json")
+                             .read_text(encoding="utf-8")))
+    faltando = [t for t in OVERRIDE if t.upper() not in tickers]
+    assert not faltando, f"cadastrados em OVERRIDE mas fora de guidance_tickers.json: {faltando}"
+
+
 def test_cadastros_adm_hsic_acm_e_xp_sem_guidance():
     from utils.override import OVERRIDE, guidance
     adm, hsic, acm = guidance("ADM"), guidance("HSIC"), guidance("ACM")
