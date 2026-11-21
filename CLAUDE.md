@@ -77,7 +77,10 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   mínima + 70%. Validação: mínima 192,59 e máxima 1.255,00 dão 511,31 e 936,28.
 - A faixa acompanha o período do gráfico: Hoje/1S/1M/1A usam 52 semanas; 5A usa 260 semanas;
   Máx. usa todo o histórico. Mesma regra de 30%/70%. Só a faixa de 52 semanas tem teste histórico;
-  nas outras o selo diz "SEM TESTE".
+  nas outras não tem. O card de decisão (badge COMPRAR/AGUARDAR/CARO) não mostra mais selo nem
+  alerta embaixo da zona (ex. "SEM TESTE", "VALIDADO", avisos de MM200/Lynch) - só rótulo, preço,
+  badge, "Ponto de oportunidade" e a zona. Esses resultados de teste (quando existem, ex. SIMONS)
+  continuam na seção própria de cada modo, mais abaixo na tela.
 - Decisão: COMPRAR - Oportunidade / AGUARDAR - Neutro / CARO - Evitar, sempre com
   "Ponto de oportunidade em [valor]".
 - Regra de prejuízo (Graham e Lynch): LPA dos últimos 3 anos; 1 ano negativo sai da média
@@ -191,8 +194,9 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Número de Graham (LPA médio × VPA): o preço histórico quase nunca falta (diferente de LPA/VPA, que ficavam
   "Sem dado" com frequência, e cuja mediana de anos longos pode ficar presa a um regime de mercado antigo da
   empresa, ex. MU antes do supercycle de IA). Sem 1 ano de histórico de preço (ticker recém-listado): sem teto -
-  a tela cai para a faixa de 52 semanas como alternativa visual; nunca tem teste histórico ("SEM TESTE"), mesmo
-  quando o valuation está disponível. Médias de 3 anos (margem de 40%: limite = 0,60 × média) e 5 anos (margem
+  a tela cai para a faixa de 52 semanas como alternativa visual. Nunca tem teste histórico - mas isso não aparece
+  mais na tela como selo (o card de decisão não mostra mais selo nem alerta, ver regra da Faixa de 52 semanas
+  acima). Médias de 3 anos (margem de 40%: limite = 0,60 × média) e 5 anos (margem
   de 50%: limite = 0,50 × média) NÃO travam a decisão - são só referências visuais, sempre marcadas na régua
   (a escala da barra estica além da mínima/máxima do período quando precisa, pra caber até o limite de 5 anos,
   que costuma ficar abaixo da mínima de 52 semanas) - a mínima/máxima mostrada nas bordas da régua é sempre um

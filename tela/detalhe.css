@@ -206,7 +206,6 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .modos { display: flex; gap: 10px; width: 100%; }
 .modos button { flex: 1; padding: 7px 10px; border-radius: 9px; font-size: 12px; font-weight: 600; letter-spacing: .04em; color: var(--suave); background: var(--card); border: 1px solid var(--borda); }
 .modos button[aria-pressed="true"] { background: var(--claro); color: var(--tinta); font-weight: 700; border-color: var(--claro); }
-.modo-texto { color: var(--suave); font-size: 12.5px; line-height: 1.45; margin: 8px 0 12px; }
 .fonte-rodape { color: var(--suave); font-size: 12px; text-align: center; margin: 28px 0 0; }
 .duas-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .duas-col .card { min-width: 0; }
@@ -216,7 +215,6 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .modo-linha { margin-bottom: 0; }
 #grafico .grafico { margin-top: 6px; }
 #decisao { margin-top: 14px; }
-.decisao .modo-texto { margin: 0 0 12px; padding-bottom: 12px; border-bottom: 1px solid var(--borda); }
 .escala-t { position: relative; height: 16px; color: var(--suave); font-size: 11px; margin: 0 6px; }
 .escala-t span { position: absolute; top: 0; white-space: nowrap; }
 .fut { padding: 10px 0; border-bottom: 1px solid #26314766; }

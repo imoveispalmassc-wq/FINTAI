@@ -88,42 +88,25 @@ function montar(root, d) {
   try { modo = sessionStorage.getItem('fintai-modo') || 'graham'; } catch (e) { /* sem armazenamento */ }
   if (!['graham', 'lynch', 'simons'].includes(modo)) modo = 'graham';
   let aoMudarModo = () => {};
-  const TEXTO_MODO = {
-    graham: 'Modo longo prazo. Para segurar por anos. Pode demorar anos até comprar.',
-    lynch: 'Modo longo prazo. Para quem entende a empresa e o crescimento. Não é para movimento curto.',
-    simons: 'Modo movimento curto: primeiro a média de 200 dias, depois a oportunidade, por último os dias de queda para escalonar a entrada. Não é para segurar anos.',
-  };
-  // selo do modo Graham: vem do teste real das zonas em 5 anos
-  const bt5 = d.backtest['5a'];
-  const seloGraham = !bt5 ? ['sem', 'SEM TESTE - Histórico curto para 5 anos']
-    : !bt5.oportunidade.vezes ? ['sem', 'SEM CASOS - Preço não esteve na Zona de Oportunidade em 5 anos']
-    : bt5.compraValidada ? ['ok', 'VALIDADO - Ganhou do buy-and-hold em 5 anos']
-    : bt5.oportunidade.retorno < bt5.referencia.retorno ? ['nao', 'INVALIDADO - Perdeu pro buy-and-hold em 5 anos']
-    : ['nao', 'INVALIDADO - Não ganhou do buy-and-hold em 5 anos'];
 
   function renderDecisao() {
     const el = $('decisao');
-    let rotulo, classe = '', texto, pilula = '', selo = null, alerta = '', extra = '';
+    let rotulo, classe = '', texto, pilula = '', extra = '';
     if (modo === 'graham') {
       const C = d.conservadorFaixa;
       if (C) {
         // Faixa de preço por valuation (âncora = preço médio de 1 ano), não a faixa histórica
         // de 52 semanas: nunca tem teste histórico, por isso sempre "SEM TESTE".
         const e = C.decisao; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
-        selo = ['sem', 'SEM TESTE - Preço teto por valuation (preço médio de 1 ano), sem teste histórico'];
         classe = e.codigo === 'COMPRAR' ? 'COMPRAR' : e.codigo === 'CARO' ? 'CARO' : '';
-        alerta = e.alerta || '';
       } else {
         const e = fx.decisao; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
-        selo = fx.testada ? seloGraham : ['sem', `SEM TESTE - Zonas de ${fx.curto} não têm teste histórico`];
         classe = e.codigo === 'COMPRAR' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
-        alerta = [e.alerta, 'Sem 1 ano de histórico de preço para o valuation: usando a faixa de preço histórica de 52 semanas como alternativa.'].filter(Boolean).join(' ');
       }
     } else if (modo === 'lynch') {
       // Lynch só pela MM200 (ignora a faixa 30/70): oportunidade de -10% a +5%, neutro até +15%, caro acima
       const LP = d.lynch.preco, e = LP || fx.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
       classe = e.codigo === 'COMPRAR' ? (LP || e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
-      alerta = LP ? `Preço ${sinal(LP.dist, 1)} da média de 200 dias (${din(LP.mm200)}). Oportunidade de ${din(LP.bemAbaixoAte)} a ${din(LP.oportunidadeAte)} (MM200 −10% a +5%), neutro até ${din(LP.caroAcima)}, caro acima.${LP.zona === 'Bem abaixo da MM200' ? ' Hoje está bem abaixo da MM200 (mais de 10%).' : ''}` : (e.alerta || '');
       const zona = LP && LP.zona === 'Bem abaixo da MM200' ? 'faixa Bem abaixo da MM200' : { COMPRAR: 'Zona de Oportunidade', AGUARDAR: 'Zona Neutra', CARO: 'Zona Cara' }[e.codigo];
       const conclusao = v.cor === 'verde'
         ? (e.codigo === 'COMPRAR' ? 'Crescimento aprovado e o preço está na Zona de Oportunidade.'
@@ -144,20 +127,16 @@ function montar(root, d) {
       texto = `1. ${mmTxt} 2. ${sm.classe === 'OPORTUNIDADE' ? 'Oportunidade' : sm.classe === 'CARO' ? 'Caro' : 'Neutro'} (faixa de 52 semanas: ${(sm.zona52 || '').toLowerCase()}). 3. ${diasTxt}: ${sm.entrada}. ${sm.entradaDetalhe}.`
         + (hA && hA.vezes && sm.classe === 'OPORTUNIDADE' ? ` Histórico da ação: subiu no dia seguinte em ${f(hA.pct, 0)}% de ${hA.vezes} ${hA.vezes === 1 ? 'vez' : 'vezes'}${hA.vezes < 20 ? ' (poucos casos)' : ''}.` : '')
         + ` Ponto de oportunidade em ${din(sm.oportunidadeAte)}.`;
-      selo = ['sem', sm.selo];
     }
     const nome = document.createElement('div'); nome.className = 'razao'; nome.textContent = `${d.razao} · ${d.ticker}`;
     el.innerHTML = `<div class="decisao">
-      <div class="modo-texto">${TEXTO_MODO[modo]}</div>
-      <div class="meta">Último pregão ${d.data} · ${d.codMoeda} · ${d.fonte}</div>
+      <div class="meta">Último pregão ${d.data} · ${d.codMoeda}</div>
       <div class="linha"><span class="preco num">${din(d.preco)}</span>
         ${tem(d.varDia) ? `<span class="var num" style="color:${cor(d.varDia)}">${seta(d.varDia)} ${sinal(d.varDia)} no dia</span>` : ''}</div>
       ${d.after ? `<div class="after num" style="color:${cor(d.after.variacao)}">After Market: ${din(d.after.preco)} ${seta(d.after.variacao)} ${sinal(d.after.variacao)}${d.after.hora ? ` | ${d.after.hora}` : ''}</div>` : ''}
       <div><span class="badge ${classe}" id="d-rotulo"></span></div>
       <div class="ponto" id="d-texto"></div>
       ${pilula ? `<span class="pilula">${pilula}</span>` : ''}
-      ${alerta ? `<div class="nota" style="margin-top:10px;color:var(--ambar)">${alerta}</div>` : ''}
-      ${selo ? `<div style="margin-top:12px"><span class="selo ${selo[0]}">${selo[1]}</span>${modo === 'simons' ? ex('simons') : ''}</div>` : ''}
       ${extra}
     </div>`;
     el.firstElementChild.insertBefore(nome, el.firstElementChild.children[1]);
