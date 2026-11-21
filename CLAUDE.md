@@ -117,7 +117,15 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Streamlit Cloud, ticker não encontrado, ou sem o dado), cai de volta no Yahoo, como antes. Não tem limite de
   anos como o Yahoo (só ~4): usa todo o histórico de 10-K que a SEC tiver, o que ajuda a Média de 5/10 anos e a
   Faixa a aparecerem com mais frequência. Precisa do mesmo e-mail de contato que o robô usa (SEC_CONTACT_EMAIL),
-  só que como Secret do Streamlit Cloud - são dois lugares diferentes, cada um com o seu Secret.
+  só que como Secret do Streamlit Cloud - são dois lugares diferentes, cada um com o seu Secret. `app.lpa_anual_eua`
+  devolve a lista e o motivo (diagnóstico: "ticker da B3", "SEC sem e-mail configurado...", "SEC não encontrou
+  esse ticker", "SEC sem o dado...", "SEC falhou (...)" ou "SEC OK"); quando a SEC não é usada (ticker dos EUA),
+  o motivo aparece na nota do card "Lucro por ação" (ex.: "Yahoo Finance (SEC não usada: SEC sem e-mail
+  configurado...)"), pra diagnosticar na própria tela sem precisar olhar o código ou os logs.
+  `tela/dados.py._pontos_anuais` não corta mais em 4 anos (cortava sempre, pensando só no limite do Yahoo - com
+  a SEC disponível, isso travava "Média 5/10 anos" em "Sem dado" mesmo com histórico de sobra); o corte de ~4
+  anos continua só onde é pra valer (crescimento de lucro/receita do Lynch, que quer a tendência recente, não
+  um CAGR de décadas).
 - Guidance TRIMESTRAL (EUA, card "Guidance da empresa para o próximo trimestre"): empresas como a Micron dão
   guidance a cada earnings release para o PRÓXIMO TRIMESTRE (receita, margem bruta, LPA), não para o ano fiscal
   inteiro - diferente do guidance ANUAL (lpa_min/lpa_max, "Previsão atual"/P/L, selo GUIDANCE OFICIAL) descrito

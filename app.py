@@ -282,31 +282,33 @@ def _tickers_sec_cache(cab: dict) -> dict:      # qualquer ticker, baixa 1x por 
 
 
 @st.cache_data(ttl=86400, show_spinner=False)   # 10-K/10-Q não mudam mais que 1x por trimestre
-def lpa_anual_eua(ticker: str) -> list[dict]:
+def lpa_anual_eua(ticker: str) -> tuple[list[dict], str]:
     """Histórico anual de LPA diluído (GAAP), direto da SEC (10-K) — qualquer ticker dos EUA, sem
     precisar estar cadastrado em utils/guidance_tickers.json. Substitui o income_stmt do Yahoo, que
     costuma trazer só ~4 anos; a SEC é a fonte primária e tem o histórico completo de 10-K. Lista
     vazia: ticker da B3, sem o Secret SEC_CONTACT_EMAIL no Streamlit Cloud, ou a SEC sem o dado —
-    nesses casos a tela cai de volta no Yahoo, como antes (nunca trava, nunca inventa)."""
+    nesses casos a tela cai de volta no Yahoo, como antes (nunca trava, nunca inventa). O segundo
+    valor é o motivo (diagnóstico), pra mostrar na tela por que caiu no Yahoo em vez da SEC."""
     if ticker.endswith(".SA"):
-        return []
+        return [], "ticker da B3"
     email = (st.secrets.get("SEC_CONTACT_EMAIL") or "").strip() if hasattr(st, "secrets") else ""
     if not email or "@" not in email:
-        return []
+        return [], "SEC sem e-mail configurado (Secret SEC_CONTACT_EMAIL do app no Streamlit Cloud)"
     import utils.fetch_guidance as fg
 
     cab = {"User-Agent": f"fintai/1.0 (contato: {email})", "Accept-Encoding": "gzip, deflate"}
     try:
         mapa = _tickers_sec_cache(cab)
         if not mapa:
-            return []
+            return [], "SEC sem a lista de tickers (tente de novo mais tarde)"
         empresa = fg.cik_do_ticker(ticker, cab, mapa=mapa)
         if not empresa:
-            return []
+            return [], "SEC não encontrou esse ticker"
         fatos = fg._get_sec(f"{fg.SEC_DADOS}/api/xbrl/companyfacts/CIK{empresa[0]}.json", cab).json()
-        return fg.lpa_anual_sec(fatos)
-    except Exception:
-        return []
+        anos = fg.lpa_anual_sec(fatos)
+        return anos, ("SEC OK" if anos else "SEC sem o dado de lucro por ação pra esse ticker")
+    except Exception as e:
+        return [], f"SEC falhou ({e})"
 
 
 @st.cache_data(ttl=86400, show_spinner=False)   # earnings release não muda mais que 1x por trimestre
@@ -352,12 +354,16 @@ def outlook_trimestral_eua(ticker: str, max_docs: int = 3) -> dict | None:
 def pacote(ticker: str, versao: str = "") -> dict:
     """Tudo o que a tela de um ticker precisa, calculado uma única vez."""
     d = baixar(ticker)
-    sec_anual = lpa_anual_eua(ticker)
+    sec_anual, sec_motivo = lpa_anual_eua(ticker)
     if sec_anual:
         # troca a série do Yahoo pela da SEC: todo mundo que usa d["lpa_anual"] (Graham, médias,
         # Faixa do Conservador, "cresceu de X para Y") passa a usar o dado verificado, sem misturar
         d = {**d, "lpa_anual": pd.Series({pd.to_datetime(x["fim"], format="%d/%m/%Y"): x["lpa"] for x in sec_anual}),
             "lpa_anual_fonte": "SEC 10-K, lucro por ação diluído (GAAP)"}
+    elif not ticker.endswith(".SA"):
+        # SEC não foi usada pra esse ticker dos EUA: mostra o motivo na tela, pra diagnosticar sem
+        # precisar olhar o código (ex.: Secret SEC_CONTACT_EMAIL do app ainda não configurado)
+        d = {**d, "lpa_anual_sec_motivo": sec_motivo}
     hist = d["hist"]
     proventos = hist["Dividends"][hist["Dividends"] > 0] if "Dividends" in hist else None
     r = calcular(hist, proventos)

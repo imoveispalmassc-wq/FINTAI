@@ -246,11 +246,14 @@ def fundamentos(d: dict, r: Resultado, ticker: str | None = None) -> dict:
 
 
 def _pontos_anuais(serie) -> list[tuple[int, float]]:
-    """Série anual do Yahoo -> [(ano, valor)], do mais antigo ao mais novo (até 4 anos)."""
+    """Série anual -> [(ano, valor)], do mais antigo ao mais novo, sem cortar: o Yahoo já costuma
+    trazer só ~4 anos por conta própria, mas a SEC (LPA anual dos EUA, ver app.lpa_anual_eua) pode
+    trazer bem mais - cortar aqui também travaria "Média 5/10 anos" em "Sem dado" mesmo com a SEC
+    tendo o histórico completo."""
     if serie is None or not len(serie):
         return []
     s = serie.dropna().sort_index()
-    return [(int(ts.year), float(v)) for ts, v in s.items()][-4:]
+    return [(int(ts.year), float(v)) for ts, v in s.items()]
 
 
 def _media_n_anos(pontos: list[tuple[int, float]], n: int) -> float | None:
@@ -276,7 +279,9 @@ def _estimativa(df, linhas, coluna):
 def modo_lynch(d: dict, pl, regra: dict) -> dict:
     """Passado (demonstrativos anuais), futuro (estimativas de analistas no Yahoo) e PEG do futuro."""
     info = d["info"]
-    lpas, receitas = _pontos_anuais(d.get("lpa_anual")), _pontos_anuais(d.get("receita_anual"))
+    # crescimento recente (não o histórico todo, que a SEC pode estender bem além de ~4 anos -
+    # mudaria o sentido do indicador, de "crescimento recente" pra um CAGR de décadas)
+    lpas, receitas = _pontos_anuais(d.get("lpa_anual"))[-4:], _pontos_anuais(d.get("receita_anual"))[-4:]
     lucro_pass, anos_lucro = (None, 0) if regra["status"] == "recorrente" else \
         crescimento_anual(lpas, excluir_negativos=regra["status"] == "excluido")
     rec_pass, anos_rec = crescimento_anual(receitas)
@@ -429,8 +434,9 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
     regra = regra_prejuizo([v for _, v in lpa_anos])
     lpa_media_3a = regra["media"] if regra["status"] in ("ok", "excluido") else None
     graham = graham_duas_versoes(f["lpa"], lpa_media_3a, f["vpa"])
-    # médias de 5 e 10 anos: mesma fonte anual do Yahoo, sem estender com dado trimestral; "Sem dado"
-    # quando o Yahoo não tem os anos pedidos (ele costuma trazer só ~4 anos de demonstrativo anual)
+    # médias de 5 e 10 anos: mesma fonte anual (Yahoo, ou SEC quando disponível - ver
+    # app.lpa_anual_eua), sem estender com dado trimestral; "Sem dado" quando a fonte não tem os
+    # anos pedidos (o Yahoo sozinho costuma trazer só ~4 anos; a SEC, bem mais)
     lpa_media_5a, lpa_media_10a = _media_n_anos(pontos_lpa, 5), _media_n_anos(pontos_lpa, 10)
     pl_conservador = r.preco_atual / lpa_media_10a if lpa_media_10a and lpa_media_10a > 0 and r.preco_atual else None
     teto_conservador = lpa_media_10a * 15 if lpa_media_10a and lpa_media_10a > 0 else None
@@ -511,6 +517,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "mm200": _n(r.mm200, 4), "tendencia": direcao, "forca": _n(r.ifr, 0),
         "lpaAnos": [{"ano": a, "lpa": _n(v, 4)} for a, v in lpa_anos],
         "lpaAnualFonte": d.get("lpa_anual_fonte") or "",
+        "lpaAnualSecMotivo": d.get("lpa_anual_sec_motivo") or "",
         "outlookTrimestral": outlook_trimestral_eua(ticker),
         "regra": {"status": regra["status"], "media": _n(regra["media"], 4), "mensagem": regra["mensagem"]},
         "lpaMedia5a": _n(lpa_media_5a, 4), "lpaMedia10a": _n(lpa_media_10a, 4),
