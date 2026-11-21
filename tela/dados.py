@@ -99,6 +99,33 @@ ARQ_CONTABIL_SEC = Path(__file__).resolve().parent.parent / "utils" / "contabil_
 ARQ_OUTLOOK_TRI = Path(__file__).resolve().parent.parent / "utils" / "guidance_trimestral_eua.json"
 
 
+def proximo_anuncio_info(info: dict) -> str | None:
+    """Próxima data de divulgação de resultados (Yahoo Finance), a partir do "info" que o app já
+    busca pra qualquer ticker (campo earningsTimestamp/earningsTimestampStart, em epoch UTC) - sem
+    nenhuma chamada extra de rede, por isso mais confiável do que buscar à parte (ex.: calendário
+    do yfinance, que pode falhar sozinho por instabilidade da própria Yahoo). None quando o Yahoo
+    não tiver esse campo pro ticker (nem toda empresa anuncia a data com antecedência)."""
+    import datetime as dt
+
+    ts = info.get("earningsTimestampStart") or info.get("earningsTimestamp")
+    if not ts:
+        return None
+    try:
+        return f"{dt.datetime.fromtimestamp(ts, tz=dt.timezone.utc):%d/%m/%Y}"
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def _com_proximo_anuncio(ot: dict | None, info: dict) -> dict | None:
+    """Preenche/atualiza "proximoAnuncio" no outlook trimestral com o do "info" (sem rede extra,
+    ver proximo_anuncio_info), que é mais confiável do que o gravado pelo robô ou buscado ao vivo
+    (ambos dependem de uma chamada à parte que pode falhar). Sem nada no "info", mantém o que já
+    veio (robô/ao vivo) como alternativa. ot=None (sem guidance trimestral achado) não muda nada."""
+    if ot is None:
+        return None
+    return {**ot, "proximoAnuncio": proximo_anuncio_info(info) or ot.get("proximoAnuncio") or ""}
+
+
 def outlook_trimestral_eua(ticker: str) -> dict | None:
     """Guidance TRIMESTRAL (receita, margem, LPA do próximo trimestre) gravado pelo robô, direto do
     earnings release na SEC - só informativo (não participa do P/L nem do selo GUIDANCE OFICIAL,
@@ -521,7 +548,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
         "lpaAnos": [{"ano": a, "lpa": _n(v, 4)} for a, v in lpa_anos],
         "lpaAnualFonte": d.get("lpa_anual_fonte") or "",
         "lpaAnualSecMotivo": d.get("lpa_anual_sec_motivo") or "",
-        "outlookTrimestral": outlook_trimestral_eua(ticker),
+        "outlookTrimestral": _com_proximo_anuncio(outlook_trimestral_eua(ticker), info),
         "regra": {"status": regra["status"], "media": _n(regra["media"], 4), "mensagem": regra["mensagem"]},
         "lpaMedia5a": _n(lpa_media_5a, 4), "lpaMedia10a": _n(lpa_media_10a, 4),
         "plConservador": _n(pl_conservador, 2), "tetoConservador": _n(teto_conservador, 2),

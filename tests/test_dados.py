@@ -385,6 +385,25 @@ def test_outlook_trimestral_eua_le_do_arquivo_gravado_pelo_robo(tmp_path, monkey
     assert r["periodo"] == "1T FY2027" and r["lpaMin"] == 36.84 and r["lpaMax"] == 38.84
 
 
+def test_proximo_anuncio_info_le_do_info_ja_buscado_sem_rede_extra():
+    from tela.dados import proximo_anuncio_info
+
+    assert proximo_anuncio_info({"earningsTimestampStart": 1801056600}) == "27/01/2027"
+    assert proximo_anuncio_info({"earningsTimestamp": 1801056600}) == "27/01/2027"
+    assert proximo_anuncio_info({}) is None
+
+
+def test_com_proximo_anuncio_prefere_info_mas_mantem_alternativa():
+    from tela.dados import _com_proximo_anuncio
+
+    assert _com_proximo_anuncio(None, {"earningsTimestampStart": 1801056600}) is None
+    # info tem a data: ganha do que veio do robô/ao vivo
+    ot = {"periodo": "4T FY2026", "proximoAnuncio": "17/12/2026"}
+    assert _com_proximo_anuncio(ot, {"earningsTimestampStart": 1801056600})["proximoAnuncio"] == "27/01/2027"
+    # info sem a data: mantém a alternativa (robô/ao vivo) em vez de apagar
+    assert _com_proximo_anuncio(ot, {})["proximoAnuncio"] == "17/12/2026"
+
+
 def test_outlook_trimestral_eua_traz_atualizacao_e_proximo_anuncio(tmp_path, monkeypatch):
     import json
 

@@ -1068,6 +1068,24 @@ function montar(root, d) {
   /* ---------------- bloco de cada modo */
   function renderBloco() {
     const el = $('modo-bloco');
+    // Guidance trimestral (informativo, independente do modo de valuation) fica anexado no fim do
+    // bloco de cada modo, logo abaixo de "Lucro por ação"/"Crescimento"/"Movimento curto".
+    const OT = d.outlookTrimestral;
+    const cambioOT = OT && OT.moedaOriginal === 'EUR' && tem(OT.taxaCambio)
+      ? ` Convertido de euro pelo câmbio EUR→USD de ${OT.taxaCambioData} (Yahoo Finance): ${f(OT.taxaCambio, 4)}.` : '';
+    const proximoOT = OT && OT.proximoAnuncio ? `<div class="nota" style="margin-top:8px">Próximo anúncio previsto: <b>${OT.proximoAnuncio}</b> (Yahoo Finance)</div>` : '';
+    const outlookHtml = OT ? `<div class="card" style="margin-top:12px">
+        <span class="rot">Guidance da empresa para o próximo trimestre</span>
+        ${bolaAtualizacao(OT.atualizacao)}
+        <div class="nota" style="margin-top:4px">${OT.periodo} · informativo: não entra no P/L nem na Previsão atual (que é guidance ANUAL)</div>
+        <div class="lista-v num" style="margin-top:8px">
+          <div>Receita<b>${tem(OT.receitaMin) && tem(OT.receitaMax) ? `${din(OT.receitaMin / 1e9, 1)} a ${din(OT.receitaMax / 1e9, 1)} bi` : 'Sem dado'}</b></div>
+          <div>Margem bruta<b>${tem(OT.margemBruta) ? `${f(OT.margemBruta, 1)}%` : 'Sem dado'}</b></div>
+          <div>LPA projetado<b>${tem(OT.lpaMin) && tem(OT.lpaMax) ? `${din(OT.lpaMin)} a ${din(OT.lpaMax)}` : 'Sem dado'}</b></div>
+        </div>
+        <div class="nota" style="margin-top:8px">Fonte: ${OT.fonte ? `<a class="link" href="" target="_blank" rel="noopener" id="ot-fonte"></a>` : '<span id="ot-fonte"></span>'} (${OT.data})${cambioOT}</div>
+        ${proximoOT}
+      </div>` : '';
     if (modo === 'graham') {
       const rg = d.regra, anos = d.lpaAnos;
       const linhas = anos.map(a => `<div>${a.ano}<b style="color:${a.lpa < 0 ? 'var(--vermelho)' : 'inherit'}">${din(a.lpa)}</b></div>`).join('');
@@ -1100,22 +1118,6 @@ function montar(root, d) {
         + `<div>Média 10 anos<b>${tem(d.lpaMedia10a) ? din(d.lpaMedia10a) : 'Sem dado'}</b></div>`
         + `<div>P/L Conservador<b>${tem(d.plConservador) ? f(d.plConservador) : 'Sem dado'}</b></div>`
         + `<div>Preço teto conservador<b>${tem(d.tetoConservador) ? din(d.tetoConservador) : 'Sem dado'}</b></div>`;
-      const OT = d.outlookTrimestral;
-      const cambioOT = OT && OT.moedaOriginal === 'EUR' && tem(OT.taxaCambio)
-        ? ` Convertido de euro pelo câmbio EUR→USD de ${OT.taxaCambioData} (Yahoo Finance): ${f(OT.taxaCambio, 4)}.` : '';
-      const proximoOT = OT && OT.proximoAnuncio ? `<div class="nota" style="margin-top:8px">Próximo anúncio previsto: <b>${OT.proximoAnuncio}</b> (Yahoo Finance)</div>` : '';
-      const outlookHtml = OT ? `<div class="card" style="margin-top:12px">
-          <span class="rot">Guidance da empresa para o próximo trimestre</span>
-          ${bolaAtualizacao(OT.atualizacao)}
-          <div class="nota" style="margin-top:4px">${OT.periodo} · informativo: não entra no P/L nem na Previsão atual acima (que é guidance ANUAL)</div>
-          <div class="lista-v num" style="margin-top:8px">
-            <div>Receita<b>${tem(OT.receitaMin) && tem(OT.receitaMax) ? `${din(OT.receitaMin / 1e9, 1)} a ${din(OT.receitaMax / 1e9, 1)} bi` : 'Sem dado'}</b></div>
-            <div>Margem bruta<b>${tem(OT.margemBruta) ? `${f(OT.margemBruta, 1)}%` : 'Sem dado'}</b></div>
-            <div>LPA projetado<b>${tem(OT.lpaMin) && tem(OT.lpaMax) ? `${din(OT.lpaMin)} a ${din(OT.lpaMax)}` : 'Sem dado'}</b></div>
-          </div>
-          <div class="nota" style="margin-top:8px">Fonte: ${OT.fonte ? `<a class="link" href="" target="_blank" rel="noopener" id="ot-fonte"></a>` : '<span id="ot-fonte"></span>'} (${OT.data})${cambioOT}</div>
-          ${proximoOT}
-        </div>` : '';
       const avisoAnualHtml = d.avisoGuidanceAnual ? `<div class="aviso" style="margin-bottom:10px">${d.avisoGuidanceAnual}</div>` : '';
       el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>
         ${avisoAnualHtml}
@@ -1125,7 +1127,6 @@ function montar(root, d) {
           <div class="lista-v num" style="margin-top:10px">${linhasLongas}</div>
           <div class="nota" id="g-nota"></div></div>${outlookHtml}`;
       if (G) { const fz = el.querySelector('#g-fonte'); if (fz) fz.textContent = G.fonte; }
-      if (OT) { const oz = el.querySelector('#ot-fonte'); if (oz) { oz.textContent = OT.fonte; oz.href = OT.url || ''; } }
       el.querySelector('#g-nota').textContent = `${nota}${anoProj ? ` ${tem(proj) ? `Projeção ${anoProj}: ${consenso}${tem(varProj) ? `; ${sinal(varProj, 0)} sobre ${anos[anos.length - 1].ano}${G && G.porLpa ? ' (o guidance é LPA ajustado; o ano anterior é o LPA contábil do Yahoo, bases diferentes)' : ''}` : ''}.${divG}${baseG} Não entra na média.${G ? ' O guidance oficial substitui o consenso dos analistas do Yahoo.' : ''}` : `Sem estimativa no Yahoo para ${anoProj}.`}` : ''}`;
     } else if (modo === 'lynch') {
       const L = d.lynch, v = L.veredito, F = L.futuro, pc = x => tem(x) ? `${sinal(x, 1)} ao ano` : 'Sem dado';
@@ -1167,7 +1168,7 @@ function montar(root, d) {
           <div class="nota num">${tem(L.pegFuturo) ? `PEG = P/L ${f(d.pl)} / Crescimento ${f(F.lucroLongo, 1)}% = ${f(L.pegFuturo)}` : 'PEG do Futuro = P/L dividido pelo Crescimento Longo Prazo do Lucro'}</div>
           ${v.motivo ? `<div class="destaque">${v.motivo}</div>` : ''}
         </div>
-        <div class="aviso" style="margin-top:10px">PEG do futuro usa estimativa. Se a empresa não entregar esse crescimento, a tese cai.</div>`;
+        <div class="aviso" style="margin-top:10px">PEG do futuro usa estimativa. Se a empresa não entregar esse crescimento, a tese cai.</div>${outlookHtml}`;
     } else {
       const sm = d.simons, mx = sm.maximo || 5, bolas = Array.from({ length: mx }, (_, k) => `<i class="${k < sm.nivel ? 'on' : ''}"></i>`).join('');
       const dias = `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'}`;
@@ -1249,8 +1250,9 @@ function montar(root, d) {
         <div class="card" style="margin-top:8px"><span class="rot">Régua fixa (igual para qualquer ação)</span>
           ${cartaoRegua}</div>
         <div style="margin-top:10px"><span class="selo sem">${sm.selo}</span></div>
-        <p class="nota" style="margin:10px 2px 0">Os dias contam desde o maior fechamento dos últimos ${sm.pregoes} pregões, desde que o último pregão tenha sido de queda. Uma alta no meio não quebra a contagem enquanto o preço não passar do topo. O histórico usa a mesma regra nos últimos 5 anos da ação; cada queda conta uma vez em cada linha (a de 10 ou mais só no dia em que chega a 10). Com menos de 20 casos, a porcentagem é pouco confiável. A régua fixa é igual para qualquer ação e ainda não foi testada.</p>`;
+        <p class="nota" style="margin:10px 2px 0">Os dias contam desde o maior fechamento dos últimos ${sm.pregoes} pregões, desde que o último pregão tenha sido de queda. Uma alta no meio não quebra a contagem enquanto o preço não passar do topo. O histórico usa a mesma regra nos últimos 5 anos da ação; cada queda conta uma vez em cada linha (a de 10 ou mais só no dia em que chega a 10). Com menos de 20 casos, a porcentagem é pouco confiável. A régua fixa é igual para qualquer ação e ainda não foi testada.</p>${outlookHtml}`;
     }
+    if (OT) { const oz = el.querySelector('#ot-fonte'); if (oz) { oz.textContent = OT.fonte; oz.href = OT.url || ''; } }
   }
 
   const SECOES = { faixa: ['graham'], tendencia: ['graham', 'lynch', 'simons'], minmax: ['graham', 'simons'],

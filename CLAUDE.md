@@ -171,12 +171,23 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   LPA × ações do Yahoo ÷ receita) mesmo quando dá para estimar: o LPA de guidance costuma ser non-GAAP e as
   ações do Yahoo podem não bater com a base da empresa - mostra só o que a empresa realmente divulgou. Grava
   em utils/guidance_trimestral_eua.json; uma tentativa sem sucesso nunca apaga um valor bom já gravado.
-  O card mostra a mesma bolinha de atualização do card de P/L (🟢 menos de 2h, 🟡 menos de 24h, 🔴 24h ou
-  mais), a partir do `atualizado_em` gravado pelo robô (ou, na busca ao vivo, do momento da própria busca).
-  Mostra também "Próximo anúncio previsto" quando o Yahoo Finance tiver essa data (campo "Earnings Date" do
-  calendário do ativo, `utils.fetch_guidance.proximo_anuncio_eua`) - não vem do documento da SEC (releases de
-  resultado não costumam anunciar a data do PRÓXIMO earnings call) e é só informativo; sem a data no Yahoo,
-  o card não mostra essa linha (nunca inventa).
+  O card fica no fim do bloco de cada modo (`tela/detalhe.js`, `renderBloco`/seção `modo-bloco`) - depois de
+  "Lucro por ação" no Conservador, de "Crescimento" no Lynch, de "Movimento curto" no Simons - e aparece nos
+  3 modos (é informativo, não depende do método de valuation). A seção `modo-bloco` foi reposicionada no HTML
+  pra ficar logo abaixo de "Mínimo, máximo e ponto médio" e acima de "Fundamentos" (antes era a primeira seção
+  da tela); como ela não é escondida por modo (diferente de `minmax`, visível só no Conservador/Simons, ou
+  `fundamentos`, só no Conservador/Lynch), o guidance trimestral sempre aparece nessa posição relativa, mesmo
+  quando "Mínimo, máximo" ou "Fundamentos" ficam escondidos no modo ativo.
+  Mostra a mesma bolinha de atualização do card de P/L (🟢 menos de 2h, 🟡 menos de 24h, 🔴 24h ou mais), a
+  partir do `atualizado_em` gravado pelo robô (ou, na busca ao vivo, do momento da própria busca).
+  Mostra também "Próximo anúncio previsto" quando o Yahoo tiver essa data. Fonte principal:
+  `tela/dados.proximo_anuncio_info`, que lê o campo earningsTimestamp/earningsTimestampStart do próprio "info"
+  que o app já busca pra qualquer ticker (sem nenhuma chamada de rede extra - mais confiável do que buscar à
+  parte: o calendário do yfinance, por exemplo, pode falhar sozinho por instabilidade da Yahoo, mesmo quando o
+  "info" tem o dado). `utils.fetch_guidance.proximo_anuncio_eua` (calendário do yfinance) é só o que o robô usa
+  (ele não busca "info"/cotação, só documentos da SEC) e serve de alternativa quando o "info" não tiver a data.
+  Não vem do documento da SEC (releases de resultado não costumam anunciar a data do PRÓXIMO earnings call) e
+  é só informativo; sem a data em nenhuma das duas fontes, o card não mostra essa linha (nunca inventa).
   Moeda: empresa estrangeira em 6-K que divulga em outra moeda (ex. ASML em euro, símbolo "€" antes do número)
   tem receita/LPA convertidos pra dólar antes de gravar/mostrar (`converter_outlook_para_usd`), pelo câmbio do
   Yahoo Finance (ticker EURUSD=X, `taxa_cambio_historica_eur_usd`) NA DATA DO ANÚNCIO/RELEASE (não o de hoje,

@@ -395,7 +395,7 @@ def pacote(ticker: str, versao: str = "") -> dict:
                 "moedaOriginal": ao_vivo.get("moeda_original") or "", "taxaCambio": ao_vivo.get("taxa_cambio"),
                 "taxaCambioData": ao_vivo.get("taxa_cambio_data") or "",
                 "atualizacao": tela.dados.atualizacao_contabil(ao_vivo),
-                "proximoAnuncio": ao_vivo.get("proximo_anuncio") or ""}}
+                "proximoAnuncio": tela.dados.proximo_anuncio_info(d["info"]) or ao_vivo.get("proximo_anuncio") or ""}}
     return dados
 
 
