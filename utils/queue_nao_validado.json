@@ -11,8 +11,16 @@
     "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
     "data": "21/11/2026"
   },
+  "BJ": {
+    "motivo": "TRAVADO - Número em 2 lugares: a faixa aparece 1 vez(es) no documento; precisa de 2 (texto + tabela); Variação até 20%: sem guidance anterior no app para comparar",
+    "data": "21/11/2026"
+  },
   "CSMG3": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
+    "data": "21/11/2026"
+  },
+  "ESE": {
+    "motivo": "TRAVADO - Número em 2 lugares: a faixa aparece 1 vez(es) no documento; precisa de 2 (texto + tabela); Variação até 20%: sem guidance anterior no app para comparar",
     "data": "21/11/2026"
   },
   "GAP": {
