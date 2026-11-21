@@ -218,8 +218,13 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   da régua (só os cartões Zona de oportunidade/neutra/cara acima já explicam os cortes). O
   PONTO DE ENTRADA (o texto "Ponto de oportunidade em") é sempre o alvo fixo de 30% sobre a âncora de 1 ano -
   não escala para os limites de 3/5 anos, que são só
-  referência, nunca o ponto de entrada em si. Mesma âncora no gráfico pontilhado do modo Conservador (repete o
-  oportunidadeAte fixo de 1 ano, não os limites de 3/5 anos).
+  referência, nunca o ponto de entrada em si. O gráfico pontilhado do modo Conservador repete as mesmas 3 faixas
+  de verde da barra (oportunidade/limite de 3 anos/limite de 5 anos, cada uma com sua linha e cor), além da
+  mm200 - a escala do eixo Y também estica pra caber o limite de 5 anos quando ele fica abaixo da mínima do
+  período mostrado, senão as linhas ficariam espremidas perto do fundo do gráfico (mesmo problema e mesma
+  solução da régua). Sem a antiga linha "Média dos métodos ... não validado" (média do Conservador/P/L
+  histórico/Bazin): tirada do gráfico por não ser validada e confundir com os cortes reais do valuation; os 3
+  métodos continuam no card "Preço justo", sem relação com a Faixa de preço.
   Mais reativo a mudança de cenário do que usar um LPA médio de vários anos (que reage devagar) e
   menos sujeito a 1 ano isolado distorcer tudo (diferente de olhar só o LPA do último ano). O card de Lucro por
   ação continua exigindo exatamente 10 anos ("Sem dado" sem isso) para "Média 5/10 anos" e o Graham ali, com

@@ -172,9 +172,6 @@ function montar(root, d) {
     let escala = series['1a'] ? '1a' : (ESCALAS.find(([k]) => k !== '10d' && series[k]) || [null])[0];
     if (!escala) { el.innerHTML = `<div class="aviso">${INDISP}</div>`; return; }
     let velas = false, prog = 1, toque = null, toqueY = 0, raf = 0;
-    // média dos valores arredondados que a tela mostra: (452 + 1.661) / 2 = 1.056,5 -> 1.057
-    const justoY = metodosJusto.length >= 2 ? Math.round(metodosJusto.reduce((a, m) => a + Math.round(m[1]), 0) / metodosJusto.length) : null;
-    const justoDivergem = metodosJusto.length >= 2 && metodosJusto[metodosJusto.length - 1][1] / metodosJusto[0][1] > 2;
 
     el.innerHTML = `<div class="grafico" id="gbox">
         <canvas id="gcanvas" role="img" aria-label="Gráfico de preço de ${d.ticker}"></canvas>
@@ -204,7 +201,7 @@ function montar(root, d) {
       const CgR = modo === 'graham' && d.conservadorFaixa;
       const refsS = modo === 'simons' ? [d.simons.mm200, d.simons.oportunidadeAte, d.simons.caraAcima, d.simons.bemAbaixoAte].filter(tem)
         : LPr && escala !== '5a' && escala !== 'max' ? [LPr.mm200, LPr.oportunidadeAte, LPr.caroAcima].filter(tem)
-        : CgR && escala !== '5a' && escala !== 'max' ? [CgR.mm200, CgR.oportunidadeAte, CgR.caroAcima].filter(tem) : [];
+        : CgR && escala !== '5a' && escala !== 'max' ? [CgR.mm200, CgR.oportunidadeAte, CgR.caroAcima, CgR.limite3a, CgR.limite5a].filter(tem) : [];
       const vmin = Math.min(...lo, ...refsS), vmax0 = Math.max(...hi, ...refsS);
       // SIMONS 10D: espaço livre em cima para o % de cada dia de queda
       const vmax = modo === 'simons' && escala === '10d' ? vmax0 + (vmax0 - vmin) * 0.16 : vmax0, folga = (vmax - vmin) * 0.05 || 1;
@@ -221,8 +218,20 @@ function montar(root, d) {
       // MM200: mesma régua da barra, repetida aqui como linha pontilhada - já existia no Lynch,
       // agora também no Conservador (Graham), só que esse é novo (antes só aparecia na barra)
       const mm200Ref = LPg ? LPg.mm200 : Cg ? Cg.mm200 : null;
+      // limites de 3/5 anos (só no Conservador): mesmas 3 faixas de verde da barra, repetidas aqui
+      const lim3aRef = Cg && tem(Cg.limite3a) ? Cg.limite3a : null;
+      const lim5aRef = Cg && tem(Cg.limite5a) ? Cg.limite5a : null;
       ctx.save(); ctx.beginPath(); ctx.rect(x0, yTop - 6, x1 - x0, yPlot - yTop + 6); ctx.clip();
-      ctx.fillStyle = '#2fbf8a1c'; ctx.fillRect(x0, Y(zOport), x1 - x0, LPg ? Y(LPg.bemAbaixoAte) - Y(zOport) : 4000);
+      if (Cg) {
+        // 3 tons de verde dentro da zona de oportunidade, mais forte quanto mais fundo o preço -
+        // mesma lógica e cores da barra (Faixa de preço)
+        const fimClaro = lim3aRef ?? lim5aRef; // onde o tom mais claro termina (próximo limite existente)
+        ctx.fillStyle = '#8fe3c41c'; ctx.fillRect(x0, Y(zOport), x1 - x0, fimClaro ? Y(fimClaro) - Y(zOport) : 4000);
+        if (lim3aRef) { ctx.fillStyle = '#2fbf8a1c'; ctx.fillRect(x0, Y(lim3aRef), x1 - x0, lim5aRef ? Y(lim5aRef) - Y(lim3aRef) : 4000); }
+        if (lim5aRef) { ctx.fillStyle = '#16805c1c'; ctx.fillRect(x0, Y(lim5aRef), x1 - x0, 4000); }
+      } else {
+        ctx.fillStyle = '#2fbf8a1c'; ctx.fillRect(x0, Y(zOport), x1 - x0, LPg ? Y(LPg.bemAbaixoAte) - Y(zOport) : 4000);
+      }
       if (LPg) { ctx.fillStyle = '#5b8def1a'; ctx.fillRect(x0, Y(LPg.bemAbaixoAte), x1 - x0, 4000); }
       ctx.fillStyle = '#f06a6a1a'; ctx.fillRect(x0, Y(zCara) - 4000, x1 - x0, 4000);
       // tracejados das zonas, com o valor de cada limite
@@ -230,19 +239,17 @@ function montar(root, d) {
       tracejado(Y(zOport), '#2fbf8a'); tracejado(Y(zCara), '#8c99b0');
       if (LPg) { tracejado(Y(LPg.bemAbaixoAte), '#7aa2f7'); }
       if (tem(mm200Ref)) { tracejado(Y(mm200Ref), '#f2994a'); }
+      if (lim3aRef) { tracejado(Y(lim3aRef), '#8fe3c4'); }
+      if (lim5aRef) { tracejado(Y(lim5aRef), '#1f9d72'); }
       const rotulos = [
         { y: Y(zOport) - 9, t: `Oportunidade até ${f(zOport)}`, c: '#2fbf8a' },
         { y: Y(zCara) + 9, t: `Neutro até ${f(zCara)}`, c: '#aab4c6' },
         { y: Y(zCara) - 9, t: `Caro acima de ${f(zCara)}`, c: '#f06a6a' },
         ...(LPg ? [{ y: Y(LPg.bemAbaixoAte) + 9, t: `Bem abaixo de ${f(LPg.bemAbaixoAte)}`, c: '#7aa2f7' }] : []),
         ...(tem(mm200Ref) ? [{ y: Y(mm200Ref) - 9, t: `Média 200d ${f(mm200Ref)}`, c: '#f2994a' }] : []),
+        ...(lim3aRef ? [{ y: Y(lim3aRef) - 9, t: `Limite 3 anos ${f(lim3aRef)}`, c: '#8fe3c4' }] : []),
+        ...(lim5aRef ? [{ y: Y(lim5aRef) - 9, t: `Limite 5 anos ${f(lim5aRef)}`, c: '#1f9d72' }] : []),
       ];
-      if (justoY !== null && modo === 'graham') {
-        const yj = Y(justoY);
-        ctx.setLineDash([6, 5]); ctx.strokeStyle = '#f2994a'; ctx.lineWidth = 1.2;
-        ctx.beginPath(); ctx.moveTo(x0, yj); ctx.lineTo(x1, yj); ctx.stroke(); ctx.setLineDash([]);
-        rotulos.push({ y: yj - 9, t: `Média dos métodos: ${d.moeda} ${f(justoY, 0)} - não validado`, c: '#f2994a' });
-      }
       // todos à esquerda; de baixo para cima, afasta os que ficariam um em cima do outro
       rotulos.sort((a, b) => b.y - a.y);
       rotulos.forEach((r, k) => { if (k && rotulos[k - 1].y - r.y < 12) r.y = rotulos[k - 1].y - 12; });
@@ -377,16 +384,6 @@ function montar(root, d) {
         const bw2 = ctx.measureText(txt).width + 18, bx = Math.max(x0, Math.min(x1 - bw2, x - bw2 / 2)), by = Math.max(yTop - 4, y - 34);
         ctx.fillStyle = v >= 0 ? '#1f9d6b' : '#d64545'; ctx.beginPath(); ctx.roundRect(bx, by, bw2, 22, 11); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.fillText(txt, bx + bw2 / 2, by + 11.5);
-      }
-      // toque perto da linha laranja: explica de onde ela vem
-      if (modo === 'graham' && toque !== null && justoY !== null && Math.abs(toqueY - Y(justoY)) < 16) {
-        const l1 = `Média de ${metodosJusto.map(m => `${m[0]} ${f(Math.round(m[1]), 0)}`).join(' e ')}.`;
-        const l2 = justoDivergem ? 'Divergência grande, não usar como alvo.' : 'Não validado por teste histórico, não usar como alvo.';
-        ctx.font = '600 11px Inter, system-ui, sans-serif'; ctx.textAlign = 'left';
-        const tw = Math.max(ctx.measureText(l1).width, ctx.measureText(l2).width) + 18, ty = Math.min(yPlot - 46, Y(justoY) + 8);
-        ctx.fillStyle = '#2a1c0cf2'; ctx.strokeStyle = '#f2994a'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.roundRect(x0 + 4, ty, Math.min(tw, x1 - x0 - 8), 40, 8); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#ffd9b0'; ctx.fillText(l1, x0 + 13, ty + 13); ctx.fillText(l2, x0 + 13, ty + 28);
       }
     }
     function animar() {
