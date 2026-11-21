@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import concurrent.futures as cf
+import datetime as dt
 import hashlib
 import importlib
 import json
@@ -351,7 +352,9 @@ def outlook_trimestral_eua(ticker: str, max_docs: int = 3) -> dict | None:
                 dados = fg.converter_outlook_para_usd(dados, taxa, data_taxa)
             if dados:
                 return {**dados, "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {fg._data_br(doc['data'])} (SEC)",
-                        "data": fg._data_br(doc["data"]), "url": link}
+                        "data": fg._data_br(doc["data"]), "url": link,
+                        "atualizado_em": dt.datetime.now(fg.BRASILIA).strftime("%d/%m %H:%M"),
+                        "proximo_anuncio": fg.proximo_anuncio_eua(ticker)}
         return None
     except Exception:
         return None
@@ -367,7 +370,7 @@ def pacote(ticker: str, versao: str = "") -> dict:
         # Faixa do Conservador, "cresceu de X para Y") passa a usar o dado verificado, sem misturar
         is_20f = any(x.get("form", "").startswith("20-F") for x in sec_anual)
         convertido = any(x.get("taxa_cambio") for x in sec_anual)
-        fonte = ("SEC 20-F, lucro por ação diluído (GAAP)" + (" - convertido de euro pelo câmbio histórico do ano, Yahoo Finance" if convertido else ""))\
+        fonte = ("SEC 20-F, lucro por ação diluído (GAAP)" + (" - convertido de euro pelo câmbio da data do anúncio de cada ano, Yahoo Finance" if convertido else ""))\
             if is_20f else "SEC 10-K, lucro por ação diluído (GAAP)"
         d = {**d, "lpa_anual": pd.Series({pd.to_datetime(x["fim"], format="%d/%m/%Y"): x["lpa"] for x in sec_anual}),
             "lpa_anual_fonte": fonte}
@@ -390,7 +393,9 @@ def pacote(ticker: str, versao: str = "") -> dict:
                 "margemBruta": ao_vivo.get("margem_bruta"), "lpaMin": ao_vivo.get("lpa_min"), "lpaMax": ao_vivo.get("lpa_max"),
                 "fonte": ao_vivo.get("fonte") or "", "data": ao_vivo.get("data") or "", "url": ao_vivo.get("url") or "",
                 "moedaOriginal": ao_vivo.get("moeda_original") or "", "taxaCambio": ao_vivo.get("taxa_cambio"),
-                "taxaCambioData": ao_vivo.get("taxa_cambio_data") or ""}}
+                "taxaCambioData": ao_vivo.get("taxa_cambio_data") or "",
+                "atualizacao": tela.dados.atualizacao_contabil(ao_vivo),
+                "proximoAnuncio": ao_vivo.get("proximo_anuncio") or ""}}
     return dados
 
 

@@ -44,6 +44,13 @@ function montar(root, d) {
   const $ = id => root.querySelector('#' + id);
   const app = root.querySelector('.app');
   const din = (v, casas = 2) => tem(v) ? `${d.moeda} ${f(v, casas)}` : '—';
+  // bolinha de atualização (verde <2h, amarelo <24h, vermelho 24h+) a partir de {em, iso, tri, triData}
+  const bolaAtualizacao = (A, extra = '') => {
+    if (!A || !A.em) return '';
+    const h = (Date.now() - Date.parse(A.iso)) / 36e5, bola = h < 2 ? '🟢' : h < 24 ? '🟡' : '🔴';
+    const [dia, hora] = A.em.split(' ');
+    return `<div class="atualiz" title="Verde: atualizado há menos de 2h. Amarelo: menos de 24h. Vermelho: 24h ou mais sem atualizar.">${bola} Atualizado em ${dia} às ${hora}${A.tri ? `<br><span class="i">Contábil 12m até ${A.tri}${A.triData ? ` (${A.triData})` : ''}</span>` : ''}${extra}</div>`;
+  };
   const limpar = [];
   const ex = chave => (d.exemplos && d.exemplos[chave] ? ' <span class="tag-proto">EXEMPLO</span>' : '');
   const FOLHAS = {};
@@ -750,11 +757,7 @@ function montar(root, d) {
       <details class="acord" open><summary>Fundamentos: os 3 critérios, um a um</summary><div class="dentro">
         <div class="card crit">
           <div class="topo-c"><span class="nome">Preço vs Lucro (P/L)</span><span class="st ${cPL}">${tPL}</span></div>
-          ${(() => { const A = d.atualizacao; if (!A || !A.em) return '';
-            // verde: menos de 2h; amarelo: menos de 24h; vermelho: 24h ou mais (o robô roda todo dia às 8h)
-            const h = (Date.now() - Date.parse(A.iso)) / 36e5, bola = h < 2 ? '🟢' : h < 24 ? '🟡' : '🔴';
-            const [dia, hora] = A.em.split(' ');
-            return `<div class="atualiz" title="Verde: atualizado há menos de 2h. Amarelo: menos de 24h. Vermelho: 24h ou mais sem atualizar.">${bola} Atualizado em ${dia} às ${hora}${A.tri ? `<br><span class="i">Contábil 12m até ${A.tri}${A.triData ? ` (${A.triData})` : ''}</span>` : ''}</div>`; })()}
+          ${bolaAtualizacao(d.atualizacao)}
           <div class="tab-pl num">
             <span></span><div class="cab"><div>Início do ano</div><div class="i">${GI.ano || anoPrev || ''} · congelado</div></div><div class="cab"><div>Contábil</div><div class="i">12 meses · ${d.lpaSec && d.lpaSec.status === 'ok' && d.lpaSec.base === 'ajustado' ? 'ajustado' : 'real'}</div></div><div class="cab"><div>Previsão atual</div><div class="i">${lpaGuia ? 'guidance' : tem(lpaCons) ? 'analistas' : ''}</div></div>
             <span class="rot">P/L</span><b class="gr">${tem(plIni) ? f(plIni) : '—'}</b><b class="gr">${f(d.pl)}</b><b class="gr">${tem(plPrev) ? f(plPrev) : '—'}</b>
@@ -1100,8 +1103,10 @@ function montar(root, d) {
       const OT = d.outlookTrimestral;
       const cambioOT = OT && OT.moedaOriginal === 'EUR' && tem(OT.taxaCambio)
         ? ` Convertido de euro pelo câmbio EUR→USD de ${OT.taxaCambioData} (Yahoo Finance): ${f(OT.taxaCambio, 4)}.` : '';
+      const proximoOT = OT && OT.proximoAnuncio ? `<div class="nota" style="margin-top:8px">Próximo anúncio previsto: <b>${OT.proximoAnuncio}</b> (Yahoo Finance)</div>` : '';
       const outlookHtml = OT ? `<div class="card" style="margin-top:12px">
           <span class="rot">Guidance da empresa para o próximo trimestre</span>
+          ${bolaAtualizacao(OT.atualizacao)}
           <div class="nota" style="margin-top:4px">${OT.periodo} · informativo: não entra no P/L nem na Previsão atual acima (que é guidance ANUAL)</div>
           <div class="lista-v num" style="margin-top:8px">
             <div>Receita<b>${tem(OT.receitaMin) && tem(OT.receitaMax) ? `${din(OT.receitaMin / 1e9, 1)} a ${din(OT.receitaMax / 1e9, 1)} bi` : 'Sem dado'}</b></div>
@@ -1109,6 +1114,7 @@ function montar(root, d) {
             <div>LPA projetado<b>${tem(OT.lpaMin) && tem(OT.lpaMax) ? `${din(OT.lpaMin)} a ${din(OT.lpaMax)}` : 'Sem dado'}</b></div>
           </div>
           <div class="nota" style="margin-top:8px">Fonte: ${OT.fonte ? `<a class="link" href="" target="_blank" rel="noopener" id="ot-fonte"></a>` : '<span id="ot-fonte"></span>'} (${OT.data})${cambioOT}</div>
+          ${proximoOT}
         </div>` : '';
       const avisoAnualHtml = d.avisoGuidanceAnual ? `<div class="aviso" style="margin-bottom:10px">${d.avisoGuidanceAnual}</div>` : '';
       el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>

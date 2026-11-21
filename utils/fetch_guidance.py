@@ -1165,10 +1165,25 @@ def converter_outlook_para_usd(dados: dict, taxa: float, data_taxa: str) -> dict
     return conv
 
 
+def proximo_anuncio_eua(ticker: str) -> str | None:
+    """Próxima data de divulgação de resultados prevista pro ticker (Yahoo Finance, campo "Earnings
+    Date" do calendário do ativo) - só informativo, ao lado do guidance TRIMESTRAL; não participa de
+    nenhum cálculo. None quando o Yahoo não tiver essa data (nem toda empresa a publica com
+    antecedência, ou o próprio Yahoo pode não ter o calendário pro ticker)."""
+    import yfinance as yf
+
+    try:
+        datas = (yf.Ticker(ticker).calendar or {}).get("Earnings Date") or []
+        return f"{min(datas):%d/%m/%Y}" if datas else None
+    except Exception:
+        return None
+
+
 def atualizar_outlook_trimestral_eua(tickers: list[str] | None = None, *, cabecalho=cabecalho_sec,
                                      buscar_cik=cik_do_ticker, buscar_docs=documentos_sec,
                                      ler_anexo=anexo_sec, buscar_taxas=taxa_cambio_historica_eur_usd,
-                                     max_docs: int = 3) -> dict[str, dict]:
+                                     buscar_proximo_anuncio=proximo_anuncio_eua,
+                                     agora: dt.datetime | None = None, max_docs: int = 3) -> dict[str, dict]:
     """Guidance TRIMESTRAL (receita, margem, LPA do próximo trimestre) de cada ticker dos EUA já
     cadastrado em guidance_tickers.json OU já travado em queue_nao_validado.json (sem guidance ANUAL
     confirmado) - só informativo (ver extrair_outlook_trimestral_eua: não participa do P/L nem do
@@ -1187,6 +1202,7 @@ def atualizar_outlook_trimestral_eua(tickers: list[str] | None = None, *, cabeca
     if not cab:
         log.warning("outlook trimestral: sem SEC_CONTACT_EMAIL (Secret do GitHub): pulado")
         return tab
+    agora = agora or dt.datetime.now(BRASILIA)
     mudou = False
     for t in tickers:
         try:
@@ -1224,7 +1240,9 @@ def atualizar_outlook_trimestral_eua(tickers: list[str] | None = None, *, cabeca
                     dados = None   # nunca mostra valor em euro como se fosse dólar
             if dados:
                 achou = {**dados, "fonte": f"{nome}, Form {doc['form']} Exhibit 99.1 de {_data_br(doc['data'])} (SEC)",
-                        "data": _data_br(doc["data"]), "url": link}
+                        "data": _data_br(doc["data"]), "url": link,
+                        "atualizado_em": agora.astimezone(BRASILIA).strftime("%d/%m %H:%M"),
+                        "proximo_anuncio": buscar_proximo_anuncio(t)}
                 break
         if achou and tab.get(t) != achou:
             tab[t] = achou

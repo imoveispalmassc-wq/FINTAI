@@ -140,7 +140,7 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   nem o do fim do ano fiscal (a empresa não converte pelo câmbio de 31/12), o que distorceria Graham/médias/
   Faixa do Conservador de anos passados. Ano sem câmbio encontrado fica de fora da série (nunca mistura euro
   com dólar). Com conversão, a fonte da tela vira "SEC 20-F, lucro por ação diluído (GAAP) - convertido de
-  euro pelo câmbio histórico do ano, Yahoo Finance". O mesmo vale pro guidance TRIMESTRAL em euro (ex. ASML,
+  euro pelo câmbio da data do anúncio de cada ano, Yahoo Finance". O mesmo vale pro guidance TRIMESTRAL em euro (ex. ASML,
   ver acima): o câmbio usado é o da data do anúncio/release (não o de hoje nem o do fim do trimestre).
   `tela/dados.py._pontos_anuais` não corta mais em 4 anos (cortava sempre, pensando só no limite do Yahoo - com
   a SEC disponível, isso travava "Média 5/10 anos" em "Sem dado" mesmo com histórico de sobra); o corte de ~4
@@ -171,14 +171,20 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   LPA × ações do Yahoo ÷ receita) mesmo quando dá para estimar: o LPA de guidance costuma ser non-GAAP e as
   ações do Yahoo podem não bater com a base da empresa - mostra só o que a empresa realmente divulgou. Grava
   em utils/guidance_trimestral_eua.json; uma tentativa sem sucesso nunca apaga um valor bom já gravado.
+  O card mostra a mesma bolinha de atualização do card de P/L (🟢 menos de 2h, 🟡 menos de 24h, 🔴 24h ou
+  mais), a partir do `atualizado_em` gravado pelo robô (ou, na busca ao vivo, do momento da própria busca).
+  Mostra também "Próximo anúncio previsto" quando o Yahoo Finance tiver essa data (campo "Earnings Date" do
+  calendário do ativo, `utils.fetch_guidance.proximo_anuncio_eua`) - não vem do documento da SEC (releases de
+  resultado não costumam anunciar a data do PRÓXIMO earnings call) e é só informativo; sem a data no Yahoo,
+  o card não mostra essa linha (nunca inventa).
   Moeda: empresa estrangeira em 6-K que divulga em outra moeda (ex. ASML em euro, símbolo "€" antes do número)
   tem receita/LPA convertidos pra dólar antes de gravar/mostrar (`converter_outlook_para_usd`), pelo câmbio do
-  próprio Yahoo Finance (ticker EURUSD=X, `taxa_cambio_eur_usd` - mesma fonte de tudo o mais no app, nunca um
-  câmbio fixo no código). Câmbio indisponível no momento: não grava nem mostra o valor em euro como se já fosse
-  dólar (moeda errada é pior que "Sem dado" por enquanto) - só tenta de novo no próximo ciclo. Convertido, a
-  nota da fonte no card mostra "Convertido de euro pelo câmbio EUR→USD de [data] (Yahoo Finance): [taxa]", pra
-  nunca esconder que o número passou por conversão; os valores originais em euro ficam guardados
-  (receita_min_eur/receita_max_eur) para quem for conferir.
+  Yahoo Finance (ticker EURUSD=X, `taxa_cambio_historica_eur_usd`) NA DATA DO ANÚNCIO/RELEASE (não o de hoje,
+  nunca um câmbio fixo no código - ver acima). Câmbio indisponível nessa data: não grava nem mostra o valor em
+  euro como se já fosse dólar (moeda errada é pior que "Sem dado" por enquanto) - só tenta de novo no próximo
+  ciclo. Convertido, a nota da fonte no card mostra "Convertido de euro pelo câmbio EUR→USD de [data] (Yahoo
+  Finance): [taxa]", pra nunca esconder que o número passou por conversão; os valores originais em euro ficam
+  guardados (receita_min_eur/receita_max_eur) para quem for conferir.
   O app (não só o robô) também busca ao vivo (`app.outlook_trimestral_eua(ticker)`, cache de 1 dia) quando o
   robô ainda não gravou nada pro ticker - mesmos padrões de texto, sem API do Claude, pra não depender do
   próximo ciclo do robô (6 em 6 horas) nem de intervenção manual toda vez que um ticker novo cai nessa mesma

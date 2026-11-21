@@ -385,6 +385,22 @@ def test_outlook_trimestral_eua_le_do_arquivo_gravado_pelo_robo(tmp_path, monkey
     assert r["periodo"] == "1T FY2027" and r["lpaMin"] == 36.84 and r["lpaMax"] == 38.84
 
 
+def test_outlook_trimestral_eua_traz_atualizacao_e_proximo_anuncio(tmp_path, monkeypatch):
+    import json
+
+    from tela.dados import ARQ_OUTLOOK_TRI, outlook_trimestral_eua
+
+    arq = tmp_path / "guidance_trimestral_eua.json"
+    arq.write_text(json.dumps({"MU": {"periodo": "1T FY2027", "receita_min": 6e10, "receita_max": 6.3e10,
+                                      "fonte": "MICRON TECHNOLOGY INC, Form 8-K (SEC)", "data": "30/09/2026",
+                                      "atualizado_em": "17/11 18:32", "proximo_anuncio": "17/12/2026"}}),
+                   encoding="utf-8")
+    monkeypatch.setattr("tela.dados.ARQ_OUTLOOK_TRI", arq)
+    r = outlook_trimestral_eua("MU")
+    assert r["proximoAnuncio"] == "17/12/2026"
+    assert r["atualizacao"]["em"] == "17/11 18:32" and r["atualizacao"]["iso"].startswith("2026-11-17")
+
+
 def test_outlook_trimestral_eua_b3_e_ticker_sem_dado_devolvem_none(tmp_path, monkeypatch):
     from tela.dados import outlook_trimestral_eua
 

@@ -1209,6 +1209,39 @@ def test_converter_outlook_para_usd_nao_mexe_quando_ja_e_dolar():
     assert fg.converter_outlook_para_usd(dados, 1.08, "20/11/2026") == dados
 
 
+def test_proximo_anuncio_eua_usa_calendario_do_yahoo(monkeypatch):
+    import datetime as pydt
+    import sys
+    import types
+
+    class FakeTicker:
+        def __init__(self, s):
+            assert s == "MU"
+
+        @property
+        def calendar(self):
+            return {"Earnings Date": [pydt.date(2026, 12, 17)], "Dividend Date": pydt.date(2026, 11, 4)}
+
+    monkeypatch.setitem(sys.modules, "yfinance", types.SimpleNamespace(Ticker=FakeTicker))
+    assert fg.proximo_anuncio_eua("MU") == "17/12/2026"
+
+
+def test_proximo_anuncio_eua_sem_calendario_devolve_none(monkeypatch):
+    import sys
+    import types
+
+    class FakeTicker:
+        def __init__(self, s):
+            pass
+
+        @property
+        def calendar(self):
+            return {}
+
+    monkeypatch.setitem(sys.modules, "yfinance", types.SimpleNamespace(Ticker=FakeTicker))
+    assert fg.proximo_anuncio_eua("ZZZZ") is None
+
+
 def test_atualizar_outlook_trimestral_eua_converte_euro_para_dolar(tmp_path, monkeypatch):
     """ASML dá o outlook em euro (símbolo €); o robô precisa converter pra dólar antes de gravar,
     senão a tela mostraria "US$ 14,20 bi" quando na verdade é € 14,20 bi (moeda errada). O câmbio
@@ -1226,11 +1259,13 @@ def test_atualizar_outlook_trimestral_eua_converte_euro_para_dolar(tmp_path, mon
         buscar_cik=lambda t, cab: ("0000937966", "ASML Holding N.V."),
         buscar_docs=lambda cik, cab: [{"form": "6-K", "data": "2026-10-14", "acc": "1", "cik": cik}],
         ler_anexo=lambda doc, cab: ("http://x", TEXTO_OUTLOOK_ASML_CEO),
-        buscar_taxas=fake_buscar_taxas)
+        buscar_taxas=fake_buscar_taxas, buscar_proximo_anuncio=lambda t: "27/01/2027",
+        agora=dt.datetime(2026, 11, 21, 18, 32, tzinfo=fg.BRASILIA))
     assert datas_pedidas == [dt.date(2026, 10, 14)]   # câmbio da data do anúncio, não de hoje
     assert tab["ASML"]["receita_min"] == pytest.approx(14.2e9 * 1.08)
     assert tab["ASML"]["moeda"] == "USD" and tab["ASML"]["moeda_original"] == "EUR"
     assert tab["ASML"]["taxa_cambio"] == 1.08 and tab["ASML"]["taxa_cambio_data"] == "14/10/2026"
+    assert tab["ASML"]["proximo_anuncio"] == "27/01/2027" and tab["ASML"]["atualizado_em"] == "21/11 18:32"
 
 
 def test_atualizar_outlook_trimestral_eua_sem_cambio_nao_grava_em_euro(tmp_path, monkeypatch):
@@ -1243,7 +1278,7 @@ def test_atualizar_outlook_trimestral_eua_sem_cambio_nao_grava_em_euro(tmp_path,
         buscar_cik=lambda t, cab: ("0000937966", "ASML Holding N.V."),
         buscar_docs=lambda cik, cab: [{"form": "6-K", "data": "2026-10-14", "acc": "1", "cik": cik}],
         ler_anexo=lambda doc, cab: ("http://x", TEXTO_OUTLOOK_ASML_CEO),
-        buscar_taxas=lambda datas: {})
+        buscar_taxas=lambda datas: {}, buscar_proximo_anuncio=lambda t: None)
     assert "ASML" not in tab
 
 
@@ -1266,7 +1301,7 @@ def test_atualizar_outlook_trimestral_eua_grava_quando_acha(tmp_path, monkeypatc
         tickers=["MU"], cabecalho=lambda: {"User-Agent": "x"},
         buscar_cik=lambda t, cab: ("0000723125", "Micron Technology, Inc."),
         buscar_docs=lambda cik, cab: [{"form": "8-K", "data": "2026-09-30", "acc": "1", "cik": cik}],
-        ler_anexo=lambda doc, cab: ("http://x", TEXTO_OUTLOOK_MU))
+        ler_anexo=lambda doc, cab: ("http://x", TEXTO_OUTLOOK_MU), buscar_proximo_anuncio=lambda t: None)
     assert tab["MU"]["periodo"] == "1T FY2027"
     assert json.loads(arq.read_text(encoding="utf-8"))["MU"]["periodo"] == "1T FY2027"
 
@@ -1292,7 +1327,7 @@ def test_atualizar_outlook_trimestral_eua_inclui_travados_sem_guidance_anual(tmp
     tab = fg.atualizar_outlook_trimestral_eua(
         cabecalho=lambda: {"User-Agent": "x"}, buscar_cik=fake_buscar_cik,
         buscar_docs=lambda cik, cab: [{"form": "8-K", "data": "2026-09-30", "acc": "1", "cik": cik}],
-        ler_anexo=lambda doc, cab: ("http://x", TEXTO_OUTLOOK_MU))
+        ler_anexo=lambda doc, cab: ("http://x", TEXTO_OUTLOOK_MU), buscar_proximo_anuncio=lambda t: None)
     assert set(vistos) == {"AAPL", "MU"}   # os dois arquivos foram combinados
     assert tab["MU"]["periodo"] == "1T FY2027"
 
