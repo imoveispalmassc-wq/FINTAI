@@ -534,3 +534,10 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 
 - `python -m pytest` precisa passar.
 - Se mudar a tela (`tela/detalhe.*`), rodar `python tools/gerar_demo.py` para atualizar a página de exemplo.
+- `app.py` recarrega os módulos (`importlib.reload`) numa ordem fixa, porque o Streamlit Cloud pode manter
+  versões antigas na memória depois de um deploy. Módulo novo que faz `from outro_modulo import nome` no topo
+  do arquivo (ex.: `utils/dados_fixos.py` importando de `utils/fetch_guidance.py`) precisa entrar nessa lista
+  DEPOIS do módulo de quem ele importa - senão, ao recarregar só o módulo novo, ele reimporta de uma versão
+  antiga do outro módulo ainda em memória, e um nome adicionado depois do último reload vira `ImportError`
+  (issue #33, causada pela adição de `utils.dados_fixos` sem adicionar `utils.fetch_guidance` antes dele na
+  mesma lista). `tests/test_app_reload.py` tem um teste que falha se essa ordem for quebrada de novo.

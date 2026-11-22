@@ -22,6 +22,7 @@ import calculos
 import tela.dados
 import utils.benchmarks
 import utils.dados_fixos
+import utils.fetch_guidance
 import utils.formato
 import utils.lynch
 import utils.override
@@ -31,8 +32,12 @@ import utils.simons
 
 # O Streamlit Cloud pode manter versões antigas dos módulos na memória depois de uma
 # atualização; recarregar (na ordem das dependências) mantém tudo na mesma versão.
+# utils.fetch_guidance vem ANTES de utils.dados_fixos: ele importa várias funções de lá
+# (from utils.fetch_guidance import ...) e, sem recarregar fetch_guidance primeiro, o
+# dados_fixos recarregado ia importar de uma versão antiga do módulo ainda em memória -
+# ImportError pra qualquer nome novo adicionado lá depois do último reload (issue #33).
 for _modulo in (utils.formato, utils.percentile, utils.signals, utils.benchmarks, utils.lynch, utils.override,
-                utils.simons, utils.dados_fixos, calculos, tela.dados):
+                utils.simons, utils.fetch_guidance, utils.dados_fixos, calculos, tela.dados):
     importlib.reload(_modulo)
 
 from calculos import calcular, normalizar_ticker, retorno_periodo
