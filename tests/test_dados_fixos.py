@@ -157,3 +157,195 @@ def test_extrair_acoes_br_sem_nenhuma_classe():
 def test_eh_br():
     assert df.eh_br("PETR4") and df.eh_br("petr4.sa") and df.eh_br("BBAS3")
     assert not df.eh_br("AAPL") and not df.eh_br("MU")
+
+
+# ------------------------------------------------------------ Issue #31: dividendo/JCP por ação (BR)
+# (a) tabela do release/relatório de resultados (ex. BBAS3, "Relatório de Análise Gerencial")
+TABELA_BBAS3 = ("R$ milhões, exceto quando indicado 3T25 2T26 3T26 Δ% A/A Δ% T/T  9M25 9M26  Δ% Acm.\n"
+               "Lucro Líquido Ajustado 3.785 3.908 1.270 (66,5) (67,5)  14.943 8.608  (42,4)\n"
+               "JCP/Dividendos por Ação – R$ 0,07 0,16 0,04 (51,4) (78,4) 0,65 0,35 (45,9)\n")
+
+
+def test_extrair_dividendo_tabela_acha_a_coluna_do_trimestre():
+    assert df.extrair_dividendo_tabela(TABELA_BBAS3, "3T26") == pytest.approx(0.04)
+    assert df.extrair_dividendo_tabela(TABELA_BBAS3, "2T26") == pytest.approx(0.16)
+    assert df.extrair_dividendo_tabela(TABELA_BBAS3, "3T25") == pytest.approx(0.07)
+
+
+def test_extrair_dividendo_tabela_sem_a_linha():
+    assert df.extrair_dividendo_tabela("nada de dividendo aqui", "3T26") is None
+
+
+def test_extrair_dividendo_tabela_sem_o_trimestre_no_cabecalho():
+    assert df.extrair_dividendo_tabela(TABELA_BBAS3, "1T26") is None
+
+
+# (b) Fato Relevante/Aviso aos Acionistas (ex. PETR4, "Petrobras informa sobre remuneração aos acionistas")
+FATO_PETR4_TRIMESTRE = (
+    "A Petróleo Brasileiro S.A. informa que o Conselho de Administração aprovou o pagamento de "
+    "remuneração aos acionistas no valor de R$ 15,3 bilhões, equivalente a R$ 1,18732774 por ação "
+    "ordinária e preferencial em circulação, como antecipação da remuneração relativa ao exercício "
+    "de 2026, declarada com base no balanço de 30 de setembro de 2026.\n\n"
+    "Valor a ser pago: R$ 1,18732774 por ação ordinária e preferencial em circulação, sendo que:")
+FATO_PETR4_ANUAL = (
+    "A Petróleo Brasileiro S.A. informa que o Conselho de Administração autorizou o encaminhamento "
+    "à Assembleia Geral Ordinária da proposta de distribuição de remuneração aos acionistas no "
+    "montante de R$ 8,1 bilhões relativa ao quarto trimestre de 2025.\n\n"
+    "Valor a ser pago: R$ 0,62622908 por ação ordinária e preferencial em circulação, sendo que:")
+
+
+def test_extrair_dividendo_fato_relevante_pelo_balanco():
+    assert df.extrair_dividendo_fato_relevante(FATO_PETR4_TRIMESTRE) == (pytest.approx(1.18732774), "3T26")
+
+
+def test_extrair_dividendo_fato_relevante_pelo_trimestre_ordinal():
+    assert df.extrair_dividendo_fato_relevante(FATO_PETR4_ANUAL) == (pytest.approx(0.62622908), "4T25")
+
+
+def test_extrair_dividendo_fato_relevante_sem_valor_por_acao():
+    assert df.extrair_dividendo_fato_relevante("nenhuma remuneração aqui") is None
+
+
+# buscar_fixos_br: dividendo_12m preenchido / "Sem dado", sem rede de verdade
+def _doc(data, categoria="Dados Econômico-Financeiros", tipo="Press-release", assunto="Relatório de Desempenho",
+        link=None):
+    return {"data": data, "categoria": categoria, "tipo": tipo, "assunto": assunto,
+           "link": link or f"https://cvm/{data}"}
+
+
+CAPA_ACOES = "Ações Ordinárias (ON) .......... 5.000.000.000\nAções Preferenciais (PN) .......... 1.000.000.000"
+
+
+def test_buscar_fixos_br_petr4_estilo_fato_relevante_preenche_dividendo():
+    """PETR4: a tabela do release não tem dividendo por ação (abordagem a) - cai para o Fato
+    Relevante/Aviso aos Acionistas (abordagem b), um documento por trimestre."""
+    docs_resultado = [_doc("2026-11-10"), _doc("2026-08-06"), _doc("2026-05-11"), _doc("2026-02-12")]
+    docs_dividendo = [
+        _doc("2026-11-10", "Fato Relevante", "", "Petrobras informa sobre remuneração aos acionistas",
+            link="https://cvm/div/2026-11-10"),
+        _doc("2026-08-06", "Fato Relevante", "", "Petrobras informa sobre remuneração aos acionistas",
+            link="https://cvm/div/2026-08-06"),
+        _doc("2026-05-11", "Fato Relevante", "", "Petrobras informa sobre remuneração aos acionistas",
+            link="https://cvm/div/2026-05-11"),
+        _doc("2026-03-05", "Fato Relevante", "", "Petrobras informa sobre remuneração aos acionistas",
+            link="https://cvm/div/2026-03-05"),
+    ]
+    textos_resultado = {
+        "2026-11-10": f"{CAPA_ACOES}\nNo 3T26, o lucro líquido foi de R$ 39,75 bilhões.",
+        "2026-08-06": "No 2T26, o lucro líquido foi de R$ 52,45 bilhões.",
+        "2026-05-11": "No 1T26, o lucro líquido foi de R$ 32,71 bilhões.",
+        "2026-02-12": "No 4T25, o lucro líquido foi de R$ 28,00 bilhões.",
+    }
+    textos_dividendo = {
+        "2026-11-10": "declarada com base no balanço de 30 de setembro de 2026. "
+                     "Valor a ser pago: R$ 1,18732774 por ação ordinária e preferencial em circulação.",
+        "2026-08-06": "declarada com base no balanço de 30 de junho de 2026. "
+                     "Valor a ser pago: R$ 1,34814262 por ação ordinária e preferencial em circulação.",
+        "2026-05-11": "declarada com base no balanço de 31 de março de 2026. "
+                     "Valor a ser pago: R$ 0,70097272 por ação ordinária e preferencial em circulação.",
+        "2026-03-05": "relativa ao quarto trimestre de 2025. "
+                     "Valor a ser pago: R$ 0,62622908 por ação ordinária e preferencial em circulação.",
+    }
+
+    def busca_cnpj(ticker, hoje):
+        return ("33.000.167/0001-01", "PETROBRAS")
+
+    def busca_docs(cnpj, hoje):
+        return docs_resultado
+
+    def busca_docs_dividendo(cnpj, hoje):
+        return docs_dividendo
+
+    def ler_pdf(link):
+        data = link.rsplit("/", 1)[1]
+        texto = textos_dividendo[data] if "/div/" in link else textos_resultado[data]
+        return b"", texto
+
+    r = df.buscar_fixos_br("PETR4", dt.date(2026, 11, 22), buscar_cnpj=busca_cnpj, buscar_docs=busca_docs,
+                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo)
+    assert r["status"] == "ok"
+    esperado = 1.18732774 + 1.34814262 + 0.70097272 + 0.62622908
+    assert r["dividendo_12m"] == pytest.approx(esperado)
+    assert r["dividendo_motivo"] is None
+    assert "Fato Relevante" in r["fonte_oficial"]
+    ind = df.calcular_indicadores(r, 42.67)
+    assert ind["dy"] == pytest.approx(esperado / 42.67)
+
+
+def test_buscar_fixos_br_bbas3_estilo_tabela_preenche_dividendo():
+    """BBAS3: a própria tabela de destaques do relatório já traz a linha "JCP/Dividendos por Ação",
+    com os 3 últimos trimestres - um único documento cobre todos eles."""
+    docs_resultado = [_doc("2026-11-13", tipo="Relatório de Análise Gerencial", assunto="Análise do Desempenho 3T26"),
+                     _doc("2026-08-17", tipo="Relatório de Análise Gerencial", assunto="Análise do Desempenho 2T26"),
+                     _doc("2026-05-13", tipo="Relatório de Análise Gerencial", assunto="Análise do Desempenho 1T26"),
+                     _doc("2026-02-24", tipo="Relatório de Análise Gerencial", assunto="Análise do Desempenho 4T25")]
+    textos = {
+        "2026-11-13": (f"{CAPA_ACOES}\n"
+                       "R$ milhões, exceto quando indicado 3T25 2T26 3T26 Δ% A/A Δ% T/T  9M25 9M26  Δ% Acm.\n"
+                       "Lucro Líquido 3.028 3.175 1.216 (59,9) (61,7) 12.836 7.480 (41,7)\n"
+                       "JCP/Dividendos por Ação – R$ 0,07 0,16 0,04 (51,4) (78,4) 0,65 0,35 (45,9)\n"),
+        "2026-08-17": ("R$ milhões, exceto quando indicado 3T25 1T26 2T26 Δ% A/A Δ% T/T  6M25 6M26  Δ% Acm.\n"
+                      "Lucro Líquido 3.028 3.100 3.175 1,0 2,4 6.000 6.275 4,6\n"
+                      "JCP/Dividendos por Ação – R$ 0,07 0,15 0,16 128,6 6,7 0,20 0,31 55,0\n"),
+        "2026-05-13": ("R$ milhões, exceto quando indicado 4T25 1T25 1T26 Δ% A/A Δ% T/T\n"
+                      "Lucro Líquido 2.900 2.800 3.100 10,7 6,9\n"
+                      "JCP/Dividendos por Ação – R$ 0,10 0,05 0,15 200,0 50,0\n"),
+        "2026-02-24": ("R$ milhões, exceto quando indicado 3T25 4T24 4T25 Δ% A/A Δ% T/T\n"
+                      "Lucro Líquido 3.028 2.700 2.900 -4,2 7,4\n"
+                      "JCP/Dividendos por Ação – R$ 0,07 0,08 0,10 25,0 25,0\n"),
+    }
+
+    def busca_cnpj(ticker, hoje):
+        return ("00.000.000/0001-91", "BCO BRASIL S.A.")
+
+    def busca_docs(cnpj, hoje):
+        return docs_resultado
+
+    def busca_docs_dividendo(cnpj, hoje):
+        return []  # não deveria precisar: a própria tabela já tem os 4 trimestres
+
+    def ler_pdf(link):
+        data = link.rsplit("/", 1)[1]
+        return b"", textos[data]
+
+    r = df.buscar_fixos_br("BBAS3", dt.date(2026, 11, 22), buscar_cnpj=busca_cnpj, buscar_docs=busca_docs,
+                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo)
+    assert r["status"] == "ok"
+    assert r["dividendo_12m"] == pytest.approx(0.04 + 0.16 + 0.15 + 0.10)
+    assert r["dividendo_motivo"] is None
+    assert "Fato Relevante" not in r["fonte_oficial"]       # achou tudo na tabela, sem precisar do 2º passo
+    ind = df.calcular_indicadores(r, 23.07)
+    assert ind["dy"] == pytest.approx((0.04 + 0.16 + 0.15 + 0.10) / 23.07)
+
+
+def test_buscar_fixos_br_sem_dividendo_em_nenhum_documento_fica_sem_dado():
+    """Ticker sem dividendo nos documentos lidos: dividendo_12m fica None ("Sem dado"), nunca
+    inventado - o lucro/ações continuam calculados normalmente."""
+    docs_resultado = [_doc("2026-11-10"), _doc("2026-08-06"), _doc("2026-05-11"), _doc("2026-02-12")]
+    textos = {
+        "2026-11-10": f"{CAPA_ACOES}\nNo 3T26, o lucro líquido foi de R$ 39,75 bilhões.",
+        "2026-08-06": "No 2T26, o lucro líquido foi de R$ 52,45 bilhões.",
+        "2026-05-11": "No 1T26, o lucro líquido foi de R$ 32,71 bilhões.",
+        "2026-02-12": "No 4T25, o lucro líquido foi de R$ 28,00 bilhões.",
+    }
+
+    def busca_cnpj(ticker, hoje):
+        return ("33.000.167/0001-01", "PETROBRAS")
+
+    def busca_docs(cnpj, hoje):
+        return docs_resultado
+
+    def busca_docs_dividendo(cnpj, hoje):
+        return []  # nenhum Fato Relevante de dividendo disponível
+
+    def ler_pdf(link):
+        return b"", textos[link.rsplit("/", 1)[1]]
+
+    r = df.buscar_fixos_br("PETR4", dt.date(2026, 11, 22), buscar_cnpj=busca_cnpj, buscar_docs=busca_docs,
+                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo)
+    assert r["status"] == "ok"
+    assert r["dividendo_12m"] is None
+    assert r["dividendo_motivo"] and "não encontrado" in r["dividendo_motivo"]
+    ind = df.calcular_indicadores(r, 42.67)
+    assert ind["dy"] is None and ind["contas"]["dy"] == "DY: Sem dado"
+    assert r["lucro_12m"] == pytest.approx(39.75e9 + 52.45e9 + 32.71e9 + 28.00e9)  # lucro continua normal
