@@ -405,6 +405,18 @@ const afastar = (posicoes, folgas, folgaEsq = 0, folgaDir = 0) => {
   for (let i = p.length - 2; i >= 0; i--) { const precisa = g[i] + g[i + 1]; if (p[i + 1] - p[i] < precisa) p[i] = p[i + 1] - precisa; }
   return p;
 };
+// as 2 bolinhas (hoje cheia, 18px; 7 dias atrás vazada, 10px) nunca podem ficar tão perto a ponto de uma
+// esconder a outra - afasta o mínimo necessário (raio de cada uma + respiro), só quando precisa
+const afastarBolinhas = (largContainerPx, posHoje, pos7) => {
+  if (pos7 === null || pos7 === undefined) return [posHoje, pos7];
+  const pxParaPct = px => px / Math.max(largContainerPx, 100) * 100;
+  const folgaHoje = pxParaPct(9 + 2), folga7 = pxParaPct(5 + 2);
+  const pontos = [{ k: 'hoje', pos: posHoje, folga: folgaHoje }, { k: 'd7', pos: pos7, folga: folga7 }]
+    .sort((a, b) => a.pos - b.pos);
+  const ajust = afastar(pontos.map(x => x.pos), pontos.map(x => x.folga));
+  const mapa = {}; pontos.forEach((x, i) => { mapa[x.k] = ajust[i]; });
+  return [mapa.hoje, mapa.d7];
+};
 const p2 = n => String(n).padStart(2, '0');
 const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 // os instantes chegam como horário local da bolsa gravado em UTC
@@ -937,21 +949,16 @@ function montar(root, d) {
     const dist = tem(d.mm200) ? (d.preco / d.mm200 - 1) * 100 : null;
     const leitura = !tem(d.forca) ? '' : d.forca >= 70 ? 'Sobrecomprada. Subiu rápido demais.'
       : d.forca <= 30 ? 'Sobrevendida. Caiu rápido demais.' : 'Neutra. Sem pressão de compra nem de venda.';
-    const fundo = 'linear-gradient(90deg,var(--vermelho) 0 30%,var(--ardosia) 30% 50%,var(--verde-claro) 50% 70%,var(--verde-forte) 70% 100%)';
-    // Força da tendência: distância do preço até a média de 200 dias, numa escala de -5% a +15%.
-    // O zero (a própria média) fica no início da faixa Fraca: tudo à direita dele está ACIMA da média.
-    const FRACA = 3, FORTE = 10;
-    const RMIN = tem(dist) && dist < -4 ? Math.floor((dist - 2) / 5) * 5 : -5;
-    const RMAX = tem(dist) && dist > 14 ? Math.ceil((dist + 2) / 5) * 5 : 15;
-    // Escala por partes: o lado negativo se abre quando a distância passa de -5% (até 40% da barra),
-    // e as faixas Fraca, Média e Forte mantêm proporção fixa, para os valores não se sobreporem.
-    const W_NEG = RMIN < -5 ? 40 : 25, RESTO = 100 - W_NEG;
-    const W_FRACA = RESTO * 0.2, W_MEDIA = RESTO * 0.47, W_FORTE = RESTO - W_FRACA - W_MEDIA;
-    const pt = v => v <= 0 ? W_NEG * Math.max(0, v - RMIN) / -RMIN
-      : v <= FRACA ? W_NEG + W_FRACA * v / FRACA
-      : v <= FORTE ? W_NEG + W_FRACA + W_MEDIA * (v - FRACA) / (FORTE - FRACA)
-      : W_NEG + W_FRACA + W_MEDIA + W_FORTE * Math.min(1, (v - FORTE) / (RMAX - FORTE));
-    const fundoT = `linear-gradient(90deg,var(--vermelho) 0 ${pt(0)}%,var(--ardosia) ${pt(0)}% ${pt(FRACA)}%,var(--verde-claro) ${pt(FRACA)}% ${pt(FORTE)}%,var(--verde-forte) ${pt(FORTE)}% 100%)`;
+    const fundo = 'linear-gradient(90deg,var(--vermelho) 0 40%,var(--ardosia) 40% 60%,var(--verde-claro) 60% 80%,var(--verde-forte) 80% 100%)';
+    // Força da tendência: distância do preço até a média de 200 dias. Escala fixa de -30% a +30%
+    // (só estica além disso se a distância real passar desses limites): abaixo de -10% perdeu força;
+    // de -10% a +10% é equilíbrio (a própria média, 0%, fica no meio dessa faixa); +10% a +20% é leve
+    // compra; acima de +20% é compra forte.
+    const NEG = -10, EQ = 10, LEVE = 20;
+    const RMIN = tem(dist) && dist < -30 ? Math.floor((dist - 5) / 10) * 10 : -30;
+    const RMAX = tem(dist) && dist > 30 ? Math.ceil((dist + 5) / 10) * 10 : 30;
+    const pt = v => (v - RMIN) / (RMAX - RMIN) * 100;
+    const fundoT = `linear-gradient(90deg,var(--vermelho) 0 ${pt(NEG)}%,var(--ardosia) ${pt(NEG)}% ${pt(EQ)}%,var(--verde-claro) ${pt(EQ)}% ${pt(LEVE)}%,var(--verde-forte) ${pt(LEVE)}% 100%)`;
     let textoT = '', notaSubirCairT = '';
     if (tem(dist)) {
       const cair = (d.preco - d.mm200) / d.preco * 100, subir = (d.mm200 / d.preco - 1) * 100;
@@ -964,74 +971,71 @@ function montar(root, d) {
     // distância e média de 200 dias embaixo da barra, cada uma sempre alinhada com o próprio ponto
     // (bolinha/traço do 0%) - em linhas separadas, pra nunca precisar empurrar uma pro lado quando
     // ficam perto uma da outra (ex. preço bem perto da própria média de 200 dias)
-    const pDist = Math.max(0, Math.min(100, pt(dist))), pZero = pt(0);
+    const pDist = Math.max(0, Math.min(100, pt(dist)));
     // marcador (bolinha vazada) de onde a Força da tendência estava há 7 pregões, pra dar pra ver
     // pra que lado ela está indo (sem precisar comparar números) - None quando não tem histórico
     const p7T = tem(d.dist200d7d) ? Math.max(0, Math.min(100, pt(d.dist200d7d))) : null;
-    const estreita = pt(FRACA) - pt(0) < 11;          // faixa Fraca sem espaço para nome e valor
     const pct = v => `${v > 0 ? '+' : ''}${f(v, 0)}%`;
-    // distância e "Média 200d" na MESMA linha, bem perto da barra (não numa linha própria lá embaixo)
-    // - só se afastam um do outro o mínimo necessário (mesma função afastar() da Faixa de preço, com
-    // a folga calculada pela largura real de cada rótulo), senão ficam cada um no próprio ponto
-    const largadorPxT = n => n * 7.3 + 6;
+    // marcador de hoje (bolinha cheia) em cima da régua, valor em azul; marcador de 7 dias atrás (bolinha
+    // vazada) embaixo, cada um na posição do seu próprio ponto (nunca empilhados) - rótulo "7 dias atrás"
+    // em cima e valor embaixo, pra não parecer o valor de hoje - os dois marcadores de 7 dias (aqui e na
+    // Força) usam o mesmo visual
+    const txtHojeT = sinal(dist), txt7ValorT = sinal(d.dist200d7d);
     const largContainerT = Math.max(el.clientWidth - 28, 200);
-    const pxParaPctT = px => px / largContainerT * 100;
-    const txtDistT = sinal(dist);
-    const largMediaT = Math.max('Média 200d'.length, f(d.mm200).length);
-    const pontosDM = [{ k: 'dist', pos: pDist, folga: pxParaPctT(largadorPxT(txtDistT.length)) / 2 },
-                      { k: 'media', pos: pZero, folga: pxParaPctT(largadorPxT(largMediaT)) / 2 }].sort((a, b) => a.pos - b.pos);
-    const ajustadasDM = afastar(pontosDM.map(x => x.pos), pontosDM.map(x => x.folga));
-    const mapaDM = {}; pontosDM.forEach((x, i) => { mapaDM[x.k] = ajustadasDM[i]; });
-    const linhaDistMedia = `<div class="marca-baixo num">
-          <span style="${ancora(mapaDM.dist)}">${txtDistT}</span>
-          <span style="${ancora(mapaDM.media)};color:var(--suave);font-weight:500;font-size:11px">Média 200d<b style="color:var(--texto)">${f(d.mm200)}</b></span>
-        </div>`;
+    const [pDistBola, p7TBola] = afastarBolinhas(largContainerT, pDist, p7T);
+    const linhaHojeT = `<div class="marca-cima so-valor num"><span style="${ancora(pDistBola)};color:var(--azul);font-weight:600;font-size:12px">${txtHojeT}</span></div>`;
+    const linha7T = p7T === null ? '' : `<div class="marca-baixo num"><span style="${ancora(p7TBola)};color:var(--suave);font-weight:500;font-size:10.5px">7 dias atrás<b style="color:var(--texto)">${txt7ValorT}</b></span></div>`;
     const divisor = 'margin-top:14px;padding-top:14px;border-top:1px solid var(--borda)';
     const barraT = !tem(dist) ? '' : `<div style="${divisor}">
           <span class="rot">Força da tendência</span>
-          <div class="zonas-rot" style="grid-template-columns:${pt(0)}fr ${pt(FRACA) - pt(0)}fr ${pt(FORTE) - pt(FRACA)}fr ${100 - pt(FORTE)}fr">
-            <span style="color:var(--vermelho)"><b>Perdeu força</b></span>
-            <span style="color:#aab4c6;text-align:center"><b>${estreita ? '' : 'Fraca'}</b></span>
-            <span style="color:var(--verde-claro);text-align:center"><b>Média</b></span>
-            <span style="color:var(--verde-forte)"><b>Forte</b></span>
+          <div style="position:relative;height:16px;margin-top:10px;font-size:11px;font-weight:700;white-space:nowrap">
+            <span style="position:absolute;left:0;color:var(--vermelho)">Perdeu força</span>
+            <span style="position:absolute;left:${(pt(NEG) + pt(EQ)) / 2}%;transform:translateX(-50%);color:#aab4c6">Equilíbrio</span>
+            <span style="position:absolute;left:${(pt(EQ) + pt(LEVE)) / 2}%;transform:translateX(-50%);color:var(--verde-claro)">Alta leve</span>
+            <span style="position:absolute;right:0;color:var(--verde-forte)">Forte</span>
           </div>
           <div class="marca-cima limites num">
-            <span class="esq">${pct(RMIN)}</span><span style="left:${pt(0)}%">0%</span>${estreita ? '' : `<span style="left:${pt(FRACA)}%">+3%</span>`}
-            <span style="left:${pt(FORTE)}%">+10%</span><span class="dir">${pct(RMAX)}</span>
+            <span class="esq">${pct(RMIN)}</span><span style="left:${pt(NEG)}%">-10%</span><span style="left:${pt(0)}%">0%</span>
+            <span style="left:${pt(EQ)}%">+10%</span><span style="left:${pt(LEVE)}%">+20%</span><span class="dir">${pct(RMAX)}</span>
           </div>
+          ${linhaHojeT}
           <div class="regua" style="background:${fundoT};margin-top:4px">
-            <span class="traco" style="left:${pt(0)}%"></span><span class="traco" style="left:${pt(FRACA)}%"></span><span class="traco" style="left:${pt(FORTE)}%"></span>
-            ${p7T !== null ? `<span class="bola-7d" style="left:${p7T}%"></span>` : ''}
-            <span class="bola" style="left:${pDist}%"></span>
+            <span class="traco" style="left:${pt(NEG)}%"></span><span class="traco" style="left:${pt(0)}%"></span>
+            <span class="traco" style="left:${pt(EQ)}%"></span><span class="traco" style="left:${pt(LEVE)}%"></span>
+            ${p7T !== null ? `<span class="bola-7d" style="left:${p7TBola}%"></span>` : ''}
+            <span class="bola" style="left:${pDistBola}%"></span>
           </div>
-          ${p7T !== null ? `<div class="marca-baixo so-valor num"><span style="${ancora(p7T)};color:var(--suave);font-weight:500;font-size:10.5px">-7 dias: ${sinal(d.dist200d7d)}</span></div>` : ''}
-          ${linhaDistMedia}
-          ${estreita ? '<div class="nota">Faixa Fraca: de 0% a +3% acima da média de 200 dias.</div>' : ''}
+          ${linha7T}
+          <div class="nota num" style="margin-top:18px">Média de 200 dias: ${din(d.mm200)} - é o ponto 0% da régua acima (referência de onde o preço está perto ou longe).</div>
           <div class="destaque num">${textoT}</div>
           <div class="nota num">${notaSubirCairT}</div>
         </div>`;
+    const largContainerF = Math.max(el.clientWidth - 28, 200);
+    const [forcaBola, forca7dBola] = tem(d.forca) ? afastarBolinhas(largContainerF, d.forca, tem(d.forca7d) ? d.forca7d : null) : [null, null];
     el.innerHTML = `<h2>Tendência e força</h2>
       <div class="card">
         <div class="duas"><div class="esq"><span class="rot">Direção da tendência</span></div><div class="dir" style="color:${corT}">${tem(d.mm200) ? d.tendencia : '—'}</div></div>
         ${barraT}
         <div style="${divisor}">
           <strong>Força</strong><div class="nota">Últimos 14 dias</div>
-          ${tem(d.forca) ? `<div class="zonas-rot" style="grid-template-columns:30fr 40fr 30fr;margin-top:8px">
-            <span style="color:var(--vermelho)"><b>Muita venda</b></span>
-            <span style="color:#aab4c6;text-align:center"><b>Equilíbrio</b></span>
-            <span style="color:var(--verde)"><b>Muita compra</b></span>
+          ${tem(d.forca) ? `<div style="position:relative;height:16px;margin-top:8px;font-size:11px;font-weight:700;white-space:nowrap">
+            <span style="position:absolute;left:0;color:var(--vermelho)">Muita venda</span>
+            <span style="position:absolute;left:50%;transform:translateX(-50%);color:#aab4c6">Equilíbrio</span>
+            <span style="position:absolute;left:70%;transform:translateX(-50%);color:var(--verde-claro)">Alta leve</span>
+            <span style="position:absolute;right:0;color:var(--verde-forte)">Forte</span>
           </div>
           <div class="marca-cima limites num">
-            <span class="esq">0</span><span style="left:30%">30</span><span style="left:50%">50</span><span style="left:70%">70</span><span class="dir">100</span>
+            <span class="esq">0</span><span style="left:40%">40</span><span style="left:60%">60</span><span style="left:80%">80</span><span class="dir">100</span>
           </div>
-          <div class="marca-cima so-valor num"><span style="${ancora(d.forca)};color:var(--azul);font-weight:600;font-size:12px">${f(d.forca, 0)}</span></div>
+          <div class="marca-cima so-valor num"><span style="${ancora(forcaBola)};color:var(--azul);font-weight:600;font-size:12px">${f(d.forca, 0)}</span></div>
           <div class="regua" style="background:${fundo};margin-top:4px">
-            <span class="traco" style="left:30%"></span><span class="traco" style="left:50%"></span><span class="traco" style="left:70%"></span>
-            ${tem(d.forca7d) ? `<span class="bola-7d" style="left:${d.forca7d}%"></span>` : ''}
-            <span class="bola" style="left:${d.forca}%"></span>
+            <span class="traco" style="left:40%"></span><span class="traco" style="left:60%"></span><span class="traco" style="left:80%"></span>
+            ${tem(d.forca7d) ? `<span class="bola-7d" style="left:${forca7dBola}%"></span>` : ''}
+            <span class="bola" style="left:${forcaBola}%"></span>
           </div>
-          ${tem(d.forca7d) ? `<div class="marca-baixo so-valor num"><span style="${ancora(d.forca7d)};color:var(--suave);font-weight:500;font-size:10.5px">-7 dias: ${f(d.forca7d, 0)}</span></div>` : ''}
-          <div class="destaque" style="text-align:center">${leitura}</div>` : `<div class="nota" style="margin-top:8px">${INDISP}</div>`}
+          ${tem(d.forca7d) ? `<div class="marca-baixo num"><span style="${ancora(forca7dBola)};color:var(--suave);font-weight:500;font-size:10.5px">7 dias atrás<b style="color:var(--texto)">${f(d.forca7d, 0)}</b></span></div>` : ''}
+          <div class="nota num" style="margin-top:18px">50 é o ponto neutro da régua acima (nem sobrecomprada, nem sobrevendida).</div>
+          <div class="destaque">${leitura}</div>` : `<div class="nota" style="margin-top:8px">${INDISP}</div>`}
         </div>
       </div>`;
   })($('tendencia'));

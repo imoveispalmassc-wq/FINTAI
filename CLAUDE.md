@@ -324,21 +324,36 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 - "Tendência e força": os cards de Direção/Força da tendência (distância preço÷MM200) e Força (IFR 14 dias)
   ficam num único bloco. Cada um mostra, além do valor de hoje (bolinha cheia), uma bolinha vazada marcando
   onde estava 7 pregões atrás (`calculos.calcular` → `dist_mm200_7d`/`ifr_7d`, calculados em `indicadores()`,
-  não um valor aproximado), com o rótulo "-7 dias: [valor]" logo embaixo dela (a posição da bolinha já mostra
-  pra que lado a tendência/força está indo, sem precisar comparar números, mas o valor exato também aparece) -
-  com menos de 8 pregões de histórico, fica "Sem dado" (não mostra a bolinha vazada nem o rótulo, nunca
-  inventa). Na barra de Força da tendência, a distância de hoje e "Média 200d" ficam na MESMA linha, logo
-  abaixo da régua (não cada uma na sua própria linha, que afastava demais da barra) - só se afastam uma da
-  outra o mínimo necessário pra não sobrepor (mesma função `afastar()`/folga pela largura do rótulo da Faixa
-  de preço), senão cada uma fica exatamente no seu próprio ponto. Os dois textos abaixo começam direto pelo
+  não um valor aproximado) - com menos de 8 pregões de histórico, fica "Sem dado" (não mostra a bolinha vazada
+  nem o rótulo, nunca inventa). As 2 barras usam o MESMO padrão de marcador: sempre as 2 bolinhas visíveis,
+  cada uma com seu valor na posição do seu próprio ponto (nunca um valor empilhado embaixo do outro) - valor
+  de hoje em azul, em cima da régua, direto acima da própria bolinha cheia (`marca-cima so-valor`); "7 dias
+  atrás" (rótulo) e o valor (negrito) em 2 linhas, em cinza pequeno, embaixo da régua, direto abaixo da própria
+  bolinha vazada (`marca-baixo`, `<b>` pro valor) - o rótulo deixa claro que aquele número é de 7 pregões
+  atrás, não do dia de hoje nem do próprio 0%/ponto neutro da régua. As 2 bolinhas (hoje e 7 dias atrás) nunca
+  podem ficar tão perto a ponto de uma esconder a outra: `afastarBolinhas()` afasta a posição visual das duas
+  (e dos valores acima/abaixo, que seguem a mesma posição da sua bolinha) só o mínimo necessário - raio de
+  cada bolinha (hoje 18px cheia, 7 dias 10px vazada) mais um respiro - preservando a posição real quando já
+  há espaço de sobra; com valores iguais ou muito próximos, as 2 continuam sempre visíveis lado a lado. Os
+  dois textos de leitura (abaixo da barra de Força da tendência) começam direto pelo
   percentual, sem rótulo ("Perdeu força"/"Alta"/"Precisa subir"/"Cai" tirados): "20,94% abaixo da média de 200
   dias." e "26,5% para voltar à média." - sem repetir a mesma distância numa segunda frase ("Preço X está Y%
-  abaixo da média de Z"). Cores das zonas: na barra de Força da tendência, "Perdeu força" (abaixo de 0%)
-  continua vermelha; "Fraca" (0% a 3%) é cinza neutro; "Média" (3% a 10%) é verde-claro; "Forte" (10% a 15%) é
-  verde-forte. Na barra de Força (IFR 0-100), "Muita venda" (0-30) é vermelha e "Muita compra" (70-100) é
-  verde (não mais verde/âmbar como antes) - dentro da faixa de 30 a 100, o gradiente fica mais granular que os
-  3 rótulos (Muita venda/Equilíbrio/Muita compra): cinza neutro de 30 a 50, verde-claro de 50 a 70, verde-forte
-  de 70 a 100, com traço e número também em 50 (além de 0/30/70/100 que já existiam).
+  abaixo da média de Z"); logo acima desses textos, uma frase fixa lembra o valor da média de 200 dias e que
+  ela é o ponto 0% da régua.
+  Os nomes das zonas são os MESMOS nas 2 barras: "Perdeu força"/"Muita venda" (vermelho) | "Equilíbrio" (cinza)
+  | "Alta leve" (verde-claro) | "Forte" (verde-forte) - a barra de Força da tendência usava antes "Leve compra"
+  e "Compra forte", renomeados para padronizar com a barra de Força (IFR).
+  Zonas da barra de Força da tendência: escala fixa de -30% a +30% (só estica além disso se a distância real
+  passar desses limites) - abaixo de -10% é "Perdeu força"; de -10% a +10% é "Equilíbrio" (com a própria média
+  de 200 dias, 0%, marcada no meio dessa faixa); de +10% a +20% é "Alta leve"; acima de +20% é "Forte".
+  Zonas da barra de Força (IFR 0-100): de 0 a 40 é "Muita venda"; de 40 a 60 é "Equilíbrio" (com 50 marcado
+  como ponto neutro - mesma frase de referência da Força da tendência, adaptada: "50 é o ponto neutro da régua
+  acima"); de 60 a 80 é "Alta leve"; de 80 a 100 é "Forte".
+  O rótulo de cada zona fica centralizado no MEIO visual da própria faixa de cor (ex.: "Equilíbrio" sempre em
+  cima do ponto central da faixa cinza - 0% na barra de tendência, 50 na de IFR), calculado como o ponto médio
+  exato dos limites da zona (`position:absolute;left:[meio]%;transform:translateX(-50%)`) - essas 2 barras não
+  usam a classe `.zonas-rot` (grade CSS compartilhada com SIMONS/Lynch/Conservador), porque o `gap` da grade
+  deixava o nome fora do centro real da faixa; a mudança é só nessas 2 barras, pra não arriscar as outras.
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 
