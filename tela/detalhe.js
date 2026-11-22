@@ -582,21 +582,22 @@ function montar(root, d) {
     const corT = { Alta: 'var(--verde)', Baixa: 'var(--vermelho)', Equilíbrio: 'var(--suave)' }[tituloT] || 'var(--texto)';
     // texto da Força (IFR) no mesmo padrão "de X para Y" da evolução da Direção da tendência acima, pra
     // mostrar a evolução em vez de só o estado de hoje - zona calculada com as MESMAS 5 faixas/limiares da
-    // régua abaixo (Muita venda/Venda/Neutro/Compra/Muita compra, 0-20/20-40/40-60/60-80/80-100), nunca com
-    // limiares diferentes dos mostrados na própria barra (senão o texto pode contradizer a cor/posição da
-    // bolinha). Sem o histórico de 7 dias, mantém uma frase descritiva da zona de hoje (nunca inventa uma
-    // comparação)
-    const zonaIFR = v => v < 20 ? 'Muita venda' : v < 40 ? 'Venda' : v < 60 ? 'Neutro' : v < 80 ? 'Compra' : 'Muita compra';
+    // régua abaixo (Muita venda/Venda/Neutro/Compra/Muita compra, padrão de mercado: <30/30-40/40-60/60-70/
+    // >70), nunca com limiares diferentes dos mostrados na própria barra (senão o texto pode contradizer a
+    // cor/posição da bolinha). Sem o histórico de 7 dias, mantém uma frase descritiva da zona de hoje (nunca
+    // inventa uma comparação)
+    const zonaIFR = v => v < 30 ? 'Muita venda' : v < 40 ? 'Venda' : v < 60 ? 'Neutro' : v <= 70 ? 'Compra' : 'Muita compra';
     let leitura = '';
     if (tem(d.forca)) {
       const zonaHoje = zonaIFR(d.forca);
       if (tem(d.forca7d)) {
         const zona7 = zonaIFR(d.forca7d);
+        const verbo = d.forca > d.forca7d ? 'subiu' : d.forca < d.forca7d ? 'caiu' : null;
         if (zonaHoje !== zona7) {
-          leitura = `Virou de ${zona7} para ${zonaHoje}: de ${f(d.forca7d, 0)} para ${f(d.forca, 0)}.`;
+          leitura = verbo ? `Virou de ${zona7} para ${zonaHoje}: ${verbo} de ${f(d.forca7d, 0)} para ${f(d.forca, 0)}.`
+            : `Virou de ${zona7} para ${zonaHoje}: manteve em ${f(d.forca, 0)}.`;
         } else {
-          const verbo = d.forca > d.forca7d ? 'Subiu' : d.forca < d.forca7d ? 'Caiu' : null;
-          leitura = verbo ? `${zonaHoje}. ${verbo} de ${f(d.forca7d, 0)} para ${f(d.forca, 0)}.` : `${zonaHoje}. Manteve em ${f(d.forca, 0)}.`;
+          leitura = verbo ? `${zonaHoje}. ${verbo.charAt(0).toUpperCase() + verbo.slice(1)} de ${f(d.forca7d, 0)} para ${f(d.forca, 0)}.` : `${zonaHoje}. Manteve em ${f(d.forca, 0)}.`;
         }
       } else {
         leitura = zonaHoje === 'Muita compra' ? 'Muita compra. Subiu rápido demais.'
@@ -605,7 +606,7 @@ function montar(root, d) {
           : zonaHoje === 'Venda' ? 'Venda. Pressão de venda.' : 'Neutro. Sem pressão de compra nem de venda.';
       }
     }
-    const fundo = 'linear-gradient(90deg,var(--vermelho) 0 20%,var(--ambar) 20% 40%,var(--ardosia) 40% 60%,var(--verde-claro) 60% 80%,var(--verde-forte) 80% 100%)';
+    const fundo = 'linear-gradient(90deg,var(--vermelho) 0 30%,var(--ambar) 30% 40%,var(--ardosia) 40% 60%,var(--verde-claro) 60% 70%,var(--verde-forte) 70% 100%)';
     const RMIN = tem(dist) && dist < -30 ? Math.floor((dist - 5) / 10) * 10 : -30;
     const RMAX = tem(dist) && dist > 30 ? Math.ceil((dist + 5) / 10) * 10 : 30;
     const pt = v => (v - RMIN) / (RMAX - RMIN) * 100;
@@ -688,17 +689,17 @@ function montar(root, d) {
           <strong>Força - RSI</strong><div class="nota">Últimos 14 dias</div>
           ${tem(d.forca) ? `<div style="position:relative;height:16px;margin-top:8px;font-size:11px;font-weight:700;white-space:nowrap">
             <span style="position:absolute;left:0;color:var(--vermelho)">Muita venda</span>
-            <span style="position:absolute;left:30%;transform:translateX(-50%);color:var(--ambar)">Venda</span>
+            <span style="position:absolute;left:35%;transform:translateX(-50%);color:var(--ambar)">Venda</span>
             <span style="position:absolute;left:50%;transform:translateX(-50%);color:#aab4c6">Neutro</span>
-            <span style="position:absolute;left:70%;transform:translateX(-50%);color:var(--verde-claro)">Compra</span>
+            <span style="position:absolute;left:65%;transform:translateX(-50%);color:var(--verde-claro)">Compra</span>
             <span style="position:absolute;right:0;color:var(--verde-forte)">Muita compra</span>
           </div>
           <div class="marca-cima limites num">
-            <span class="esq">0</span><span style="left:20%">20</span><span style="left:40%">40</span><span style="left:60%">60</span><span style="left:80%">80</span><span class="dir">100</span>
+            <span class="esq">0</span><span style="left:30%">30</span><span style="left:40%">40</span><span style="left:60%">60</span><span style="left:70%">70</span><span class="dir">100</span>
           </div>
           <div class="marca-cima so-valor num"><span style="${ancora(forcaBola)};color:var(--azul);font-weight:600;font-size:12px">${f(d.forca, 0)}</span></div>
           <div class="regua" style="background:${fundo};margin-top:4px">
-            <span class="traco" style="left:20%"></span><span class="traco" style="left:40%"></span><span class="traco" style="left:50%"></span><span class="traco" style="left:60%"></span><span class="traco" style="left:80%"></span>
+            <span class="traco" style="left:30%"></span><span class="traco" style="left:40%"></span><span class="traco" style="left:50%"></span><span class="traco" style="left:60%"></span><span class="traco" style="left:70%"></span>
             ${tem(d.forca7d) ? `<span class="bola-7d" style="left:${forca7dBola}%"></span>` : ''}
             <span class="bola" style="left:${forcaBola}%"></span>
           </div>

@@ -368,11 +368,12 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Zonas da barra de Força da tendência: escala fixa de -30% a +30% (só estica além disso se a distância real
   passar desses limites) - abaixo de -10% é "Baixa"; de -10% a +10% é "Equilíbrio" (com a própria média
   de 200 dias, 0%, marcada no meio dessa faixa); de +10% a +20% é "Alta leve"; acima de +20% é "Forte".
-  A barra de Força (IFR, título "Força - RSI") tem 5 zonas, não 4: "Muita venda" (vermelho, 0-20) | "Venda"
-  (âmbar, 20-40) | "Neutro" (cinza, 40-60, com 50 marcado com um traço na própria régua, além dos traços de
-  20/40/60/80 - mesma frase de referência da Força da tendência, adaptada: "50 é o ponto neutro da régua
-  acima") | "Compra" (verde-claro, 60-80) | "Muita
-  compra" (verde-forte, 80-100).
+  A barra de Força (IFR, título "Força - RSI") tem 5 zonas, não 4, no PADRÃO DE MERCADO (regra travada):
+  "Muita venda" (vermelho, <30) | "Venda" (âmbar, 30-40) | "Neutro" (cinza, 40-60, com 50 marcado com um traço
+  na própria régua, além dos traços de 30/40/60/70 - mesma frase de referência da Força da tendência, adaptada:
+  "50 é o ponto neutro da régua acima") | "Compra" (verde-claro, 60-70) | "Muita compra" (verde-forte, >70).
+  Os limiares são 30/40/60/70 (não 20/40/60/80 - régua já teve esse limiar errado, bug corrigido porque ficava
+  desalinhada do padrão de mercado de RSI).
   O rótulo de cada zona fica centralizado no MEIO visual da própria faixa de cor (ex.: "Equilíbrio"/"Neutro"
   sempre em cima do ponto central da faixa cinza - 0% na barra de tendência, 50 na de IFR; as zonas da ponta -
   "Baixa"/"Muita venda" à esquerda, "Forte"/"Muita compra" à direita - ficam ancoradas na borda, não
@@ -382,19 +383,21 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   real da faixa; a mudança é só nessas 2 barras, pra não arriscar as outras.
   O texto de leitura da Força (destaque abaixo da régua de IFR) segue o MESMO padrão "de X para Y" da evolução
   da Direção da tendência, pra mostrar a evolução em vez de só o estado de hoje - zona calculada com as MESMAS
-  5 faixas/limiares da régua logo acima (Muita venda <20 / Venda 20-40 / Neutro 40-60 / Compra 60-80 / Muita
-  compra >=80; NÃO usa limiares diferentes dos mostrados na própria barra, tipo o antigo Sobrecomprada/
-  Sobrevendida 70/30 ou o esquema de 4 zonas anterior - um texto com zona diferente da cor/posição da bolinha
-  na régua já foi bug reportado e corrigido) pro valor de hoje e pro de 7 dias atrás (`forca7d`): mesma zona e
-  subiu = "[Zona]. Subiu de [7 dias] para [hoje]."; mesma zona e caiu = "...Caiu de [7 dias] para [hoje].";
-  zona diferente = "Virou de [zona 7 dias] para [zona hoje]: de [7 dias] para [hoje]." (ex.: "Virou de Neutro
-  para Venda: de 45 para 29." - 45 fica entre 40 e 60, Neutro). Sem `forca7d` (menos de 8 pregões de
-  histórico): mantém uma frase descritiva só da zona de hoje (Muita compra: "Subiu rápido demais."; Compra:
-  "Pressão de compra."; Muita venda: "Caiu rápido demais."; Venda: "Pressão de venda."; Neutro: "Sem pressão de
-  compra nem de venda."), nunca inventando uma comparação sem dado.
+  5 faixas/limiares da régua logo acima (Muita venda <30 / Venda 30-40 / Neutro 40-60 / Compra 60-70 / Muita
+  compra >70; NÃO usa limiares diferentes dos mostrados na própria barra, tipo o antigo Sobrecomprada/
+  Sobrevendida 70/30 OU o esquema de limiares 20/40/60/80 - um texto com zona diferente da cor/posição da
+  bolinha na régua já foi bug reportado e corrigido mais de uma vez) pro valor de hoje e pro de 7 dias atrás
+  (`forca7d`): mesma zona e subiu = "[Zona]. Subiu de [7 dias] para [hoje]."; mesma zona e caiu = "...Caiu de
+  [7 dias] para [hoje]."; zona diferente = "Virou de [zona 7 dias] para [zona hoje]: subiu/caiu de [7 dias]
+  para [hoje]." - o verbo entra TAMBÉM na frase de "Virou de..." (antes só dizia "de X para Y" sem verbo; ex.:
+  "Virou de Venda para Muita venda: caiu de 32 para 24."). Sem `forca7d` (menos de 8 pregões de histórico):
+  mantém uma frase descritiva só da zona de hoje (Muita compra: "Subiu rápido demais."; Compra: "Pressão de
+  compra."; Muita venda: "Caiu rápido demais."; Venda: "Pressão de venda."; Neutro: "Sem pressão de compra nem
+  de venda."), nunca inventando uma comparação sem dado.
   NÃO é bug o valor de hoje ficar na mesma zona de 7 dias atrás mesmo perto de um limite (ex.: valor caindo de
-  35 pra 31, ambos abaixo de 40 - "Venda. Caiu de 35 para 31.", não "Virou de..."); "Virou de..." só aparece
-  quando o valor de hoje realmente cruza um dos limiares 20/40/60/80.
+  35 pra 31, ambos entre 30 e 40 - "Venda. Caiu de 35 para 31.", não "Virou de..."); "Virou de..." só aparece
+  quando o valor de hoje realmente cruza um dos limiares 30/40/60/70. Teste travado: RSI 24 cai em Muita venda;
+  RSI 31 continua em Venda; RSI 70 é Compra; RSI 71 já é Muita compra.
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 
