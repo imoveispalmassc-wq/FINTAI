@@ -64,39 +64,20 @@ ATIVOS: dict[str, dict[str, Any]] = {
     "AAPL": {"mercado": "EUA", "regra": "xbrl"},
     "ADM": {"mercado": "EUA", "regra": "xbrl"},
     "HSIC": {"mercado": "EUA", "regra": "xbrl"},
-    "ACM": {
-        "mercado": "EUA",
-        "regra": "xbrl",
-        # AECOM: lucro de OPERAÇÕES CONTÍNUAS (o total inclui descontinuadas)
-        "tags_lucro": [
-            "IncomeLossFromContinuingOperationsAttributableToParent",
-            "IncomeLossFromContinuingOperations",
-        ],
-        "tags_lpa": ["IncomeLossFromContinuingOperationsPerDilutedShare"],
-        "lpa_tipo": "diluido_operacoes_continuas",
-    },
+    # AECOM tem operações descontinuadas: a REGRA 2 (padrão do xbrl) usa as contínuas e marca tem_descontinuadas
+    "ACM": {"mercado": "EUA", "regra": "xbrl"},
     "XP": {
         "mercado": "EUA",
         "regra": "xp_ajustado",  # lucro e LPA diluído AJUSTADOS (gerencial) do 6-K
         "moeda_lpa": "BRL",
         "moeda_preco": "USD",
     },
-    "NVDA": {"mercado": "EUA", "regra": "guidance_receita"},
-    "TGT": {
-        "mercado": "EUA",
-        "regra": "guidance_lpa",
-        "lpa_guidance": 11.03,          # com reembolso de tarifas
-        "lpa_limpo": 8.89,              # sem reembolso (anotado)
-        "contexto": ["EPS"],
-        "lpa_tipo": "guidance_com_reembolso_tarifas",
-    },
-    "PANW": {
-        "mercado": "EUA",
-        "regra": "guidance_lpa",
-        "lpa_guidance": 4.28,
-        "contexto": ["non-GAAP", "EPS"],
-        "lpa_tipo": "guidance_nao_gaap",
-    },
+    # REGRA 5 (travada): TTM = 4 trimestres REAIS (GAAP). Guidance nunca entra no TTM - fica em guidance_auto.json.
+    # NVDA/TGT/PANW eram configurados por guidance (LPA projetado no campo do TTM): agora TTM GAAP normal.
+    # "ri": domínios do RI da empresa aceitos como link oficial (ordem de fonte: release no RI > 8-K/6-K > CVM).
+    "NVDA": {"mercado": "EUA", "regra": "xbrl", "ri": ["investor.nvidia.com", "nvidianews.nvidia.com"]},
+    "TGT": {"mercado": "EUA", "regra": "xbrl", "ri": ["corporate.target.com", "investors.target.com"]},
+    "PANW": {"mercado": "EUA", "regra": "xbrl", "ri": ["investors.paloaltonetworks.com"]},
     "PETR4": {
         "mercado": "BR",
         "regra": "cvm",
@@ -117,6 +98,10 @@ ATIVOS: dict[str, dict[str, Any]] = {
 
 TAGS_LUCRO_PADRAO = ["NetIncomeLoss"]
 TAGS_LPA_PADRAO = ["EarningsPerShareDiluted"]
+# REGRA 2 (travada): com operações descontinuadas, vale o resultado de operações CONTÍNUAS
+TAGS_LUCRO_CONTINUAS = ["IncomeLossFromContinuingOperationsAttributableToParent", "IncomeLossFromContinuingOperations"]
+TAGS_LPA_CONTINUAS = ["IncomeLossFromContinuingOperationsPerDilutedShare"]
+ARQ_Q4_RELEASE = Path(__file__).resolve().parent / "q4_release.json"
 
 FORMS_RESULTADO_EUA = {"10-Q", "10-K", "10-Q/A", "10-K/A", "20-F", "6-K"}
 ITENS_8K_RESULTADO = {"2.02"}
@@ -182,14 +167,29 @@ def ler_last_run(caminho: Path, hoje: date) -> date:
     return _d(dados["last_run"])
 
 
-def link_oficial_valido(link: str | None) -> bool:
+def link_oficial_valido(link: str | None, extras: tuple | list = ()) -> bool:
+    """SEC/CVM sempre; `extras` = domínios do RI da própria empresa (config "ri")."""
     if not link:
         return False
     m = re.match(r"https?://([^/]+)/", link + "/")
     if not m:
         return False
     host = m.group(1).lower()
-    return any(host == dom or host.endswith("." + dom) for dom in DOMINIOS_OFICIAIS)
+    return any(host == dom or host.endswith("." + dom) for dom in (*DOMINIOS_OFICIAIS, *extras))
+
+
+def q4_release(ticker: str) -> dict:
+    """REGRA 3: 4º tri divulgado explicitamente no release, {"YYYY-MM-DD": lpa} (arquivo usa DD/MM/AAAA)."""
+    try:
+        cfg = json.loads(ARQ_Q4_RELEASE.read_text(encoding="utf-8")).get(ticker.upper()) or {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+    saida = {}
+    for fim, v in cfg.items():
+        d, m_, a = fim.split("/")
+        if v.get("lpa") is not None:
+            saida[f"{a}-{m_}-{d}"] = float(v["lpa"])
+    return saida
 
 
 def _num(txt: str) -> float:
@@ -291,7 +291,7 @@ def trimestres_de_fatos(fatos: list[dict]) -> list[dict]:
     for f in por_periodo.values():
         if 80 <= _dur(f) <= 100:
             tri[f["end"]] = {"start": f["start"], "end": f["end"], "val": float(f["val"]),
-                             "ref": f.get("ref"), "derivado": False}
+                             "ref": f.get("ref"), "derivado": False, "filed": str(f.get("filed", ""))}
 
     for f in por_periodo.values():
         if not (350 <= _dur(f) <= 380) or f["end"] in tri:
@@ -313,7 +313,8 @@ def trimestres_de_fatos(fatos: list[dict]) -> list[dict]:
                 inicio_q4 = _d(dentro[-1]["end"]) + timedelta(days=1)
         if val is not None:
             tri[f["end"]] = {"start": inicio_q4.isoformat(), "end": f["end"],
-                             "val": round(val, 6), "ref": f.get("ref"), "derivado": True}
+                             "val": round(val, 6), "ref": f.get("ref"), "derivado": True,
+                             "filed": str(f.get("filed", ""))}
 
     return sorted(tri.values(), key=lambda x: x["end"])
 
@@ -460,30 +461,81 @@ class Fontes:
             return self._guidance_lpa(cik, cfg)
         return vazio("PENDENTE_CONFIG", f"Regra desconhecida: {regra}")
 
+    def _serie_ttm(self, cik: str, tags: list[str], unidade: str, q4_rel: dict | None = None) -> dict | None:
+        """4 últimos trimestres de um conceito, com as regras travadas:
+        REGRA 3 - 4º tri = ano - 9 meses; se o release divulgou o 4º tri (q4_release.json), vale o do release
+        (registra q4_calculado / q4_release / q4_usado). Quando os 4 trimestres são exatamente um ano fiscal com
+        valor anual oficial (10-K), o TTM é o anual (LPA não é aditivo)."""
+        for tag in tags:
+            fatos = self._fatos_xbrl(cik, tag, unidade)
+            if not fatos:
+                continue
+            tri = trimestres_de_fatos(fatos)
+            q4 = {}
+            for x in tri:
+                if x["derivado"] and q4_rel and x["end"] in q4_rel:
+                    q4 = {"q4_calculado": round(x["val"], 4), "q4_release": q4_rel[x["end"]],
+                          "q4_usado": q4_rel[x["end"]], "q4_fim": x["end"]}
+                    x["val"] = q4_rel[x["end"]]
+                elif x["derivado"]:
+                    q4 = {"q4_calculado": round(x["val"], 4), "q4_release": None,
+                          "q4_usado": round(x["val"], 4), "q4_fim": x["end"]}
+            q = ultimos_4_consecutivos(tri)
+            if not q:
+                continue
+            soma = sum(x["val"] for x in q)
+            res = {"q": q, "tag": tag, "valor": soma, "q4": q4 if q4.get("q4_fim") in [x["end"] for x in q] else {}}
+            anual = [f for f in fatos if f.get("start", "")[:10] == q[0]["start"] and f.get("end", "")[:10] == q[-1]["end"]
+                     and 350 <= _dur(f) <= 380 and f.get("val") is not None]
+            if anual:
+                ult = max(anual, key=lambda f: str(f.get("filed", "")))
+                res.update(valor=float(ult["val"]), soma_trimestres=round(soma, 4),
+                           ttm_regra="ano fiscal completo: valor anual oficial do 10-K")
+            return res
+        return None
+
     def _ttm_padrao(self, ticker: str, cfg: dict, cik: str) -> dict:
+        """REGRA 1: GAAP. REGRA 2: operações contínuas quando há descontinuadas (flag tem_descontinuadas,
+        total só como nota). REGRA 3: ver _serie_ttm."""
+        q4_rel = q4_release(ticker)
         tl = cfg.get("tags_lucro", TAGS_LUCRO_PADRAO)
         tp = cfg.get("tags_lpa", TAGS_LPA_PADRAO)
-        ql, tag_l = self._ttm_xbrl(cik, tl, "USD")
-        qp, tag_p = self._ttm_xbrl(cik, tp, "USD/shares")
+        sl = self._serie_ttm(cik, tl, "USD")
+        sp = self._serie_ttm(cik, tp, "USD/shares", q4_rel)
+        cont_p = self._serie_ttm(cik, TAGS_LPA_CONTINUAS, "USD/shares", q4_rel) if "tags_lpa" not in cfg else None
         res = vazio("ATUALIZADO")
-        res.update(lucro_moeda="USD", lpa_moeda="USD",
-                   lpa_tipo=cfg.get("lpa_tipo", "diluido_gaap"))
-        if ql:
-            res["lucro_ttm"] = round(sum(x["val"] for x in ql), 2)
+        res.update(lucro_moeda="USD", lpa_moeda="USD", lpa_tipo=cfg.get("lpa_tipo", "diluido_gaap"))
+        if cont_p and sp and [x["end"] for x in cont_p["q"]] == [x["end"] for x in sp["q"]] \
+                and abs(cont_p["valor"] - sp["valor"]) >= 0.005:
+            res.update(tem_descontinuadas=True, lpa_total=round(sp["valor"], 4), lpa_tipo="diluido_operacoes_continuas")
+            cont_l = self._serie_ttm(cik, TAGS_LUCRO_CONTINUAS, "USD")
+            if sl:
+                res["lucro_total"] = round(sl["valor"], 2)
+            sp, tp = cont_p, TAGS_LPA_CONTINUAS
+            if cont_l:
+                sl, tl = cont_l, TAGS_LUCRO_CONTINUAS
+        if sl:
+            res["lucro_ttm"] = round(sl["valor"], 2)
         else:
             res["pendencias"].append(f"PENDENTE_XBRL: sem 4 trimestres consecutivos para {tl}")
-        if qp:
-            res["lpa_ttm"] = round(sum(x["val"] for x in qp), 4)
+        if sp:
+            res["lpa_ttm"] = round(sp["valor"], 4)
+            res.update(sp["q4"])
+            if sp.get("ttm_regra"):
+                res.update(ttm_regra=sp["ttm_regra"], soma_trimestres=sp["soma_trimestres"])
         else:
             res["pendencias"].append(f"PENDENTE_XBRL: sem 4 trimestres consecutivos para {tp}")
-        if ql and qp and [x["end"] for x in ql] != [x["end"] for x in qp]:
+        if sl and sp and [x["end"] for x in sl["q"]] != [x["end"] for x in sp["q"]]:
             res["pendencias"].append("Trimestres do lucro e do LPA não coincidem.")
-        base = qp or ql
+        base = sp or sl
         if base:
-            res["trimestres"] = [x["end"] for x in base]
-            res["derivados"] = [x["end"] for x in base if x["derivado"]]
-            res["link_oficial"] = base[-1]["ref"]
-            res["fonte"] = f"SEC XBRL ({tag_l or '-'} / {tag_p or '-'})"
+            res["trimestres"] = [x["end"] for x in base["q"]]
+            res["derivados"] = [x["end"] for x in base["q"] if x["derivado"]]
+            res["link_oficial"] = base["q"][-1]["ref"]
+            res["fonte"] = f"SEC XBRL ({sl['tag'] if sl else '-'} / {sp['tag'] if sp else '-'})"
+            datas = [x.get("filed", "") for x in base["q"] if re.fullmatch(r"\d{4}-\d{2}-\d{2}", x.get("filed", "")[:10])]
+            if datas:
+                res["source_date"] = _data_br_iso(max(datas)[:10])   # data do documento oficial mais novo
         if res["pendencias"]:
             res["status"] = "PENDENTE_XBRL"
         return res
@@ -491,7 +543,9 @@ class Fontes:
     def _ttm_xp(self, cik: str) -> dict:
         """Lucro e LPA diluído AJUSTADOS dos 4 últimos releases (6-K, Exhibit 99.1)."""
         res = vazio("ATUALIZADO")
-        res.update(lucro_moeda="BRL", lpa_moeda="BRL", lpa_tipo="diluido_ajustado_gerencial")
+        # REGRA 1 (travada): ajustado nunca no campo principal. O release só traz o LPA ajustado -> lpa_ajustado;
+        # lpa_ttm (GAAP) fica vazio até haver o LPA contábil diluído em fonte oficial.
+        res.update(lucro_moeda="BRL", lpa_moeda="BRL", lpa_tipo="diluido_gaap")
         trimestres: dict[str, dict] = {}
         for f in self._filings_sec(cik):
             if len(trimestres) >= 4:
@@ -511,8 +565,11 @@ class Fontes:
                 f"XP: só {len(trimestres)} release(s) 6-K com lucro/LPA ajustado legíveis.")
             return res
         ult = sorted(trimestres.values(), key=lambda x: x["fim"])[-4:]
-        res["lucro_ttm"] = round(sum(x["lucro"] for x in ult), 2)
-        res["lpa_ttm"] = round(sum(x["lpa"] for x in ult), 4)
+        res["lucro_ajustado"] = round(sum(x["lucro"] for x in ult), 2)
+        res["lpa_ajustado"] = round(sum(x["lpa"] for x in ult), 4)
+        if all(x.get("lucro_contabil") is not None for x in ult):
+            res["lucro_ttm"] = round(sum(x["lucro_contabil"] for x in ult), 2)
+        res["pendencias"].append("XP: LPA GAAP (contábil diluído) não divulgado no release 6-K; ajustado só como nota.")
         res["trimestres"] = [x["fim"] for x in ult]
         res["link_oficial"] = ult[-1]["link"]
         res["fonte"] = "SEC 6-K Exhibit 99.1 (release de resultados, valores ajustados)"
@@ -766,9 +823,11 @@ def _extrair_xp(texto: str) -> dict | None:
         lucro = re.search(r"\bNet Income\s*\|?\s*([\d,]{3,})\s*\|", texto)
     if not (lpa and lucro):
         return None
+    contabil = re.search(r"(?<!Adjusted )\bNet Income\s*\|?\s*([\d,]{3,})\s*\|", texto)
     return {"fim": f"{ano}-{_FIM_TRI[tri]}",
             "lucro": _num(lucro.group(1)) * 1e6,   # tabela em R$ milhões
-            "lpa": float(lpa.group(1))}
+            "lpa": float(lpa.group(1)),
+            "lucro_contabil": _num(contabil.group(1)) * 1e6 if contabil else None}
 
 
 def _valor_no_contexto(texto: str, valor: float, termos: list[str], raio: int = 400) -> bool:
@@ -825,7 +884,13 @@ def config_ativo(ticker: str) -> dict:
 
 CAMPOS_TTM = ("lucro_ttm", "lucro_moeda", "lpa_ttm", "lpa_moeda", "lpa_tipo", "lpa_limpo",
               "receita_guidance", "trimestres", "derivados", "fonte", "link_oficial",
-              "link_lucro", "status", "pendencias")
+              "link_lucro", "status", "pendencias",
+              # notas das regras travadas (ajustado/total só como extra; divergência do 4º tri)
+              "lpa_ajustado", "lucro_ajustado", "tem_descontinuadas", "lpa_total", "lucro_total",
+              "q4_calculado", "q4_release", "q4_usado", "q4_fim", "ttm_regra", "soma_trimestres",
+              # marcação obrigatória: NUNCA apagada pelo ttm_auto.py
+              "last_updated", "updated_by", "source_date")
+CAMPOS_MARCACAO = ("last_updated", "updated_by", "source_date")
 
 CAMPOS_NUMERICOS_OFICIAIS = ("lucro_ttm", "lpa_ttm", "lpa_limpo", "receita_guidance")
 
@@ -833,12 +898,13 @@ CAMPOS_NUMERICOS_OFICIAIS = ("lucro_ttm", "lpa_ttm", "lpa_limpo", "receita_guida
 def validar_registro(reg: dict) -> dict:
     """Nenhum número oficial sem link SEC/CVM: se o link faltar, zera o campo e marca pendente."""
     descartados = []
-    link_principal_ok = link_oficial_valido(reg.get("link_oficial"))
+    ri = tuple(config_ativo(reg["ticker"]).get("ri", ())) if reg.get("ticker") else ()
+    link_principal_ok = link_oficial_valido(reg.get("link_oficial"), ri)
     for c in CAMPOS_NUMERICOS_OFICIAIS:
         if reg.get(c) is None:
             continue
         link = reg.get("link_lucro") if c == "lucro_ttm" and reg.get("link_lucro") else reg.get("link_oficial")
-        if not link_oficial_valido(link):
+        if not link_oficial_valido(link, ri):
             reg[c] = None
             descartados.append(c)
     if "lpa_ttm" in descartados:
@@ -852,10 +918,30 @@ def validar_registro(reg: dict) -> dict:
     return reg
 
 
+def cotacao_verificada(reg: dict) -> bool:
+    """REGRA 4 (travada): cotação copiada de outro robô, estimada ou sem fonte não é verificada."""
+    fonte = str(reg.get("preco_fonte") or "")
+    return reg.get("preco") is not None and bool(fonte) and "COPIADO" not in fonte.upper() \
+        and "NÃO VERIFICAD" not in fonte.upper() and "ESTIMAD" not in fonte.upper() \
+        and reg.get("preco_verificado") is not False
+
+
+def status_pl(reg: dict) -> str:
+    if not cotacao_verificada(reg):
+        return "cotação pendente"
+    if reg.get("lpa_ttm") is None:
+        return "LPA GAAP indisponível"
+    if reg["lpa_ttm"] <= 0:
+        return "P/L negativo (n/s)"
+    return "ok" if reg.get("pl") is not None else "sem câmbio"
+
+
 def calcular_pl(reg: dict, usd_brl: float | None) -> tuple[float | None, str | None]:
     lpa, preco = reg.get("lpa_ttm"), reg.get("preco")
     if lpa is None or preco is None:
         return None, None
+    if not cotacao_verificada(reg):
+        return None, "cotação pendente: sem cotação verificada, sem P/L"
     if reg.get("lpa_moeda") and reg.get("preco_moeda") and reg["lpa_moeda"] != reg["preco_moeda"]:
         if not usd_brl:
             return None, "Sem dólar para converter moedas."
@@ -866,6 +952,10 @@ def calcular_pl(reg: dict, usd_brl: float | None) -> tuple[float | None, str | N
     if lpa <= 0:
         return None, f"P/L negativo (n/s): LPA {lpa}"
     return round(preco / lpa, 2), None
+
+
+def _data_br_iso(iso: str) -> str:
+    return f"{iso[8:10]}/{iso[5:7]}/{iso[:4]}"
 
 
 def _precisa_recalcular(prev: dict | None, docs: list[dict]) -> bool:
@@ -935,12 +1025,24 @@ def executar(base: Path, hoje: date, fontes: Any) -> int:
                 if _precisa_recalcular(prev, docs):
                     ttm = fontes.calcular_ttm(t)
                     _marcar_lag(ttm, docs)
-                    if prev and ttm["status"].startswith("PENDENTE") and ttm.get("lucro_ttm") is None \
-                            and prev.get("lucro_ttm") is not None:
-                        # Mantém o último TTM OFICIAL, sinalizando a pendência.
+                    if prev and ttm["status"].startswith("PENDENTE") and (
+                            prev.get("lpa_ttm") is not None or prev.get("lucro_ttm") is not None):
+                        # Já tinha TTM bom: NÃO volta para pendente. Mantém o último TTM (com a marcação)
+                        # e registra o motivo em pendencias.
                         manter = {c: prev.get(c) for c in CAMPOS_TTM if c not in ("status", "pendencias")}
-                        ttm = {**manter, "status": ttm["status"], "pendencias": ttm["pendencias"]}
-                    origem = "RECALCULADO" if docs or prev is None else "RETENTATIVA_PENDENTE"
+                        ttm = {**manter, "status": "MANTIDO_TTM_ANTERIOR",
+                               "pendencias": list(ttm["pendencias"])}
+                        origem = "MANTIDO_TTM_ANTERIOR"
+                    else:
+                        origem = "RECALCULADO" if docs or prev is None else "RETENTATIVA_PENDENTE"
+                        if not ttm["status"].startswith("PENDENTE"):
+                            ttm["last_updated"] = datetime.now(TZ_BR).strftime("%d/%m/%Y às %H:%M")
+                            ttm["updated_by"] = "ttm_auto.py"
+                            ttm["source_date"] = ttm.get("source_date") or (
+                                _data_br_iso(max(d["data"] for d in docs)) if docs else (prev or {}).get("source_date"))
+                        for c in CAMPOS_MARCACAO:     # nunca apaga a marcação já gravada
+                            if ttm.get(c) is None and prev and prev.get(c) is not None:
+                                ttm[c] = prev[c]
                 else:
                     ttm = {c: prev.get(c) for c in CAMPOS_TTM}
                     ttm["status"] = "SEM_NOVO_DOCUMENTO"
@@ -956,6 +1058,7 @@ def executar(base: Path, hoje: date, fontes: Any) -> int:
                 reg.update({k: usd.get(k) for k in ("usd_brl", "usd_brl_data", "usd_brl_fonte")})
                 pl, obs = calcular_pl(reg, usd.get("usd_brl"))
                 reg["pl"] = pl
+                reg["pl_status"] = status_pl(reg)
                 if obs:
                     reg["pendencias"] = list(reg.get("pendencias") or []) + [obs]
                 reg["dias_catchup"] = len(dias)

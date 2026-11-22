@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 concurrency:
   group: ttm-diario
@@ -32,10 +33,11 @@ jobs:
           python-version: "3.11"
 
       - name: Dependências
-        run: pip install requests numpy pandas yfinance pytest
+        run: pip install -r requirements.txt pytest || pip install requests numpy pandas yfinance pytest
 
-      - name: Testes do catch-up (offline)
-        run: python -m unittest discover -s tests -v
+      # REGRA 6 (travada): pytest antes de qualquer PR
+      - name: Testes (python -m pytest)
+        run: python -m pytest -q
 
       # Se este passo falhar, os passos seguintes não rodam:
       # last_run.json NÃO é atualizado e o próximo dia reprocessa os dias perdidos.
@@ -46,19 +48,30 @@ jobs:
           FINTAI_HOJE: ${{ github.event.inputs.hoje }}
         run: python utils/ttm_auto.py
 
-      - name: Commit automático
+      # REGRA 6 (travada): atualização automática NUNCA vai direto para a main - sempre PR para revisão
+      # (sempre o mesmo ramo, recriado a partir da main a cada execução: o PR aberto é atualizado, não duplicado)
+      - name: Abrir/atualizar pull request do TTM
         if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git config user.name  "fintai-bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add utils/ttm_diario.json utils/last_run.json
-          if git diff --cached --quiet; then
-            echo "Sem mudanças para commitar."
+          arquivos="utils/ttm_diario.json utils/last_run.json"
+          if git diff --quiet -- $arquivos; then
+            echo "Sem mudanças no TTM."
             exit 0
           fi
-          git commit -m "TTM diário $(date -u +%F) [automático]"
-          git fetch origin "${GITHUB_REF_NAME}"
-          git reset --soft "origin/${GITHUB_REF_NAME}"
-          git add utils/ttm_diario.json utils/last_run.json
-          git commit -m "TTM diário $(date -u +%F) [automático]" || echo "Nada novo após sync"
-          git push origin "HEAD:${GITHUB_REF_NAME}"
+          git fetch origin main
+          python tools/resumo_ttm_pr.py --base origin/main --saida /tmp/pr_ttm.md
+          mkdir -p /tmp/ttm && cp $arquivos /tmp/ttm/
+          git config user.name  "fintai-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git stash --include-untracked || true
+          ramo="ttm/revisar"
+          git checkout -B "$ramo" origin/main
+          cp /tmp/ttm/ttm_diario.json /tmp/ttm/last_run.json utils/
+          git add $arquivos
+          git commit -m "Atualização automática TTM - $(date -u +%d/%m/%Y) [revisar]"
+          git push --force origin "$ramo"
+          gh pr create --base main --head "$ramo" \
+            --title "TTM automático: revisar ($(date -u +%d/%m/%Y))" --body-file /tmp/pr_ttm.md \
+            || gh pr edit "$ramo" --body-file /tmp/pr_ttm.md

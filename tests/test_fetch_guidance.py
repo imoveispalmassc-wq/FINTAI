@@ -395,14 +395,15 @@ def _aj(valores):
     return {fim: {"lpa": v, "fonte": "SEC Form 8-K Exhibit 99.1, LPA Ajustado", "data": "x", "url": ""} for fim, v in valores.items()}
 
 
-def test_contabil_ajustado_da_adm_soma_5_19_e_nao_5_12():
+def test_regra1_tela_usa_gaap_5_12_e_ajustado_5_19_so_como_nota():
+    """REGRA 1 (travada): LPA ajustado NUNCA vai para o campo principal (lpa_12m)."""
     gaap = fg.lpa_ttm_sec(_fatos_adm(), dt.date(2026, 11, 17))
     assert gaap["lpa_12m"] == pytest.approx(5.12)                          # GAAP
     c = fg.contabil_ajustado(gaap, _aj(ADM_AJ))
-    assert c["lpa_12m"] == pytest.approx(5.19) and c["base"] == "ajustado" and c["trimestres_gaap"] == 0
-    assert sum(t["lpa"] for t in c["trimestres"][1:]) == pytest.approx(4.32)   # 2026 até o 3T
-    assert c["fonte"] == "SEC 8-K Exhibit 99.1, LPA Ajustado"
-    assert [t["tipo"] for t in c["trimestres"]] == ["ajustado"] * 4
+    assert c["lpa_12m"] == pytest.approx(5.12) and c["base"] == "GAAP"
+    assert c["lpa_ajustado"] == pytest.approx(5.19) and "nota" in c["nota_ajustado"]
+    assert [t["tipo"] for t in c["trimestres"]] == ["GAAP"] * 4
+    assert [t["lpa_ajustado"] for t in c["trimestres"]] == [0.87, 0.71, 1.84, 1.77]
     # o LPA ajustado do trimestre sai do press release, sem confundir com o acumulado, o ano ou a projeção
     q3 = ("ADM Reports Third Quarter 2026 Results. Third quarter adjusted EPS of $1.77; year-to-date adjusted EPS "
           "of $4.32. The Company now expects 2026 adjusted EPS of approximately $5.50 to $5.80.")
@@ -410,19 +411,73 @@ def test_contabil_ajustado_da_adm_soma_5_19_e_nao_5_12():
     assert fg.extrair_eps_ajustado_trimestre(q3) == 1.77 and fg.extrair_eps_ajustado_trimestre(q4) == 0.87
 
 
-def test_falta_ajustado_em_um_trimestre_usa_gaap_so_nele_e_marca_no_card():
-    import pathlib
+def test_falta_ajustado_em_um_trimestre_nao_cria_lpa_ajustado_e_tela_segue_gaap():
     from tela.dados import contabil_12m
     gaap = fg.lpa_ttm_sec(_fatos_adm(), dt.date(2026, 11, 17))
     sem_1t = {k: v for k, v in ADM_AJ.items() if k != "31/03/2026"}
     c = fg.contabil_ajustado(gaap, _aj(sem_1t))
-    assert [t["tipo"] for t in c["trimestres"]] == ["ajustado", "GAAP", "ajustado", "ajustado"]
-    assert c["lpa_12m"] == pytest.approx(0.87 + 1.07 + 1.84 + 1.77)        # 1T26 pelo GAAP (1,07)
-    assert c["fonte"] == "SEC 8-K Exhibit 99.1, LPA Ajustado (1 trimestre GAAP por falta de Ajustado)"
+    assert c["lpa_12m"] == pytest.approx(5.12) and "lpa_ajustado" not in c
     lpa, fonte, _ = contabil_12m("ADM", 5.12, {"ADM": c})
-    assert lpa == pytest.approx(5.55) and "1 trimestre GAAP por falta de Ajustado" in fonte
-    js = pathlib.Path(fg.__file__).resolve().parent.parent.joinpath("tela", "detalhe.js").read_text(encoding="utf-8")
-    assert "GAAP por falta de Ajustado" in js and "Contábil Ajustado 12 meses" in js
+    assert lpa == pytest.approx(5.12) and "GAAP" in fonte
+
+
+def _fatos_tgt():
+    """TGT (valores dos releases): 4T25 2,30 · 1T26 1,71 · 2T26 4,11 · 3T26 2,65 GAAP."""
+    e = [_fato("2025-11-02", "2026-01-31", 2.30, "10-K", "2026-03-11"),
+         _fato("2026-02-01", "2026-05-02", 1.71, "10-Q", "2026-05-28"),
+         _fato("2026-05-03", "2026-08-01", 4.11, "10-Q", "2026-08-27"),
+         _fato("2026-08-02", "2026-10-31", 2.65, "10-Q", "2026-11-25")]
+    return {"facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"USD/shares": e}}}}}
+
+
+def test_obrigatorio_tgt_sai_10_77_gaap_e_nao_10_91():
+    aj = {"31/01/2026": 2.44, "02/05/2026": 1.71, "01/08/2026": 4.11, "31/10/2026": 2.65}
+    c = fg.contabil_ajustado(fg.lpa_ttm_sec(_fatos_tgt(), dt.date(2026, 11, 22)), _aj(aj))
+    assert c["lpa_12m"] == pytest.approx(10.77) and c["lpa_ajustado"] == pytest.approx(10.91)
+
+
+def _fatos_acm():
+    """AECOM (ano fiscal out-set). Contínuas: 1,06 / 1,42 / -0,65 / ano 2,84. Total: 0,56 / 1,39 / -0,67 / ano 2,25."""
+    def serie(q1, q2, q3, nove, ano):
+        return [_fato("2025-10-01", "2025-12-31", q1, "10-Q", "2026-02-09"),
+                _fato("2026-01-01", "2026-03-31", q2, "10-Q", "2026-05-11"),
+                _fato("2026-04-01", "2026-06-30", q3, "10-Q", "2026-08-10"),
+                _fato("2025-10-01", "2026-06-30", nove, "10-Q", "2026-08-10"),
+                _fato("2025-10-01", "2026-09-30", ano, "10-K", "2026-11-18")]
+    return {"facts": {"us-gaap": {
+        "EarningsPerShareDiluted": {"units": {"USD/shares": serie(0.56, 1.39, -0.67, 1.28, 2.25)}},
+        "IncomeLossFromContinuingOperationsPerDilutedShare": {"units": {"USD/shares": serie(1.06, 1.42, -0.65, 1.85, 2.84)}}}}}
+
+
+def test_obrigatorio_acm_sai_2_84_continuas_e_2_25_total_so_na_nota():
+    c = fg.contabil_ajustado(fg.lpa_ttm_sec(_fatos_acm(), dt.date(2026, 11, 22), "ACM"), {})
+    assert c["lpa_12m"] == pytest.approx(2.84) and c["tem_descontinuadas"] is True
+    assert c["lpa_12m_total"] == pytest.approx(2.25) and "2.25" in c["nota"]
+
+
+def _fatos_panw():
+    """PANW (ano fiscal ago-jul). 2T26 0,61 · 3T26 -0,22 · 9M FY26 0,79 · ano FY26 0,40 · 1T27 0,57."""
+    e = [_fato("2025-08-01", "2025-10-31", 0.47, "10-Q", "2025-11-20"),
+         _fato("2025-11-01", "2026-01-31", 0.61, "10-Q", "2026-02-18"),
+         _fato("2026-02-01", "2026-04-30", -0.22, "10-Q", "2026-06-03"),
+         _fato("2025-08-01", "2026-04-30", 0.79, "10-Q", "2026-06-03"),
+         _fato("2025-08-01", "2026-07-31", 0.40, "10-K", "2026-09-05"),
+         _fato("2026-08-01", "2026-10-31", 0.57, "10-Q", "2026-11-19")]
+    return {"facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"USD/shares": e}}}}}
+
+
+def test_obrigatorio_panw_sai_0_61_com_q4_do_release_e_registra_divergencia(monkeypatch):
+    sem = fg.lpa_ttm_sec(_fatos_panw(), dt.date(2026, 11, 22))
+    assert sem["lpa_12m"] == pytest.approx(0.57) and sem["q4_calculado"] == pytest.approx(-0.39)   # regra padrão
+    monkeypatch.setattr(fg, "q4_release_cfg", lambda t: {"31/07/2026": {"lpa": -0.35, "fonte": "release", "url": "u"}})
+    c = fg.contabil_ajustado(fg.lpa_ttm_sec(_fatos_panw(), dt.date(2026, 11, 22), "PANW"), {})
+    assert c["lpa_12m"] == pytest.approx(0.61)
+    assert (c["q4_calculado"], c["q4_release"], c["q4_usado"]) == (pytest.approx(-0.39), -0.35, -0.35)
+
+
+def test_q4_release_do_repositorio_tem_panw_com_fonte():
+    cfg = fg.q4_release_cfg("PANW")
+    assert cfg["31/07/2026"]["lpa"] == -0.35 and cfg["31/07/2026"]["url"].startswith("https://")
 
 
 

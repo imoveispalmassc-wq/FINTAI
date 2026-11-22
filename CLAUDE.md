@@ -76,6 +76,32 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 - A página de exemplo (`docs/index.html`, gerada por `tools/gerar_demo.py`) não busca dados.
   Qualquer valor nela sem fonte real fica vazio ou marcado como EXEMPLO.
 
+## TTM automático: PROMPT TRAVADO (22/11/2026, vale para todos os robôs e para o ttm_auto.py)
+
+- Fonte, nesta ordem: release no RI > 8-K/6-K na SEC > CVM/ITR. Nunca só site de cotação para lucro/LPA. Domínio do
+  RI aceito como link oficial pela config "ri" de cada ativo em `utils/ttm_auto.py` (além de sec.gov/cvm.gov.br).
+- Todo registro atualizado leva last_updated ("DD/MM/AAAA às HH:MM"), updated_by e source_date (data do documento
+  oficial). O ttm_auto.py NUNCA apaga essas 3 marcações. Ativo que já tem TTM bom NÃO volta para pendente: mantém o
+  último TTM (status MANTIDO_TTM_ANTERIOR) e põe o motivo em pendencias.
+- REGRA 1: a tela usa SEMPRE LPA GAAP TTM. Ajustado/recorrente NUNCA no campo principal - só lpa_ajustado (ou
+  lpa_recorrente), com nota. Ex.: TGT = 10,77 GAAP; 10,91 ajustado só na nota.
+- REGRA 2: com operações descontinuadas, usa operações CONTÍNUAS (tag IncomeLossFromContinuingOperationsPerDilutedShare),
+  marca tem_descontinuadas: true e guarda o total (lpa_total / lpa_12m_total) só como nota. Sem descontinuadas, GAAP
+  total. Ex.: ACM = 2,84 contínuas; 2,25 total na nota.
+- REGRA 3: 4º tri = ano − 9 meses, EXCETO quando o release divulga o 4º tri explicitamente: aí vale o do release,
+  cadastrado com fonte em `utils/q4_release.json`; registra q4_calculado, q4_release, q4_usado. Ex.: PANW = 0,61
+  (release −0,35; cálculo daria −0,39). Quando os 4 trimestres formam exatamente um ano fiscal com LPA anual oficial no
+  10-K, o TTM é o próprio anual (LPA não é aditivo; soma_trimestres fica registrada).
+- REGRA 4: sem cotação verificada, sem P/L. Cotação "COPIADO - NÃO VERIFICADO", estimada ou sem fonte não gera P/L:
+  pl = null e pl_status = "cotação pendente".
+- REGRA 5: TTM = 4 trimestres reais somados; guidance é projeção e nunca entra no TTM (guidance em guidance_auto.json;
+  TTM em contabil_sec.json / contabil_br.json / ttm_diario.json). Nenhum ativo é configurado "por guidance" no TTM.
+- REGRA 6: atualização automática de TTM NUNCA vai direto para a main. ttm_diario.yml abre/atualiza o PR do ramo
+  `ttm/revisar`; update-guidance.yml publica só o guidance (com as 4 travas) e manda contabil_sec/contabil_br para o PR
+  do ramo `ttm/contabil-revisar`. `python -m pytest` roda antes. Corpo do PR (`tools/resumo_ttm_pr.py`): no topo as
+  divergências (GAAP x ajustado, contínuas x total, 4º tri, cotação não verificada), depois ativos alterados, fonte e
+  LPA antes -> depois. Merge publica; fechar descarta.
+
 ## Regras de cálculo (valem para todos os ativos)
 
 - Faixa de 52 semanas: ponto de oportunidade = mínima + 30% da amplitude; fim da Zona Neutra =
@@ -105,11 +131,10 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   (Início do ano: guidance; Contábil: cotação ÷ LPA = P/L; Previsão atual: guidance/consenso e variação desde o início;
   Média 12m: P/L e diferença). Soma dos trimestres, fontes completas, faixas de LPA, lucro ajustado e a definição de P/L
   ficam em "Ver como calculamos".
-- Contábil 12 meses (EUA): utils/contabil_sec.json, gravado pelo robô = soma dos 4 últimos trimestres de LPA AJUSTADO
-  do press release (8-K Exhibit 99.1 de cada trimestre); fonte "SEC 8-K Exhibit 99.1, LPA Ajustado". Os trimestres saem
-  do GAAP dos 10-Q/10-K (4º tri = ano − 9 meses). Trimestre sem ajustado usa o GAAP dele e o card marca "Contábil
-  Ajustado (N trimestre GAAP por falta de Ajustado)". Sem nem GAAP completo (menos de 4 trimestres, fora de sequência
-  ou último com mais de 200 dias): Yahoo, "fonte: Yahoo - SEC incompleto". No fim de cada ticker o robô grava
+- Contábil 12 meses (EUA): utils/contabil_sec.json, gravado pelo robô = soma dos 4 últimos trimestres de LPA diluído
+  GAAP dos 10-Q/10-K (REGRA 1, travada em 22/11/2026: antes era o LPA AJUSTADO do 8-K Exhibit 99.1 - o ajustado agora
+  só aparece como lpa_ajustado/nota_ajustado, nunca em lpa_12m). Sem nem GAAP completo (menos de 4 trimestres, fora de
+  sequência ou último com mais de 200 dias): Yahoo, "fonte: Yahoo - SEC incompleto". No fim de cada ticker o robô grava
   atualizado_em, trimestre_ref e trimestre_data, igual à B3 (ver abaixo) - calculando o trimestre a partir do
   mês de fim de cada trimestre, já que a SEC não dá "3T26" pronto.
 - LPA anual histórico (EUA, cartão "Lucro por ação", Graham, médias de 5/10 anos e Faixa do Conservador): o app

@@ -59,58 +59,70 @@
   "PETR4": {
     "status": "ok",
     "base": "ajustado",
-    "lucro_12m": 134116000000.0,
+    "lucro_12m": 153365000000.0,
     "acoes": 5446501379.0,
-    "lpa_12m": 24.6242,
+    "lpa_12m": 28.1584,
     "trimestres": [
       {
         "tri": "4T25",
         "fim": "31/12/2025",
-        "lucro": 28651000000.0,
+        "lucro": 25743000000.0,
         "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
         "data": "05/03/2026",
         "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1486338&numSequencia=1011044&numVersao=1",
-        "leitura": "tabela do relatório"
+        "leitura": "coluna 4T25 do Relatório de Desempenho 1T26 (linha total; acionistas 25.653)"
       },
       {
         "tri": "1T26",
         "fim": "31/03/2026",
-        "lucro": 25743000000.0,
+        "lucro": 23909000000.0,
         "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
         "data": "13/05/2026",
         "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1521702&numSequencia=1046408&numVersao=1",
-        "leitura": "tabela do relatório"
+        "leitura": "Relatório de Desempenho 1T26, coluna 1T26 (linha total; acionistas 23.811)"
       },
       {
         "tri": "2T26",
         "fim": "30/06/2026",
-        "lucro": 23909000000.0,
+        "lucro": 55813000000.0,
         "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
         "data": "06/08/2026",
         "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1553785&numSequencia=1078491&numVersao=1",
-        "leitura": "tabela do relatório"
+        "leitura": "Relatório de Desempenho 3T26, coluna 2T26 (o robô tinha gravado como 3T26)"
       },
       {
         "tri": "3T26",
         "fim": "30/09/2026",
-        "lucro": 55813000000.0,
+        "lucro": 47900000000.0,
         "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
         "data": "10/11/2026",
         "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1587565&numSequencia=1112271&numVersao=1",
-        "leitura": "tabela do relatório"
+        "leitura": "R$ 47,9 bi (arredondado) - Folha PE / JB / Cenário Energia sobre o release 3T26; valor exato em milhões a confirmar no relatório",
+        "url_noticia": "https://www.folhape.com.br/economia/petrobras-registra-alta-no-lucro-liquido-de-215-no-3o-trimestre/523519/"
       }
     ],
     "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
     "data": "10/11/2026",
     "atualizado": "22/11/2026",
     "lidos": {
+      "4T25": 25.743,
+      "1T26": 23.909,
+      "2T26": 55.813,
+      "3T26": 47.9
+    },
+    "atualizado_em": "22/11 08:48",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "set/26",
+    "correcao": "22/11/2026: série estava 1 trimestre atrasada (cada release foi lido na coluna do trimestre anterior); corrigida.",
+    "lidos_antes_da_correcao": {
       "4T25": 28.651,
       "1T26": 25.743,
       "2T26": 23.909,
       "3T26": 55.813
     },
-    "atualizado_em": "22/11 08:48",
-    "trimestre_ref": "3T26",
-    "trimestre_data": "set/26"
+    "alerta_acoes": "acoes (5,45 bi, Yahoo) parece ser só a PN; total ON+PN ~12,9 bi. LPA 12m fica superestimado até corrigir.",
+    "last_updated": "22/11/2026 às 11:00",
+    "updated_by": "robo-claude-10h",
+    "source_date": "10/11/2026"
   }
 }

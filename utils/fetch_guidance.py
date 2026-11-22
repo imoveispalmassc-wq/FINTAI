@@ -1389,14 +1389,32 @@ def lpa_anual_sec(fatos: dict) -> list[dict]:
             for fim, unidade in sorted(anuais)]
 
 
-def lpa_ttm_sec(fatos: dict, hoje: dt.date) -> dict:
-    """LPA diluído (GAAP) dos últimos 12 meses = soma dos últimos 4 trimestres dos 10-Q/10-K.
+TAG_LPA_TOTAL = "EarningsPerShareDiluted"
+TAG_LPA_CONTINUAS = "IncomeLossFromContinuingOperationsPerDilutedShare"
+ARQ_Q4_RELEASE = RAIZ / "utils" / "q4_release.json"   # ticker -> fim (DD/MM/AAAA) -> 4º tri divulgado no release
 
-    Trimestres de 3 meses vêm direto dos 10-Q; o 4º trimestre fiscal = ano (10-K) - 9 meses acumulados (10-Q).
-    Devolve {"status": "ok", "lpa_12m", "trimestres", ...} ou {"status": "incompleto", "motivo"}."""
-    eps = (((fatos.get("facts") or {}).get("us-gaap") or {}).get("EarningsPerShareDiluted") or {}).get("units", {}).get("USD/shares", [])
+
+def q4_release_cfg(ticker: str | None) -> dict:
+    """4º trimestre divulgado EXPLICITAMENTE no release (Regra 3): {"DD/MM/AAAA": {"lpa", "fonte", "url"}}.
+    Só entra número com fonte citada; arquivo ausente = nenhum."""
+    if not ticker:
+        return {}
+    try:
+        return (json.loads(ARQ_Q4_RELEASE.read_text(encoding="utf-8")).get(ticker.upper()) or {})
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _ttm_tag_sec(fatos: dict, hoje: dt.date, tag: str, q4_rel: dict) -> dict:
+    """Soma dos 4 últimos trimestres de um conceito de LPA diluído (GAAP) da SEC.
+
+    REGRA 3 (travada): 4º tri = ano (10-K) - 9 meses (10-Q); se o release divulgou o 4º tri explicitamente
+    (utils/q4_release.json), vale o do release, e a divergência fica em q4_calculado / q4_release / q4_usado.
+    Quando os 4 trimestres formam exatamente um ano fiscal com o LPA anual do 10-K, o TTM é o próprio LPA anual
+    oficial (LPA não é aditivo: a soma dos trimestres pode diferir alguns centavos do anual)."""
+    eps = (((fatos.get("facts") or {}).get("us-gaap") or {}).get(tag) or {}).get("units", {}).get("USD/shares", [])
     if not eps:
-        return {"status": "incompleto", "motivo": "SEC sem EarningsPerShareDiluted"}
+        return {"status": "incompleto", "motivo": f"SEC sem {tag}"}
     por_periodo = {}
     for e in eps:
         if e.get("form") not in ("10-Q", "10-K", "10-Q/A", "10-K/A") or "start" not in e or "end" not in e:
@@ -1408,20 +1426,28 @@ def lpa_ttm_sec(fatos: dict, hoje: dt.date) -> dict:
         # a versão mais recente do mesmo período ganha (reapresentações)
         if chave not in por_periodo or e.get("filed", "") > por_periodo[chave].get("filed", ""):
             por_periodo[chave] = e
-    tri, longos = {}, []
+    tri, longos, inicio, q4 = {}, [], {}, {}
     for (ini, fim), e in por_periodo.items():
         dias = (fim - ini).days
         if 80 <= dias <= 100:
             tri[fim] = (float(e["val"]), e.get("filed", ""), e.get("form", ""))
+            inicio[fim] = ini
         elif 255 <= dias <= 285 or 350 <= dias <= 380:
             longos.append((ini, fim, dias, float(e["val"]), e.get("filed", ""), e.get("form", "")))
-    # 4º trimestre: ano fiscal menos os 9 meses do mesmo ano fiscal
+    anuais = {(ini, fim): val for ini, fim, dias, val, _f, _fo in longos if dias >= 350}
+    # 4º trimestre: ano fiscal menos os 9 meses do mesmo ano fiscal (exceção: release explícito)
     for ini, fim, dias, val, filed, form in longos:
         if dias < 350 or fim in tri:
             continue
         nove = next((l for l in longos if l[0] == ini and 255 <= l[2] <= 285), None)
         if nove:
-            tri[fim] = (val - nove[3], filed, form)
+            calc = round(val - nove[3], 4)
+            rel = q4_rel.get(f"{fim:%d/%m/%Y}")
+            usado = round(float(rel["lpa"]), 4) if rel and rel.get("lpa") is not None else calc
+            tri[fim] = (usado, filed, form)
+            inicio[fim] = nove[1] + dt.timedelta(days=1)
+            q4[fim] = {"q4_calculado": calc, "q4_release": usado if rel else None, "q4_usado": usado,
+                       "q4_fonte": (rel or {}).get("fonte"), "q4_url": (rel or {}).get("url")}
     fins = sorted(tri)
     if len(fins) < 4:
         return {"status": "incompleto", "motivo": f"só {len(fins)} trimestre(s) na SEC"}
@@ -1430,10 +1456,44 @@ def lpa_ttm_sec(fatos: dict, hoje: dt.date) -> dict:
         return {"status": "incompleto", "motivo": "trimestres da SEC não são consecutivos"}
     if (hoje - ultimos[-1]).days > CONTABIL_IDADE_MAX:
         return {"status": "incompleto", "motivo": f"último trimestre na SEC termina em {ultimos[-1]:%d/%m/%Y}"}
-    return {"status": "ok", "lpa_12m": round(sum(tri[f][0] for f in ultimos), 4),
-            "trimestres": [{"fim": f"{f:%d/%m/%Y}", "lpa": round(tri[f][0], 4), "form": tri[f][2]} for f in ultimos],
-            "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
-            "data": _data_br(max(tri[f][1] for f in ultimos)), "atualizado": f"{hoje:%d/%m/%Y}"}
+    soma = round(sum(tri[f][0] for f in ultimos), 4)
+    res = {"status": "ok", "lpa_12m": soma,
+           "trimestres": [{"fim": f"{f:%d/%m/%Y}", "lpa": round(tri[f][0], 4), "form": tri[f][2]} for f in ultimos],
+           "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
+           "data": _data_br(max(tri[f][1] for f in ultimos)), "atualizado": f"{hoje:%d/%m/%Y}"}
+    anual = anuais.get((inicio.get(ultimos[0]), ultimos[-1]))
+    if anual is not None:
+        res["lpa_12m"] = round(anual, 4)
+        res["soma_trimestres"] = soma
+        res["ttm_regra"] = "ano fiscal completo: LPA anual oficial do 10-K"
+    q = [dict(q4[f], fim=f"{f:%d/%m/%Y}") for f in ultimos if f in q4]
+    if q:
+        res.update({k: v for k, v in q[-1].items() if k != "fim"}, q4_fim=q[-1]["fim"])
+    return res
+
+
+def lpa_ttm_sec(fatos: dict, hoje: dt.date, ticker: str | None = None) -> dict:
+    """LPA diluído (GAAP) dos últimos 12 meses = soma dos últimos 4 trimestres dos 10-Q/10-K.
+
+    REGRA 1 (travada): sempre GAAP. REGRA 2 (travada): se a empresa tem operações descontinuadas (o LPA de
+    operações contínuas existe e difere do total), usa o de operações CONTÍNUAS, marca tem_descontinuadas e
+    guarda o total em lpa_12m_total; sem descontinuadas, o total. REGRA 3: ver _ttm_tag_sec.
+    Devolve {"status": "ok", "lpa_12m", "trimestres", ...} ou {"status": "incompleto", "motivo"}."""
+    q4_rel = q4_release_cfg(ticker)
+    total = _ttm_tag_sec(fatos, hoje, TAG_LPA_TOTAL, q4_rel)
+    cont = _ttm_tag_sec(fatos, hoje, TAG_LPA_CONTINUAS, q4_rel)
+    if cont.get("status") == "ok" and total.get("status") == "ok" \
+            and [t["fim"] for t in cont["trimestres"]] == [t["fim"] for t in total["trimestres"]]:
+        if abs(cont["lpa_12m"] - total["lpa_12m"]) >= 0.005:
+            return {**cont, "tem_descontinuadas": True, "lpa_12m_total": total["lpa_12m"],
+                    "fonte": "SEC 10-Q/10-K, lucro por ação diluído de operações contínuas (GAAP)",
+                    "nota": f"Tem operações descontinuadas: LPA total (GAAP) {total['lpa_12m']:.2f} só como nota."}
+        return total
+    if total.get("status") != "ok" and cont.get("status") == "ok":
+        return {**cont, "fonte": "SEC 10-Q/10-K, lucro por ação diluído de operações contínuas (GAAP)"}
+    if total.get("status") == "incompleto" and total.get("motivo", "").startswith("SEC sem"):
+        return {"status": "incompleto", "motivo": "SEC sem EarningsPerShareDiluted"}
+    return total
 
 
 # LPA ajustado do trimestre no press release (8-K Exhibit 99.1): "Third quarter adjusted EPS of $1.77"
@@ -1454,29 +1514,31 @@ def extrair_eps_ajustado_trimestre(texto: str) -> float | None:
 
 
 def contabil_ajustado(gaap: dict, ajustados: dict) -> dict:
-    """Soma dos 4 últimos trimestres de LPA AJUSTADO (8-K Exhibit 99.1).
+    """REGRA 1 (travada): a tela usa SEMPRE o LPA GAAP de 12 meses (lpa_12m). O LPA AJUSTADO do press release
+    (8-K Exhibit 99.1) NUNCA vai para o campo principal: só aparece como lpa_ajustado (soma dos 4 trimestres,
+    quando os 4 têm ajustado), com nota.
 
     gaap: resultado de lpa_ttm_sec (dá os 4 trimestres e o GAAP de cada um).
-    ajustados: {"DD/MM/AAAA" (fim do trimestre): {"lpa", "fonte", "data", "url"}}.
-    Trimestre sem ajustado usa o GAAP daquele trimestre e conta em "trimestres_gaap"."""
+    ajustados: {"DD/MM/AAAA" (fim do trimestre): {"lpa", "fonte", "data", "url"}}."""
     if gaap.get("status") != "ok":
         return gaap
-    tri, n_gaap = [], 0
+    tri = []
     for t in gaap["trimestres"]:
         a = ajustados.get(t["fim"])
-        if a and a.get("lpa") is not None:
-            tri.append({"fim": t["fim"], "lpa": round(float(a["lpa"]), 4), "tipo": "ajustado",
-                        "fonte": a.get("fonte", "SEC 8-K Exhibit 99.1"), "data": a.get("data", ""), "url": a.get("url", "")})
-        else:
-            n_gaap += 1
-            tri.append({"fim": t["fim"], "lpa": t["lpa"], "tipo": "GAAP", "fonte": f"SEC {t.get('form') or '10-Q/10-K'} (GAAP)",
-                        "data": gaap.get("data", ""), "url": ""})
-    fonte = "SEC 8-K Exhibit 99.1, LPA Ajustado"
-    if n_gaap:
-        fonte += f" ({n_gaap} trimestre{'s' if n_gaap > 1 else ''} GAAP por falta de Ajustado)"
-    return {"status": "ok", "base": "ajustado" if n_gaap < 4 else "GAAP", "lpa_12m": round(sum(t["lpa"] for t in tri), 4),
-            "trimestres": tri, "trimestres_gaap": n_gaap, "fonte": fonte if n_gaap < 4 else "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
-            "data": max((t["data"] for t in tri if t["data"]), default=gaap.get("data", "")), "atualizado": gaap.get("atualizado", "")}
+        tri.append({"fim": t["fim"], "lpa": t["lpa"], "tipo": "GAAP", "fonte": f"SEC {t.get('form') or '10-Q/10-K'} (GAAP)",
+                    "data": gaap.get("data", ""), "url": "",
+                    **({"lpa_ajustado": round(float(a["lpa"]), 4), "fonte_ajustado": a.get("fonte", "SEC 8-K Exhibit 99.1"),
+                        "url_ajustado": a.get("url", "")} if a and a.get("lpa") is not None else {})})
+    extras = {k: gaap[k] for k in ("tem_descontinuadas", "lpa_12m_total", "nota", "soma_trimestres", "ttm_regra",
+                                   "q4_calculado", "q4_release", "q4_usado", "q4_fonte", "q4_url", "q4_fim") if k in gaap}
+    res = {"status": "ok", "base": "GAAP", "lpa_12m": gaap["lpa_12m"], "trimestres": tri, "trimestres_gaap": len(tri),
+           "fonte": gaap.get("fonte", "SEC 10-Q/10-K, lucro por ação diluído (GAAP)"), "data": gaap.get("data", ""),
+           "atualizado": gaap.get("atualizado", ""), **extras}
+    if all("lpa_ajustado" in t for t in tri):
+        res["lpa_ajustado"] = round(sum(t["lpa_ajustado"] for t in tri), 4)
+        res["nota_ajustado"] = ("LPA ajustado (8-K Exhibit 99.1) só como nota; a tela usa o GAAP. "
+                                f"Ajustado 12m: {res['lpa_ajustado']:.2f}.")
+    return res
 
 
 def ajustados_sec(cik: str, cab: dict, fins: list[str], *, buscar_docs=None, ler=None) -> dict:
@@ -1511,7 +1573,7 @@ def contabil_eua(ticker: str, hoje: dt.date, *, cabecalho=cabecalho_sec, buscar_
     if not empresa:
         return {"status": "incompleto", "motivo": "ticker não encontrado na SEC"}
     fatos = _get_sec(f"{SEC_DADOS}/api/xbrl/companyfacts/CIK{empresa[0]}.json", cab).json()
-    gaap = lpa_ttm_sec(fatos, hoje)
+    gaap = lpa_ttm_sec(fatos, hoje, ticker)
     if gaap.get("status") != "ok":
         return gaap
     return contabil_ajustado(gaap, ajustados_sec(empresa[0], cab, [t["fim"] for t in gaap["trimestres"]]))
