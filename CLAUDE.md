@@ -350,10 +350,14 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   distância preço÷MM200 arredondada em 2 casas (mesma precisão do valor ao lado): positiva = Alta, negativa =
   Baixa, só exatos 0,00% = Equilíbrio (ex.: -4,20% já é Baixa, não "perto de zero"). 1ª linha: "7 dias atrás: [Direção 7 dias]
   ([valor 7 dias]) → Hoje: [Direção hoje] ([valor hoje])" (ex.: "7 dias atrás: Baixa (-4,20%) → Hoje: Baixa
-  (-20,94%)"). 2ª linha, automática: manteve a direção e o valor absoluto cresceu = "Continuou em [direção,
-  minúsculo] e piorou [diferença] p.p."; manteve e o valor absoluto caiu = "...e melhorou [diferença] p.p.";
-  trocou de direção = "Virou de [direção 7 dias] para [direção hoje]." - mesma regra pra qualquer ativo, sem
-  mudar cor/layout da barra.
+  (-20,94%)"). 2ª linha, automática, NUNCA usa a sigla "p.p." (pouca gente conhece): manteve a direção e o
+  valor absoluto cresceu = "Continuou em [direção, minúsculo] e piorou: de [valor 7 dias] para [valor hoje]
+  acima/abaixo da média." (ex.: "Continuou em baixa e piorou: de 4,20% para 20,94% abaixo da média." - palavra
+  acima/abaixo conforme a direção, omitida em Equilíbrio); manteve e o valor absoluto caiu = mesma forma trocando
+  "piorou" por "melhorou"; trocou de direção = "Virou de [direção 7 dias] para [direção hoje]: de [valor 7 dias
+  com sinal] para [valor hoje com sinal]." (ex.: "Virou de baixa para alta: de -4,20% para +1,66%." - usa o
+  sinal em vez de acima/abaixo porque a referência muda de lado) - mesma regra pra qualquer ativo, sem mudar
+  cor/layout da barra.
   Os nomes das zonas são os MESMOS nas 2 barras: "Perdeu força"/"Muita venda" (vermelho) | "Equilíbrio" (cinza)
   | "Alta leve" (verde-claro) | "Forte" (verde-forte) - a barra de Força da tendência usava antes "Leve compra"
   e "Compra forte", renomeados para padronizar com a barra de Força (IFR).

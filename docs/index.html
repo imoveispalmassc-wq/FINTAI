@@ -969,10 +969,12 @@ function montar(root, d) {
     if (tem(dist) && tem(d.dist200d7d)) {
       const dirHoje = direcaoDist(dist), dir7 = direcaoDist(d.dist200d7d);
       const absHoje = Math.abs(dist), abs7 = Math.abs(d.dist200d7d);
-      const diffPP = Math.abs(absHoje - abs7);
-      const linha2 = dirHoje !== dir7 ? `Virou de ${dir7} para ${dirHoje}.`
-        : absHoje > abs7 ? `Continuou em ${dirHoje.toLowerCase()} e piorou ${f(diffPP)} p.p.`
-        : absHoje < abs7 ? `Continuou em ${dirHoje.toLowerCase()} e melhorou ${f(diffPP)} p.p.`
+      // nunca usa "p.p." (pouca gente conhece a sigla): sempre escreve "de X% para Y%", com a
+      // palavra abaixo/acima da média quando a direção se mantém (mesma referência nos 2 valores)
+      const qualif = dirHoje === 'Alta' ? ' acima da média' : dirHoje === 'Baixa' ? ' abaixo da média' : '';
+      const linha2 = dirHoje !== dir7 ? `Virou de ${dir7.toLowerCase()} para ${dirHoje.toLowerCase()}: de ${sinal(d.dist200d7d)} para ${sinal(dist)}.`
+        : absHoje > abs7 ? `Continuou em ${dirHoje.toLowerCase()} e piorou: de ${f(abs7)}% para ${f(absHoje)}%${qualif}.`
+        : absHoje < abs7 ? `Continuou em ${dirHoje.toLowerCase()} e melhorou: de ${f(abs7)}% para ${f(absHoje)}%${qualif}.`
         : `Continuou em ${dirHoje.toLowerCase()}, sem variação.`;
       evolucaoT = `<div class="nota" style="margin-top:4px">7 dias atrás: ${dir7} (${sinal(d.dist200d7d)}) → Hoje: ${dirHoje} (${sinal(dist)})</div>
           <div class="nota" style="margin-top:2px">${linha2}</div>`;
