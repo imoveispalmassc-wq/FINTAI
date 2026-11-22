@@ -343,27 +343,31 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   de 200 dias." e "26,5% para voltar à média." - sem repetir a mesma distância numa segunda frase ("Preço X
   está Y% abaixo da média de Z"); logo acima desses textos, uma frase fixa lembra o valor da média de 200 dias
   e que ela é o ponto 0% da régua.
-  O título/badge "Direção da tendência" usa a MESMA zona/limiar da régua "Força da tendência" logo abaixo -
-  "Perdeu força" (vermelho) / "Equilíbrio" (cinza, #aab4c6) / "Alta leve" (verde-claro) / "Forte" (verde-forte),
-  nos mesmos limiares -10/+10/+20 - NUNCA um limiar à parte (era Alta/Baixa/Equilíbrio cortando só em 0%, que
-  podia contradizer a cor/posição da bolinha na régua, ex. título "Alta" com a bolinha já na faixa vermelha de
-  "Perdeu força"; mesmo ajuste feito na Força/IFR, ver zonaIFR abaixo). Evolução da Direção da tendência: logo
-  abaixo do título, 2 linhas em cinza pequeno, só quando há os 7 pregões de histórico (`dist200d7d`) - nunca
-  inventa, com a MESMA zona/limiar do título/régua (nunca Sobrecomprada/Sobrevendida nem Alta/Baixa separados).
-  1ª linha: "7 dias atrás: [Zona 7 dias] ([valor 7 dias]) → Hoje: [Zona hoje] ([valor hoje])" (ex.: "7 dias
-  atrás: Equilíbrio (-4,20%) → Hoje: Perdeu força (-20,94%)"). 2ª linha, automática, NUNCA usa a sigla "p.p."
-  (pouca gente conhece): mesma zona e o valor absoluto cresceu = "Continuou em [zona, minúsculo] e piorou: de
-  [valor 7 dias] para [valor hoje] acima/abaixo da média." (palavra acima/abaixo pelo SINAL real de hoje, não
-  pelo nome da zona - a zona "Equilíbrio" pode ter valor levemente negativo ou positivo); mesma zona e o valor
-  absoluto caiu = mesma forma trocando "piorou" por "melhorou"; zona diferente = "Virou de [zona 7 dias] para
-  [zona hoje]: de [valor 7 dias com sinal] para [valor hoje com sinal]." (ex.: "Virou de equilíbrio para
-  perdeu força: de -4,20% para -20,94%." - usa o sinal em vez de acima/abaixo porque a referência muda de lado)
-  - mesma regra pra qualquer ativo, sem mudar cor/layout da barra.
-  Os nomes das zonas são os MESMOS nas 2 barras: "Perdeu força"/"Muita venda" (vermelho) | "Equilíbrio" (cinza)
-  | "Alta leve" (verde-claro) | "Forte" (verde-forte) - a barra de Força da tendência usava antes "Leve compra"
-  e "Compra forte", renomeados para padronizar com a barra de Força (IFR).
+  O título/badge "Direção da tendência" e a evolução abaixo usam REGRA TRAVADA, à parte dos limiares de cor da
+  régua "Força da tendência" (-10/+10/+20, só pras zonas Perdeu força/Equilíbrio/Alta leve/Forte da própria
+  régua): distância < -5% = "Baixa" (vermelho); entre -5% e +5% = "Equilíbrio" (cinza); > +5% = "Alta" (verde).
+  PROIBIDO usar "Perdeu força"/"Alta leve"/"Forte" como Direção - são só os nomes das zonas da régua, uma coisa
+  diferente (bug corrigido: o título já chegou a usar essas zonas como se fossem a Direção, mostrando "Perdeu
+  força" onde devia mostrar "Baixa"). Na régua de Força da tendência, só o RÓTULO de texto da zona vermelha
+  (a mais à esquerda) é "Baixa" em vez de "Perdeu força" - mudança só do texto desse rótulo, a cor/posição/
+  limite de -10% da própria zona continuam os mesmos. Evolução da Direção da tendência: logo abaixo do título,
+  2 linhas em cinza pequeno, só quando há os 7 pregões de histórico (`dist200d7d`) - nunca inventa, com a MESMA
+  regra travada (Alta/Baixa/Equilíbrio, limiar ±5%) do título. 1ª linha: "7 dias atrás: [Direção 7 dias]
+  ([valor 7 dias]) → Hoje: [Direção hoje] ([valor hoje])" (ex.: "7 dias atrás: Baixa (-12,86%) → Hoje: Baixa
+  (-17,01%)"). 2ª linha, automática, NUNCA usa a sigla "p.p." (pouca gente conhece): manteve a direção e o
+  valor absoluto cresceu = "Continuou em [direção, minúsculo] e piorou: de [valor 7 dias] para [valor hoje]
+  acima/abaixo da média." (palavra acima/abaixo pelo SINAL real de hoje, não pelo nome da direção - a faixa
+  "Equilíbrio" pode ter valor levemente negativo ou positivo); manteve e o valor absoluto caiu = mesma forma
+  trocando "piorou" por "melhorou"; trocou de direção = "Virou de [direção 7 dias] para [direção hoje]: de
+  [valor 7 dias com sinal] para [valor hoje com sinal]." (usa o sinal em vez de acima/abaixo porque a
+  referência muda de lado) - mesma regra pra qualquer ativo, sem mudar cor/layout da barra.
+  Os nomes das zonas da régua (diferente da Direção, ver acima) são os MESMOS nas 2 barras: "Baixa"/"Muita
+  venda" (vermelho) | "Equilíbrio" (cinza) | "Alta leve" (verde-claro) | "Forte" (verde-forte) - a barra de
+  Força da tendência usava antes "Leve compra" e "Compra forte", renomeados para padronizar com a barra de
+  Força (IFR); o rótulo vermelho já se chamou "Perdeu força", mas virou "Baixa" pra não confundir com a
+  Direção (ver acima).
   Zonas da barra de Força da tendência: escala fixa de -30% a +30% (só estica além disso se a distância real
-  passar desses limites) - abaixo de -10% é "Perdeu força"; de -10% a +10% é "Equilíbrio" (com a própria média
+  passar desses limites) - abaixo de -10% é "Baixa"; de -10% a +10% é "Equilíbrio" (com a própria média
   de 200 dias, 0%, marcada no meio dessa faixa); de +10% a +20% é "Alta leve"; acima de +20% é "Forte".
   Zonas da barra de Força (IFR 0-100): de 0 a 40 é "Muita venda"; de 40 a 60 é "Equilíbrio" (com 50 marcado
   como ponto neutro - mesma frase de referência da Força da tendência, adaptada: "50 é o ponto neutro da régua

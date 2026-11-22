@@ -574,13 +574,12 @@ function montar(root, d) {
     // de -10% a +10% é equilíbrio (a própria média, 0%, fica no meio dessa faixa); +10% a +20% é leve
     // compra; acima de +20% é compra forte.
     const NEG = -10, EQ = 10, LEVE = 20;
-    // Título/badge "Direção da tendência" e evolução abaixo usam as MESMAS 4 faixas/limiares da régua
-    // logo abaixo (Perdeu força/Equilíbrio/Alta leve/Forte, -10/+10/+20) - nunca um limiar à parte (era
-    // Alta/Baixa/Equilíbrio cortando em 0%, que podia contradizer a cor/posição da bolinha na régua; mesmo
-    // ajuste feito na Força/IFR, ver zonaIFR abaixo)
-    const direcaoDist = v => v < NEG ? 'Perdeu força' : v < EQ ? 'Equilíbrio' : v < LEVE ? 'Alta leve' : 'Forte';
+    // Título/badge "Direção da tendência" e evolução abaixo: regra travada, à parte dos limiares de cor da
+    // régua (-10/+10/+20) - dist < -5% = Baixa; entre -5% e +5% = Equilíbrio; dist > +5% = Alta. PROIBIDO
+    // usar "Perdeu força"/"Alta leve"/"Forte" como Direção (esses nomes são só das zonas da régua abaixo).
+    const direcaoDist = v => v < -5 ? 'Baixa' : v > 5 ? 'Alta' : 'Equilíbrio';
     const tituloT = tem(dist) ? direcaoDist(dist) : '—';
-    const corT = { 'Perdeu força': 'var(--vermelho)', 'Equilíbrio': '#aab4c6', 'Alta leve': 'var(--verde-claro)', Forte: 'var(--verde-forte)' }[tituloT] || 'var(--texto)';
+    const corT = { Alta: 'var(--verde)', Baixa: 'var(--vermelho)', Equilíbrio: 'var(--suave)' }[tituloT] || 'var(--texto)';
     // texto da Força (IFR) no mesmo padrão "de X para Y" da evolução da Direção da tendência acima, pra
     // mostrar a evolução em vez de só o estado de hoje - zona calculada com as MESMAS 4 faixas/limiares da
     // régua abaixo (Muita venda/Equilíbrio/Alta leve/Forte, 0-40/40-60/60-80/80-100), nunca com limiares
@@ -655,7 +654,7 @@ function montar(root, d) {
     const barraT = !tem(dist) ? '' : `<div style="${divisor}">
           <span class="rot">Força da tendência</span>
           <div style="position:relative;height:16px;margin-top:10px;font-size:11px;font-weight:700;white-space:nowrap">
-            <span style="position:absolute;left:0;color:var(--vermelho)">Perdeu força</span>
+            <span style="position:absolute;left:0;color:var(--vermelho)">Baixa</span>
             <span style="position:absolute;left:${(pt(NEG) + pt(EQ)) / 2}%;transform:translateX(-50%);color:#aab4c6">Equilíbrio</span>
             <span style="position:absolute;left:${(pt(EQ) + pt(LEVE)) / 2}%;transform:translateX(-50%);color:var(--verde-claro)">Alta leve</span>
             <span style="position:absolute;right:0;color:var(--verde-forte)">Forte</span>
