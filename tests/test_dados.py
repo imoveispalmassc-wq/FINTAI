@@ -426,3 +426,18 @@ def test_outlook_trimestral_eua_b3_e_ticker_sem_dado_devolvem_none(tmp_path, mon
     monkeypatch.setattr("tela.dados.ARQ_OUTLOOK_TRI", tmp_path / "nao_existe.json")
     assert outlook_trimestral_eua("PETR4.SA") is None
     assert outlook_trimestral_eua("ZZZZ") is None
+
+
+def test_issue25_petr4_lucro_total_usa_acoes_oficiais_e_nao_as_do_yahoo():
+    """PETR4: LPA contábil 10,89 × 12,89 bi (ON+PN oficial) = R$ 140,4 bi; nunca × 5,45 bi (só PN, Yahoo) = 59,3 bi."""
+    from tela.dados import acoes_oficiais
+    info = {"sharesOutstanding": 5446501379}
+    sec = {"status": "ok", "lpa_12m": 10.8949, "acoes": 12888732761.0, "lucro_12m": 140421e6,
+           "fonte_acoes": "Petrobras 6-K 3T26, nota 26"}
+    acoes, fonte = acoes_oficiais(info, sec)
+    assert acoes == 12888732761 and "6-K" in fonte
+    assert round(sec["lpa_12m"] * acoes / 1e9, 1) == 140.4
+    # BBAS3 (ações do contábil = as do Yahoo) não muda; sem contábil do robô, Yahoo
+    assert acoes_oficiais({"sharesOutstanding": 5708922664}, {"status": "ok", "acoes": 5708922664.0})[0] == 5708922664
+    assert acoes_oficiais(info, None) == (5446501379, "Yahoo")
+    assert acoes_oficiais(info, {"status": "pendente"}) == (5446501379, "Yahoo")
