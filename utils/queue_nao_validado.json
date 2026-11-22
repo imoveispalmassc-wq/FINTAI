@@ -7,6 +7,10 @@
     "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior",
     "data": "21/11/2026"
   },
+  "AXIA3": {
+    "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
+    "data": "22/11/2026"
+  },
   "BBDC4": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
     "data": "21/11/2026"
@@ -38,5 +42,9 @@
   "NVO": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior",
     "data": "21/11/2026"
+  },
+  "TAEE11": {
+    "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
+    "data": "22/11/2026"
   }
 }
