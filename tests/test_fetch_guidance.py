@@ -1505,3 +1505,46 @@ def test_petr4_acoes_oficiais_on_mais_pn_ganham_do_yahoo():
            (("4T25", 15563e6), ("1T26", 32663e6), ("2T26", 52445e6), ("3T26", 39750e6))]
     c = fg.contabil_br_de_trimestres(tri, cfg["acoes"], "Petrobras", dt.date(2026, 11, 22), base="contábil")
     assert c["lpa_12m"] == pytest.approx(10.895, abs=0.001)          # nunca 28,16 (ações só PN)
+
+
+# ------------------------------------------------------------ issue #26: PDFs da Petrobras (coluna do trimestre)
+PB_LINHA = "Lucro líquido (Prejuízo) - Acionistas Petrobras"
+# Valores reais (Relatórios de Desempenho). O texto do PDF gruda um rótulo solto antes do cabeçalho
+# ("4T25" de um gráfico/título) - era isso que fazia o robô ler a coluna do trimestre anterior.
+PB_TEXTOS = {
+    "4T25": "Destaques 3T25 R$ milhões 4T25 3T25 4T24 2025 2024 " + PB_LINHA + " 15.563 32.705 (17.044) 110.129 36.606",
+    "1T26": "Destaques 4T25 R$ milhões 1T26 4T25 1T25 1T26 X 4T25 (%) " + PB_LINHA + " 32.663 15.563 35.200 109,9 (7,2)",
+    "2T26": "Destaques 1T26 R$ milhões 2T26 1T26 2T25 6M26 6M25 " + PB_LINHA + " 52.445 32.663 26.661 85.108 61.861",
+    "3T26": "Destaques 2T26 R$ milhões 3T26 2T26 3T25 9M26 9M25 " + PB_LINHA + " 39.750 52.445 32.705 124.858 94.566",
+}
+PB_DATAS = {"4T25": "2026-03-05", "1T26": "2026-05-13", "2T26": "2026-08-06", "3T26": "2026-11-10"}
+
+
+def _contabil_pb(textos):
+    docs = [{"data": PB_DATAS[t], "categoria": "Comunicado ao Mercado", "tipo": "Press-release",
+             "assunto": f"Relatório de Desempenho {t}", "link": f"https://cvm/{t}.pdf"} for t in PB_TEXTOS]
+    return fg.contabil_br("PETR4", dt.date(2026, 11, 22), {"linha": PB_LINHA, "acoes": 12888732761, "fonte": "Petrobras"},
+                          buscar_cnpj=lambda t, h: ("1", "PB"), buscar_docs=lambda c, h: docs,
+                          ler_pdf=lambda link: (b"", textos[link.split("/")[-1][:4]]),
+                          buscar_acoes=lambda t: 5446501379.0, registrar=lambda m: None)
+
+
+def test_issue26_cabecalho_com_rotulo_grudado_nao_desloca_a_coluna():
+    assert fg.colunas_do_cabecalho(["2T26", "3T26", "2T26", "3T25"], "3T26") == ["3T26", "2T26", "3T25"]
+    assert fg.colunas_do_cabecalho(["4T25", "1T26", "4T25", "1T25"], "1T26") == ["1T26", "4T25", "1T25"]
+    # colunas de variação ("1T26 X 4T25") coladas no fim: fica o cabeçalho do começo
+    assert fg.colunas_do_cabecalho(["1T26", "4T25", "1T25", "1T26"], "1T26") == ["1T26", "4T25", "1T25"]
+    assert fg.colunas_do_cabecalho(["3T25", "2T26", "3T26"], "3T26") == ["3T25", "2T26", "3T26"]   # BB: sem repetição, igual
+
+
+def test_issue26_petrobras_le_o_trimestre_certo_e_soma_140_4_bi():
+    c = _contabil_pb(PB_TEXTOS)
+    assert c["status"] == "ok", c
+    assert c["lidos"] == {"4T25": 15.563, "1T26": 32.663, "2T26": 52.445, "3T26": 39.75}
+    assert round(c["lucro_12m"] / 1e9, 1) == 140.4 and round(c["lpa_12m"], 2) == 10.89
+
+
+def test_issue26_trava_quando_o_comparativo_do_release_seguinte_nao_bate():
+    textos = dict(PB_TEXTOS, **{"2T26": PB_TEXTOS["2T26"].replace("52.445 32.663", "52.445 25.743")})
+    c = _contabil_pb(textos)
+    assert c["status"] == "pendente" and "coluna suspeita" in c["motivo"]

@@ -292,5 +292,26 @@ class TestRegrasTravadas(unittest.TestCase):
         tmp.cleanup()
 
 
+class TestFonteOficialB3(unittest.TestCase):
+    """Issue #26: release de resultados > CVM. BBAS3 = R$ 12,45 bi (Análise do Desempenho), não 11,02 bi (DRE CVM)."""
+
+    def test_bbas3_usa_o_release_e_guarda_a_cvm_so_como_conferencia(self):
+        class F(t.Fontes):
+            def _ttm_cvm_dre(self, ticker, cfg):
+                r = t.vazio("ATUALIZADO")
+                r.update(lucro_ttm=11016424000.0, lpa_ttm=1.9226, trimestres=["2026-09-30"], link_oficial=CVM)
+                return r
+        r = F(RedeFalsa({})).calcular_ttm("BBAS3")
+        self.assertAlmostEqual(r["lucro_ttm"] / 1e9, 12.453, places=3)
+        self.assertAlmostEqual(r["lpa_ttm"], 2.1813, places=4)
+        self.assertAlmostEqual(r["lucro_cvm"] / 1e9, 11.016, places=3)
+        self.assertGreater(r["divergencia_cvm"], 0.1)
+        self.assertIn("contabil_br.json", r["fonte"])
+
+    def test_link_do_release_no_ri_e_aceito_como_oficial(self):
+        self.assertTrue(t.link_oficial_valido("https://filemanager-cdn.mziq.com/published/x", t.config_ativo("PETR4")["ri"]))
+        self.assertFalse(t.link_oficial_valido("https://investidor10.com.br/x", t.config_ativo("BBAS3")["ri"]))
+
+
 if __name__ == "__main__":
     unittest.main()

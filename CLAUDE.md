@@ -250,6 +250,14 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   é leitura inválida e tenta o próximo documento; em release/Relatório de Análise Gerencial a tabela vence sempre e a
   frase só ajuda na unidade; PDF com 3 tentativas e leitores pypdf → pdfplumber → PyMuPDF; trimestre que não abre usa a
   coluna dele na tabela de um release posterior; log "BBAS3 3T26: frase=... tabela=... divergência=... gravou=..."), soma 4 trimestres consecutivos e grava em utils/contabil_br.json:
+  Coluna do trimestre (issue #26): o cabeçalho de trimestres é a maior janela SEM repetição que contém o trimestre
+  (`colunas_do_cabecalho`) - o texto do PDF da Petrobras grudava um rótulo solto antes do cabeçalho ("2T26 3T26 2T26
+  3T25") e o robô lia a coluna do trimestre anterior; entre os grupos candidatos vale o mais completo (um pedaço solto
+  como "4T25 (%)" das colunas de variação não é cabeçalho). TRAVA: o release de T repete T-1 como comparativo; se esse
+  comparativo diverge mais de 2% do T-1 lido no próprio release de T-1, não grava ("coluna suspeita").
+  FONTE OFICIAL DA B3 (issue #26): release de resultados > CVM. O ttm_diario (ttm_auto.py) usa o contábil do release
+  (contabil_br.json, base contábil) e guarda a DRE consolidada dos dados abertos da CVM só como conferência (lucro_cvm,
+  divergencia_cvm). Ex.: BBAS3 12m = R$ 12,45 bi (Análise do Desempenho), CVM R$ 11,02 bi só nota.
   LPA = soma ÷ ações (oficial do config; senão Yahoo). Sem conseguir ler: "Yahoo - pendente", nunca número inventado; pendente não apaga valor
   bom já gravado. Demais tickers da B3: Yahoo.
   No fim de cada ticker (B3 e EUA) o robô grava atualizado_em ("17/11 18:32", Brasília; só muda com leitura boa,
