@@ -937,7 +937,7 @@ function montar(root, d) {
     const dist = tem(d.mm200) ? (d.preco / d.mm200 - 1) * 100 : null;
     const leitura = !tem(d.forca) ? '' : d.forca >= 70 ? 'Sobrecomprada. Subiu rápido demais.'
       : d.forca <= 30 ? 'Sobrevendida. Caiu rápido demais.' : 'Neutra. Sem pressão de compra nem de venda.';
-    const fundo = 'linear-gradient(90deg,var(--verde) 0 30%,var(--ardosia) 30% 70%,var(--ambar) 70% 100%)';
+    const fundo = 'linear-gradient(90deg,var(--vermelho) 0 30%,var(--ardosia) 30% 70%,var(--verde) 70% 100%)';
     // Força da tendência: distância do preço até a média de 200 dias, numa escala de -5% a +15%.
     // O zero (a própria média) fica no início da faixa Fraca: tudo à direita dele está ACIMA da média.
     const FRACA = 3, FORTE = 10;
@@ -955,11 +955,10 @@ function montar(root, d) {
     let textoT = '', notaSubirCairT = '';
     if (tem(dist)) {
       const cair = (d.preco - d.mm200) / d.preco * 100, subir = (d.mm200 / d.preco - 1) * 100;
-      const grau = dist > FORTE ? 'forte' : dist >= FRACA ? 'média' : 'fraca';
-      textoT = dist < 0 ? `Perdeu força. ${f(Math.abs(dist))}% abaixo da média de 200 dias.`
-        : `Alta ${grau}. ${f(dist)}% acima da média de 200 dias.`;
-      notaSubirCairT = dist < 0 ? `Precisa subir ${f(subir, 1)}% para voltar à média.`
-        : `Cai ${f(cair, 1)}% para perder a tendência.`;
+      textoT = dist < 0 ? `${f(Math.abs(dist))}% abaixo da média de 200 dias.`
+        : `${f(dist)}% acima da média de 200 dias.`;
+      notaSubirCairT = dist < 0 ? `${f(subir, 1)}% para voltar à média.`
+        : `${f(cair, 1)}% para perder a tendência.`;
     }
     // mesmo desenho da barra de zonas: nomes em cima de cada cor, limites com traço e valor,
     // distância e média de 200 dias embaixo da barra, cada uma sempre alinhada com o próprio ponto
@@ -1018,9 +1017,9 @@ function montar(root, d) {
         <div style="${divisor}">
           <strong>Força</strong><div class="nota">Últimos 14 dias</div>
           ${tem(d.forca) ? `<div class="zonas-rot" style="grid-template-columns:30fr 40fr 30fr;margin-top:8px">
-            <span style="color:var(--verde)"><b>Muita venda</b></span>
+            <span style="color:var(--vermelho)"><b>Muita venda</b></span>
             <span style="color:#aab4c6;text-align:center"><b>Equilíbrio</b></span>
-            <span style="color:var(--ambar)"><b>Muita compra</b></span>
+            <span style="color:var(--verde)"><b>Muita compra</b></span>
           </div>
           <div class="marca-cima limites num">
             <span class="esq">0</span><span style="left:30%">30</span><span style="left:70%">70</span><span class="dir">100</span>
