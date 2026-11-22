@@ -952,8 +952,26 @@ function montar(root, d) {
     const direcaoDist = v => { const r = Math.round(v * 100) / 100; return r > 0 ? 'Alta' : r < 0 ? 'Baixa' : 'Equilíbrio'; };
     const tituloT = tem(dist) ? direcaoDist(dist) : '—';
     const corT = { Alta: 'var(--verde)', Baixa: 'var(--vermelho)', Equilíbrio: 'var(--suave)' }[tituloT] || 'var(--texto)';
-    const leitura = !tem(d.forca) ? '' : d.forca >= 70 ? 'Sobrecomprada. Subiu rápido demais.'
-      : d.forca <= 30 ? 'Sobrevendida. Caiu rápido demais.' : 'Neutra. Sem pressão de compra nem de venda.';
+    // texto da Força (IFR) no mesmo padrão "de X para Y" da evolução da Direção da tendência acima, pra
+    // mostrar a evolução em vez de só o estado de hoje - sem o histórico de 7 dias, mantém o texto antigo
+    // (nunca inventa uma comparação sem dado)
+    const zonaIFR = v => v >= 70 ? 'Sobrecomprada' : v <= 30 ? 'Sobrevendida' : 'Neutra';
+    let leitura = '';
+    if (tem(d.forca)) {
+      const zonaHoje = zonaIFR(d.forca);
+      if (tem(d.forca7d)) {
+        const zona7 = zonaIFR(d.forca7d);
+        if (zonaHoje !== zona7) {
+          leitura = `Virou de ${zona7} para ${zonaHoje}: de ${f(d.forca7d, 0)} para ${f(d.forca, 0)}.`;
+        } else {
+          const verbo = d.forca > d.forca7d ? 'Subiu' : d.forca < d.forca7d ? 'Caiu' : null;
+          leitura = verbo ? `${zonaHoje}. ${verbo} de ${f(d.forca7d, 0)} para ${f(d.forca, 0)}.` : `${zonaHoje}. Manteve em ${f(d.forca, 0)}.`;
+        }
+      } else {
+        leitura = zonaHoje === 'Sobrecomprada' ? 'Sobrecomprada. Subiu rápido demais.'
+          : zonaHoje === 'Sobrevendida' ? 'Sobrevendida. Caiu rápido demais.' : 'Neutra. Sem pressão de compra nem de venda.';
+      }
+    }
     const fundo = 'linear-gradient(90deg,var(--vermelho) 0 40%,var(--ardosia) 40% 60%,var(--verde-claro) 60% 80%,var(--verde-forte) 80% 100%)';
     // Força da tendência: distância do preço até a média de 200 dias. Escala fixa de -30% a +30%
     // (só estica além disso se a distância real passar desses limites): abaixo de -10% perdeu força;
@@ -1004,7 +1022,7 @@ function montar(root, d) {
     const largContainerT = Math.max(el.clientWidth - 28, 200);
     const [pDistBola, p7TBola] = afastarBolinhas(largContainerT, pDist, p7T);
     const linhaHojeT = `<div class="marca-cima so-valor num"><span style="${ancora(pDistBola)};color:var(--azul);font-weight:600;font-size:12px">${txtHojeT}</span></div>`;
-    const linha7T = p7T === null ? '' : `<div class="marca-baixo num"><span style="${ancora(p7TBola)};color:var(--suave);font-weight:500;font-size:10.5px">7 dias atrás<b style="color:var(--texto)">${txt7ValorT}</b></span></div>`;
+    const linha7T = p7T === null ? '' : `<div class="marca-baixo num" style="margin-top:10px"><span style="${ancora(p7TBola)};color:var(--suave);font-weight:500;font-size:10.5px">7 dias atrás<b style="color:var(--texto)">${txt7ValorT}</b></span></div>`;
     const divisor = 'margin-top:14px;padding-top:14px;border-top:1px solid var(--borda)';
     const barraT = !tem(dist) ? '' : `<div style="${divisor}">
           <span class="rot">Força da tendência</span>
@@ -1054,7 +1072,7 @@ function montar(root, d) {
             ${tem(d.forca7d) ? `<span class="bola-7d" style="left:${forca7dBola}%"></span>` : ''}
             <span class="bola" style="left:${forcaBola}%"></span>
           </div>
-          ${tem(d.forca7d) ? `<div class="marca-baixo num"><span style="${ancora(forca7dBola)};color:var(--suave);font-weight:500;font-size:10.5px">7 dias atrás<b style="color:var(--texto)">${f(d.forca7d, 0)}</b></span></div>` : ''}
+          ${tem(d.forca7d) ? `<div class="marca-baixo num" style="margin-top:10px"><span style="${ancora(forca7dBola)};color:var(--suave);font-weight:500;font-size:10.5px">7 dias atrás<b style="color:var(--texto)">${f(d.forca7d, 0)}</b></span></div>` : ''}
           <div class="nota num" style="margin-top:18px">50 é o ponto neutro da régua acima (nem sobrecomprada, nem sobrevendida).</div>
           <div class="destaque">${leitura}</div>` : `<div class="nota" style="margin-top:8px">${INDISP}</div>`}
         </div>

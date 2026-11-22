@@ -334,7 +334,9 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   podem ficar tão perto a ponto de uma esconder a outra: `afastarBolinhas()` afasta a posição visual das duas
   (e dos valores acima/abaixo, que seguem a mesma posição da sua bolinha) só o mínimo necessário - raio de
   cada bolinha (hoje 18px cheia, 7 dias 10px vazada) mais um respiro - preservando a posição real quando já
-  há espaço de sobra; com valores iguais ou muito próximos, as 2 continuam sempre visíveis lado a lado. Os
+  há espaço de sobra; com valores iguais ou muito próximos, as 2 continuam sempre visíveis lado a lado. O
+  rótulo "7 dias atrás" embaixo da bolinha vazada (nas 2 barras) tem respiro extra (margem maior que o padrão
+  de `.marca-baixo`) pra não ficar colado na bolinha. Os
   dois textos de leitura (abaixo da barra de Força da tendência) começam direto pelo
   percentual, com 1 casa decimal (mesma precisão da segunda frase, pra nunca mostrar "20,94%" numa linha e
   "26,5%" na outra), sem rótulo ("Perdeu força"/"Alta"/"Precisa subir"/"Cai" tirados): "20,9% abaixo da média
@@ -372,6 +374,15 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   exato dos limites da zona (`position:absolute;left:[meio]%;transform:translateX(-50%)`) - essas 2 barras não
   usam a classe `.zonas-rot` (grade CSS compartilhada com SIMONS/Lynch/Conservador), porque o `gap` da grade
   deixava o nome fora do centro real da faixa; a mudança é só nessas 2 barras, pra não arriscar as outras.
+  O texto de leitura da Força (destaque abaixo da régua de IFR, ex. "Sobrevendida") segue o MESMO padrão "de X
+  para Y" da evolução da Direção da tendência, pra mostrar a evolução em vez de só o estado de hoje - zona
+  (Sobrecomprada ≥70 / Sobrevendida ≤30 / Neutra no meio, limiares à parte dos nomes Muita venda/Alta leve/Forte
+  da régua) calculada pro valor de hoje e pro de 7 dias atrás (`forca7d`): mesma zona e subiu = "[Zona]. Subiu
+  de [7 dias] para [hoje]."; mesma zona e caiu = "...Caiu de [7 dias] para [hoje]."; zona diferente = "Virou de
+  [zona 7 dias] para [zona hoje]: de [7 dias] para [hoje]." (ex.: "Virou de Neutra para Sobrevendida: de 45
+  para 29." - 45 fica entre 30 e 70, Neutra, mesmo ficando perto do limite). Sem `forca7d` (menos de 8 pregões
+  de histórico): mantém o texto antigo, só com a zona de hoje (ex.: "Sobrevendida. Caiu rápido demais."), nunca
+  inventando uma comparação sem dado.
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 
