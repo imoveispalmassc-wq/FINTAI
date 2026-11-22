@@ -1689,6 +1689,28 @@ RE_RELATORIO = re.compile(r"an[áa]lise\s+gerencial|an[áa]lise\s+do\s+desempenh
                           r"divulga[çc][ãa]o\s+de\s+resultados|resultado", re.I)
 
 
+def colunas_do_cabecalho(trimestres: list[str], tri: str) -> list[str]:
+    """Colunas do cabeçalho da tabela a partir de uma sequência de rótulos de trimestre colados no texto do PDF.
+
+    Issue #26 (PDFs da Petrobras): o texto extraído pode grudar um rótulo solto que vem antes do cabeçalho (título,
+    gráfico, cabeçalho da tabela anterior) no próprio cabeçalho - ex.: "2T26" + "3T26 2T26 3T25" vira
+    "2T26 3T26 2T26 3T25". Aí o 3T26 cai no índice 1 e o robô lia a coluna do trimestre ANTERIOR (série inteira
+    1 trimestre atrasada). Um cabeçalho de verdade não repete trimestre: fica a MAIOR janela sem repetição que
+    contém `tri` (empate: a que começa antes, ex.: "1T26 4T25 1T25" + "1T26 X 4T25" das colunas de variação)."""
+    if len(set(trimestres)) == len(trimestres):
+        return trimestres
+    melhor: list[str] = []
+    for i in range(len(trimestres)):
+        vistos: list[str] = []
+        for q in trimestres[i:]:
+            if q in vistos:
+                break
+            vistos.append(q)
+        if tri in vistos and len(vistos) > len(melhor):
+            melhor = vistos
+    return melhor or trimestres
+
+
 def ler_lucro_trimestre(texto: str, tri: str, linha: str = "Lucro Líquido Ajustado", tabela_vence: bool = False) -> dict:
     """Lucro da `linha` no trimestre `tri` (ex.: "3T26"), em reais, no release de resultados.
 
@@ -1721,7 +1743,10 @@ def ler_lucro_trimestre(texto: str, tri: str, linha: str = "Lucro Líquido Ajust
                   if tri in re.findall(r"\b[1-4]T\d{2}\b", g.group(1))]
         if not grupos:
             continue
-        colunas = re.findall(r"\b[1-4]T\d{2}\b", grupos[-1].group(1))
+        # entre os grupos com `tri`, o cabeçalho de verdade é o mais completo (empate: o mais perto da linha) - um
+        # pedaço solto como "4T25 (%)" das colunas de variação não é cabeçalho (issue #26)
+        candidatos = [colunas_do_cabecalho(re.findall(r"\b[1-4]T\d{2}\b", g.group(1)), tri) for g in grupos]
+        colunas = max(reversed(candidatos), key=len)
         valores = [v for v in m.group(1).split() if not v.endswith("%")]
         if len(valores) < len(colunas):
             continue
@@ -1835,6 +1860,10 @@ def contabil_br(ticker: str, hoje: dt.date, cfg: dict, *, buscar_cnpj=cnpj_do_ti
             continue
         lidos[tri] = {"tri": tri, "fim": f"{fim_do_trimestre(tri):%d/%m/%Y}", "lucro": r["valor"], "fonte": fonte,
                       "data": _data_br(doc["data"]), "url": doc["link"], "leitura": r["motivo"]}
+        # comparativo do trimestre anterior no MESMO documento: confere com o que o release anterior disse (issue #26)
+        rant = ler_lucro_trimestre(texto, tri_anterior(tri), linha, tabela_vence=True)
+        if rant["tabela"] is not None:
+            lidos[tri]["anterior"] = rant["tabela"]
         if linha_aj:
             ra = ler_lucro_trimestre(texto, tri, linha_aj, tabela_vence=relatorio)
             if ra["valor"] is not None:
@@ -1861,6 +1890,19 @@ def contabil_br(ticker: str, hoje: dt.date, cfg: dict, *, buscar_cnpj=cnpj_do_ti
                     break
             else:
                 registrar(f"{ticker} {tri_falta}: gravou=não motivo=nenhum documento com o lucro do trimestre lido")
+    # TRAVA da coluna (issue #26): o release do trimestre T repete o T-1 como comparativo. Se o T-1 lido no release
+    # de T não bate com o T-1 lido no próprio release de T-1, alguma leitura pegou a coluna errada -> não grava.
+    suspeitos = []
+    for t_, v in lidos.items():
+        ant = lidos.get(tri_anterior(t_))
+        if v.get("anterior") and ant and ant.get("lucro") and abs(v["anterior"] / ant["lucro"] - 1) > 0.02:
+            suspeitos.append(f"{tri_anterior(t_)}: release do {tri_anterior(t_)} diz {ant['lucro'] / 1e9:.2f} bi, "
+                             f"comparativo no release do {t_} diz {v['anterior'] / 1e9:.2f} bi")
+    if suspeitos:
+        motivo = "coluna suspeita (comparativo não bate): " + "; ".join(sorted(suspeitos))
+        registrar(f"{ticker}: contábil pendente ({motivo})")
+        return {"status": "pendente", "motivo": motivo,
+                "lidos": {k: round(v["lucro"] / 1e9, 4) for k, v in sorted(lidos.items(), key=lambda x: fim_do_trimestre(x[0]))}}
     # número de ações: fonte oficial cadastrada (ex.: PETR4 ON+PN do ITR/6-K) ganha do Yahoo, que pode trazer só a PN
     acoes = cfg.get("acoes") or buscar_acoes(ticker)
     base = "ajustado" if RE_LINHA_AJUSTADA.search(linha) else "contábil"

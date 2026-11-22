@@ -85,6 +85,7 @@ ATIVOS: dict[str, dict[str, Any]] = {
         "acoes": 12.89e9,   # ~12,89 bi ações em circulação
         "yahoo": "PETR4.SA",
         "lpa_tipo": "lucro_atribuivel_div_acoes",
+        "ri": ["mziq.com", "petrobras.com.br"],
     },
     "BBAS3": {
         "mercado": "BR",
@@ -93,6 +94,7 @@ ATIVOS: dict[str, dict[str, Any]] = {
         "acoes": 5.73e9,    # ~5,73 bi ações
         "yahoo": "BBAS3.SA",
         "lpa_tipo": "lucro_contabil_div_acoes",
+        "ri": ["mziq.com", "bb.com.br"],
     },
 }
 
@@ -102,6 +104,10 @@ TAGS_LPA_PADRAO = ["EarningsPerShareDiluted"]
 TAGS_LUCRO_CONTINUAS = ["IncomeLossFromContinuingOperationsAttributableToParent", "IncomeLossFromContinuingOperations"]
 TAGS_LPA_CONTINUAS = ["IncomeLossFromContinuingOperationsPerDilutedShare"]
 ARQ_Q4_RELEASE = Path(__file__).resolve().parent / "q4_release.json"
+# FONTE OFICIAL DA B3 (issue #26, regra travada): release de resultados > CVM. O contábil lido do release pelo robô
+# de guidance (contabil_br.json, base contábil) ganha da DRE consolidada dos dados abertos da CVM; a CVM fica só
+# como conferência (lucro_cvm / divergencia_cvm).
+ARQ_CONTABIL_BR = Path(__file__).resolve().parent / "contabil_br.json"
 
 FORMS_RESULTADO_EUA = {"10-Q", "10-K", "10-Q/A", "10-K/A", "20-F", "6-K"}
 ITENS_8K_RESULTADO = {"2.02"}
@@ -677,6 +683,20 @@ class Fontes:
         return novos
 
     def _ttm_cvm(self, ticker: str, cfg: dict) -> dict:
+        """B3: release de resultados (contabil_br.json) primeiro; DRE consolidada da CVM só como conferência."""
+        cvm = self._ttm_cvm_dre(ticker, cfg)
+        rel = contabil_release(ticker)
+        if not rel:
+            return cvm
+        if cvm.get("lucro_ttm") is not None:
+            rel["lucro_cvm"] = cvm["lucro_ttm"]
+            rel["divergencia_cvm"] = round(rel["lucro_ttm"] / cvm["lucro_ttm"] - 1, 4) if cvm["lucro_ttm"] else None
+            if cvm.get("trimestres") and cvm["trimestres"][-1] != rel["trimestres"][-1]:
+                rel["pendencias"].append(f"CVM vai até {cvm['trimestres'][-1]}, release até {rel['trimestres'][-1]}.")
+        rel["lpa_tipo"] = cfg.get("lpa_tipo", rel.get("lpa_tipo"))
+        return rel
+
+    def _ttm_cvm_dre(self, ticker: str, cfg: dict) -> dict:
         res = vazio("ATUALIZADO")
         res.update(lucro_moeda="BRL", lpa_moeda="BRL", lpa_tipo=cfg.get("lpa_tipo"))
         cnpj = cfg.get("cnpj")
@@ -874,6 +894,28 @@ def vazio(status: str, pendencia: str | None = None) -> dict:
             "pendencias": [pendencia] if pendencia else []}
 
 
+def contabil_release(ticker: str) -> dict | None:
+    """TTM da B3 a partir do contábil lido no release de resultados (contabil_br.json), se estiver ok e na base
+    contábil (Regra 1). Lucro 12m = soma dos 4 trimestres do release; LPA = lucro ÷ ações do próprio contábil."""
+    try:
+        c = json.loads(ARQ_CONTABIL_BR.read_text(encoding="utf-8")).get(ticker) or {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+    if c.get("status") != "ok" or c.get("base") != "contábil" or not c.get("acoes") or not c.get("trimestres"):
+        return None
+    res = vazio("ATUALIZADO")
+    tri = c["trimestres"]
+    fim_iso = lambda f: f"{f[6:10]}-{f[3:5]}-{f[0:2]}"
+    res.update(lucro_ttm=float(c["lucro_12m"]), lucro_moeda="BRL", lpa_ttm=round(float(c["lucro_12m"]) / float(c["acoes"]), 4),
+               lpa_moeda="BRL", trimestres=[fim_iso(t["fim"]) for t in tri], link_oficial=tri[-1].get("url"),
+               fonte=f"{c.get('fonte') or 'Release de resultados'} ÷ {float(c['acoes']) / 1e9:.2f} bi ações (contabil_br.json)",
+               source_date=tri[-1].get("data"))
+    if c.get("lucro_ajustado_12m") is not None:
+        res["lucro_ajustado"] = c["lucro_ajustado_12m"]
+        res["lpa_ajustado"] = c.get("lpa_ajustado")
+    return res
+
+
 def config_ativo(ticker: str) -> dict:
     if ticker in ATIVOS:
         return ATIVOS[ticker]
@@ -888,6 +930,7 @@ CAMPOS_TTM = ("lucro_ttm", "lucro_moeda", "lpa_ttm", "lpa_moeda", "lpa_tipo", "l
               # notas das regras travadas (ajustado/total só como extra; divergência do 4º tri)
               "lpa_ajustado", "lucro_ajustado", "tem_descontinuadas", "lpa_total", "lucro_total",
               "q4_calculado", "q4_release", "q4_usado", "q4_fim", "ttm_regra", "soma_trimestres",
+              "lucro_cvm", "divergencia_cvm",
               # marcação obrigatória: NUNCA apagada pelo ttm_auto.py
               "last_updated", "updated_by", "source_date")
 CAMPOS_MARCACAO = ("last_updated", "updated_by", "source_date")
