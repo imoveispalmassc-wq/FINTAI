@@ -324,15 +324,21 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 - "Tendência e força": os cards de Direção/Força da tendência (distância preço÷MM200) e Força (IFR 14 dias)
   ficam num único bloco. Cada um mostra, além do valor de hoje (bolinha cheia), uma bolinha vazada marcando
   onde estava 7 pregões atrás (`calculos.calcular` → `dist_mm200_7d`/`ifr_7d`, calculados em `indicadores()`,
-  não um valor aproximado), com o rótulo "-7 dias" logo embaixo dela (não o número - a posição da bolinha já
-  mostra pra que lado a tendência/força está indo, sem precisar comparar números) - com menos de 8 pregões de
-  histórico, fica "Sem dado" (não mostra a bolinha vazada nem o rótulo, nunca inventa). Na barra de Força da
-  tendência, a distância de hoje e "Média 200d" ficam na MESMA linha, logo abaixo da régua (não cada uma na sua
-  própria linha, que afastava demais da barra) - só se afastam uma da outra o mínimo necessário pra não
-  sobrepor (mesma função `afastar()`/folga pela largura do rótulo da Faixa de preço), senão cada uma fica
-  exatamente no seu próprio ponto. Os dois textos abaixo começam direto pelo percentual, sem rótulo
-  ("Perdeu força"/"Alta"/"Precisa subir"/"Cai" tirados): "20,94% abaixo da média de 200 dias." e "26,5% para
-  voltar à média." - sem repetir a mesma distância numa segunda frase ("Preço X está Y% abaixo da média de Z").
+  não um valor aproximado), com o rótulo "-7 dias: [valor]" logo embaixo dela (a posição da bolinha já mostra
+  pra que lado a tendência/força está indo, sem precisar comparar números, mas o valor exato também aparece) -
+  com menos de 8 pregões de histórico, fica "Sem dado" (não mostra a bolinha vazada nem o rótulo, nunca
+  inventa). Na barra de Força da tendência, a distância de hoje e "Média 200d" ficam na MESMA linha, logo
+  abaixo da régua (não cada uma na sua própria linha, que afastava demais da barra) - só se afastam uma da
+  outra o mínimo necessário pra não sobrepor (mesma função `afastar()`/folga pela largura do rótulo da Faixa
+  de preço), senão cada uma fica exatamente no seu próprio ponto. Os dois textos abaixo começam direto pelo
+  percentual, sem rótulo ("Perdeu força"/"Alta"/"Precisa subir"/"Cai" tirados): "20,94% abaixo da média de 200
+  dias." e "26,5% para voltar à média." - sem repetir a mesma distância numa segunda frase ("Preço X está Y%
+  abaixo da média de Z"). Cores das zonas: na barra de Força da tendência, "Perdeu força" (abaixo de 0%)
+  continua vermelha; "Fraca" (0% a 3%) é cinza neutro; "Média" (3% a 10%) é verde-claro; "Forte" (10% a 15%) é
+  verde-forte. Na barra de Força (IFR 0-100), "Muita venda" (0-30) é vermelha e "Muita compra" (70-100) é
+  verde (não mais verde/âmbar como antes) - dentro da faixa de 30 a 100, o gradiente fica mais granular que os
+  3 rótulos (Muita venda/Equilíbrio/Muita compra): cinza neutro de 30 a 50, verde-claro de 50 a 70, verde-forte
+  de 70 a 100, com traço e número também em 50 (além de 0/30/70/100 que já existiam).
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 

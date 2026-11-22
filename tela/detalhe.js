@@ -560,7 +560,7 @@ function montar(root, d) {
     const dist = tem(d.mm200) ? (d.preco / d.mm200 - 1) * 100 : null;
     const leitura = !tem(d.forca) ? '' : d.forca >= 70 ? 'Sobrecomprada. Subiu rápido demais.'
       : d.forca <= 30 ? 'Sobrevendida. Caiu rápido demais.' : 'Neutra. Sem pressão de compra nem de venda.';
-    const fundo = 'linear-gradient(90deg,var(--vermelho) 0 30%,var(--ardosia) 30% 70%,var(--verde) 70% 100%)';
+    const fundo = 'linear-gradient(90deg,var(--vermelho) 0 30%,var(--ardosia) 30% 50%,var(--verde-claro) 50% 70%,var(--verde-forte) 70% 100%)';
     // Força da tendência: distância do preço até a média de 200 dias, numa escala de -5% a +15%.
     // O zero (a própria média) fica no início da faixa Fraca: tudo à direita dele está ACIMA da média.
     const FRACA = 3, FORTE = 10;
@@ -574,7 +574,7 @@ function montar(root, d) {
       : v <= FRACA ? W_NEG + W_FRACA * v / FRACA
       : v <= FORTE ? W_NEG + W_FRACA + W_MEDIA * (v - FRACA) / (FORTE - FRACA)
       : W_NEG + W_FRACA + W_MEDIA + W_FORTE * Math.min(1, (v - FORTE) / (RMAX - FORTE));
-    const fundoT = `linear-gradient(90deg,var(--vermelho) 0 ${pt(0)}%,var(--ambar) ${pt(0)}% ${pt(FRACA)}%,var(--ardosia) ${pt(FRACA)}% ${pt(FORTE)}%,var(--verde) ${pt(FORTE)}% 100%)`;
+    const fundoT = `linear-gradient(90deg,var(--vermelho) 0 ${pt(0)}%,var(--ardosia) ${pt(0)}% ${pt(FRACA)}%,var(--verde-claro) ${pt(FRACA)}% ${pt(FORTE)}%,var(--verde-forte) ${pt(FORTE)}% 100%)`;
     let textoT = '', notaSubirCairT = '';
     if (tem(dist)) {
       const cair = (d.preco - d.mm200) / d.preco * 100, subir = (d.mm200 / d.preco - 1) * 100;
@@ -614,9 +614,9 @@ function montar(root, d) {
           <span class="rot">Força da tendência</span>
           <div class="zonas-rot" style="grid-template-columns:${pt(0)}fr ${pt(FRACA) - pt(0)}fr ${pt(FORTE) - pt(FRACA)}fr ${100 - pt(FORTE)}fr">
             <span style="color:var(--vermelho)"><b>Perdeu força</b></span>
-            <span style="color:var(--ambar);text-align:center"><b>${estreita ? '' : 'Fraca'}</b></span>
-            <span style="color:#aab4c6;text-align:center"><b>Média</b></span>
-            <span style="color:var(--verde)"><b>Forte</b></span>
+            <span style="color:#aab4c6;text-align:center"><b>${estreita ? '' : 'Fraca'}</b></span>
+            <span style="color:var(--verde-claro);text-align:center"><b>Média</b></span>
+            <span style="color:var(--verde-forte)"><b>Forte</b></span>
           </div>
           <div class="marca-cima limites num">
             <span class="esq">${pct(RMIN)}</span><span style="left:${pt(0)}%">0%</span>${estreita ? '' : `<span style="left:${pt(FRACA)}%">+3%</span>`}
@@ -627,7 +627,7 @@ function montar(root, d) {
             ${p7T !== null ? `<span class="bola-7d" style="left:${p7T}%"></span>` : ''}
             <span class="bola" style="left:${pDist}%"></span>
           </div>
-          ${p7T !== null ? `<div class="marca-baixo so-valor num"><span style="${ancora(p7T)};color:var(--suave);font-weight:500;font-size:10.5px">-7 dias</span></div>` : ''}
+          ${p7T !== null ? `<div class="marca-baixo so-valor num"><span style="${ancora(p7T)};color:var(--suave);font-weight:500;font-size:10.5px">-7 dias: ${sinal(d.dist200d7d)}</span></div>` : ''}
           ${linhaDistMedia}
           ${estreita ? '<div class="nota">Faixa Fraca: de 0% a +3% acima da média de 200 dias.</div>' : ''}
           <div class="destaque num">${textoT}</div>
@@ -645,15 +645,15 @@ function montar(root, d) {
             <span style="color:var(--verde)"><b>Muita compra</b></span>
           </div>
           <div class="marca-cima limites num">
-            <span class="esq">0</span><span style="left:30%">30</span><span style="left:70%">70</span><span class="dir">100</span>
+            <span class="esq">0</span><span style="left:30%">30</span><span style="left:50%">50</span><span style="left:70%">70</span><span class="dir">100</span>
           </div>
           <div class="marca-cima so-valor num"><span style="${ancora(d.forca)};color:var(--azul);font-weight:600;font-size:12px">${f(d.forca, 0)}</span></div>
           <div class="regua" style="background:${fundo};margin-top:4px">
-            <span class="traco" style="left:30%"></span><span class="traco" style="left:70%"></span>
+            <span class="traco" style="left:30%"></span><span class="traco" style="left:50%"></span><span class="traco" style="left:70%"></span>
             ${tem(d.forca7d) ? `<span class="bola-7d" style="left:${d.forca7d}%"></span>` : ''}
             <span class="bola" style="left:${d.forca}%"></span>
           </div>
-          ${tem(d.forca7d) ? `<div class="marca-baixo so-valor num"><span style="${ancora(d.forca7d)};color:var(--suave);font-weight:500;font-size:10.5px">-7 dias</span></div>` : ''}
+          ${tem(d.forca7d) ? `<div class="marca-baixo so-valor num"><span style="${ancora(d.forca7d)};color:var(--suave);font-weight:500;font-size:10.5px">-7 dias: ${f(d.forca7d, 0)}</span></div>` : ''}
           <div class="destaque" style="text-align:center">${leitura}</div>` : `<div class="nota" style="margin-top:8px">${INDISP}</div>`}
         </div>
       </div>`;
