@@ -1,10 +1,15 @@
 {
   "BBAS3": {
-    "linha": "Lucro Líquido Ajustado",
-    "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado"
+    "linha": "Lucro Líquido Contábil",
+    "linha_ajustado": "Lucro Líquido Ajustado",
+    "fonte": "BB, Análise do Desempenho, Lucro Líquido Contábil"
   },
   "PETR4": {
-    "linha": "Lucro Líquido sem Eventos Exclusivos",
-    "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos"
+    "linha": "Lucro líquido (Prejuízo) - Acionistas Petrobras",
+    "linha_ajustado": "Lucro Líquido sem Eventos Exclusivos",
+    "fonte": "Petrobras, Relatório de Desempenho, Lucro líquido - Acionistas Petrobras (contábil)",
+    "acoes": 12888732761,
+    "fonte_acoes": "Petrobras, demonstrações financeiras 3T26 (6-K SEC, nota 26): ON 7.442.231.382 + PN 5.446.501.379 = 12.888.732.761 em 30/09/2026 (média ponderada igual, sem tesouraria)",
+    "url_acoes": "https://www.sec.gov/Archives/edgar/data/1119639/000129281426005249/pbrfs3q26rs_6k.htm"
   }
 }

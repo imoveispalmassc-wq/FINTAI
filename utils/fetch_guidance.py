@@ -1765,8 +1765,15 @@ def extrair_lucro_trimestre(texto: str, tri: str, linha: str = "Lucro Líquido A
     return r["valor"], r["motivo"]
 
 
-def contabil_br_de_trimestres(trimestres: list[dict], acoes: float | None, fonte: str, hoje: dt.date) -> dict:
-    """4 trimestres consecutivos -> lucro de 12 meses, LPA = soma ÷ ações. Senão: pendente."""
+RE_LINHA_AJUSTADA = re.compile(r"ajustad|recorrente|sem\s+eventos", re.I)
+
+
+def contabil_br_de_trimestres(trimestres: list[dict], acoes: float | None, fonte: str, hoje: dt.date,
+                              base: str = "ajustado") -> dict:
+    """4 trimestres consecutivos -> lucro de 12 meses, LPA = soma ÷ ações. Senão: pendente.
+
+    REGRA 1 (travada): base "contábil" é o principal. Quando cada trimestre também traz "lucro_ajustado" (linha
+    ajustada lida só como nota), grava lucro_ajustado_12m / lpa_ajustado - nunca no campo principal."""
     if len(trimestres) < 4:
         return {"status": "pendente", "motivo": f"só {len(trimestres)} trimestre(s) lidos dos releases"}
     ult = sorted(trimestres, key=lambda x: fim_do_trimestre(x["tri"]))[-4:]
@@ -1775,8 +1782,13 @@ def contabil_br_de_trimestres(trimestres: list[dict], acoes: float | None, fonte
     if not acoes:
         return {"status": "pendente", "motivo": "número de ações indisponível"}
     soma = sum(x["lucro"] for x in ult)
-    return {"status": "ok", "base": "ajustado", "lucro_12m": soma, "acoes": acoes, "lpa_12m": round(soma / acoes, 4),
-            "trimestres": ult, "fonte": fonte, "data": ult[-1]["data"], "atualizado": f"{hoje:%d/%m/%Y}"}
+    res = {"status": "ok", "base": base, "lucro_12m": soma, "acoes": acoes, "lpa_12m": round(soma / acoes, 4),
+           "trimestres": ult, "fonte": fonte, "data": ult[-1]["data"], "atualizado": f"{hoje:%d/%m/%Y}"}
+    if all(x.get("lucro_ajustado") is not None for x in ult):
+        aj = sum(x["lucro_ajustado"] for x in ult)
+        res.update(lucro_ajustado_12m=aj, lpa_ajustado=round(aj / acoes, 4),
+                   nota_ajustado=f"Lucro ajustado 12m R$ {aj / 1e9:.2f} bi (LPA {aj / acoes:.2f}) só como nota; a tela usa o contábil.")
+    return res
 
 
 def contabil_br(ticker: str, hoje: dt.date, cfg: dict, *, buscar_cnpj=cnpj_do_ticker, buscar_docs=documentos_cvm,
@@ -1789,7 +1801,9 @@ def contabil_br(ticker: str, hoje: dt.date, cfg: dict, *, buscar_cnpj=cnpj_do_ti
     if not empresa:
         registrar(f"{ticker}: CNPJ não encontrado na CVM")
         return {"status": "pendente", "motivo": "CNPJ não encontrado na CVM"}
-    linha, fonte = cfg.get("linha", "Lucro Líquido Ajustado"), cfg.get("fonte", f"{ticker}, Divulgação de Resultados")
+    # REGRA 1 (travada): a linha principal é a do lucro CONTÁBIL; "linha_ajustado" (opcional) só vira nota
+    linha, fonte = cfg.get("linha", "Lucro Líquido Contábil"), cfg.get("fonte", f"{ticker}, Divulgação de Resultados")
+    linha_aj = cfg.get("linha_ajustado")
     docs = buscar_docs(empresa[0], hoje)
     registrar(f"{ticker}: {len(docs)} documento(s) de resultado/projeção na CVM")
     # na mesma data, o release de resultados vem antes de fato relevante, ITR etc.
@@ -1821,6 +1835,10 @@ def contabil_br(ticker: str, hoje: dt.date, cfg: dict, *, buscar_cnpj=cnpj_do_ti
             continue
         lidos[tri] = {"tri": tri, "fim": f"{fim_do_trimestre(tri):%d/%m/%Y}", "lucro": r["valor"], "fonte": fonte,
                       "data": _data_br(doc["data"]), "url": doc["link"], "leitura": r["motivo"]}
+        if linha_aj:
+            ra = ler_lucro_trimestre(texto, tri, linha_aj, tabela_vence=relatorio)
+            if ra["valor"] is not None:
+                lidos[tri]["lucro_ajustado"] = ra["valor"]
         ordem = sorted(lidos, key=fim_do_trimestre)
         if len(ordem) >= 4 and all(tri_anterior(b) == a for a, b in zip(ordem[-4:], ordem[-3:])):
             break
@@ -1843,7 +1861,12 @@ def contabil_br(ticker: str, hoje: dt.date, cfg: dict, *, buscar_cnpj=cnpj_do_ti
                     break
             else:
                 registrar(f"{ticker} {tri_falta}: gravou=não motivo=nenhum documento com o lucro do trimestre lido")
-    resultado = contabil_br_de_trimestres(list(lidos.values()), buscar_acoes(ticker), fonte, hoje)
+    # número de ações: fonte oficial cadastrada (ex.: PETR4 ON+PN do ITR/6-K) ganha do Yahoo, que pode trazer só a PN
+    acoes = cfg.get("acoes") or buscar_acoes(ticker)
+    base = "ajustado" if RE_LINHA_AJUSTADA.search(linha) else "contábil"
+    resultado = contabil_br_de_trimestres(list(lidos.values()), acoes, fonte, hoje, base=base)
+    if cfg.get("acoes") and resultado.get("status") == "ok":
+        resultado["fonte_acoes"] = cfg.get("fonte_acoes", "cadastro oficial")
     resultado["lidos"] = {k: round(v["lucro"] / 1e9, 4) for k, v in sorted(lidos.items(), key=lambda x: fim_do_trimestre(x[0]))}
     registrar(f"{ticker}: contábil {resultado['status']}"
               + (f" lucro 12m {resultado['lucro_12m'] / 1e9:.2f} bi, LPA {resultado['lpa_12m']:.2f}" if resultado["status"] == "ok"

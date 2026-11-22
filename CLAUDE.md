@@ -238,15 +238,19 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   queue_nao_validado.json) mas com guidance trimestral verificado: em vez do aviso de pendente, mostra uma nota
   diferente ("Guidance ANUAL de TICKER não encontrado ... a empresa só dá guidance trimestral. Guidance
   trimestral verificado abaixo") - não é um dado faltando, é a empresa que não dá guidance anual.
-- Contábil 12 meses (B3): tickers de utils/contabil_br_config.json (linha do lucro e nome da fonte; hoje só BBAS3, linha
-  "Lucro Líquido Ajustado", fonte "BB, Divulgação de Resultados, Lucro Líquido Ajustado"). O robô lê o release de
+- Contábil 12 meses (B3): tickers de utils/contabil_br_config.json (linha do lucro e nome da fonte; hoje BBAS3, linha
+  "Lucro Líquido Contábil", e PETR4, linha "Lucro líquido (Prejuízo) - Acionistas Petrobras"). REGRA 1 vale para a B3
+  também: a linha principal ("linha") é sempre a do lucro CONTÁBIL; "linha_ajustado" (ex.: "Lucro Líquido Ajustado",
+  "Lucro Líquido sem Eventos Exclusivos") é lida só como nota (lucro_ajustado_12m / lpa_ajustado). "acoes" + "fonte_acoes"
+  no config (número oficial ON+PN do ITR/6-K) ganham do Yahoo, que para a PETR4 devolve só a PN (5,45 bi em vez de
+  12,89 bi). O robô lê o release de
   resultados de cada trimestre na CVM (trimestre = o último encerrado antes da entrega), extrai o lucro do trimestre
   (frase e tabela; divergência > 3% = sem confiança; frase com acumulado/ano/semestre/9M/12M é descartada; tabela só
   pela coluna trimestral; sem unidade escrita, decide pela frase, e "3,9" sem frase é ambíguo; lucro < R$ 1 mi, ex. 0,00,
   é leitura inválida e tenta o próximo documento; em release/Relatório de Análise Gerencial a tabela vence sempre e a
   frase só ajuda na unidade; PDF com 3 tentativas e leitores pypdf → pdfplumber → PyMuPDF; trimestre que não abre usa a
   coluna dele na tabela de um release posterior; log "BBAS3 3T26: frase=... tabela=... divergência=... gravou=..."), soma 4 trimestres consecutivos e grava em utils/contabil_br.json:
-  LPA = soma ÷ ações (Yahoo). Sem conseguir ler: "Yahoo - pendente", nunca número inventado; pendente não apaga valor
+  LPA = soma ÷ ações (oficial do config; senão Yahoo). Sem conseguir ler: "Yahoo - pendente", nunca número inventado; pendente não apaga valor
   bom já gravado. Demais tickers da B3: Yahoo.
   No fim de cada ticker (B3 e EUA) o robô grava atualizado_em ("17/11 18:32", Brasília; só muda com leitura boa,
   igual ao "pendente"/"incompleto" não apagar valor bom), trimestre_ref ("3T26") e trimestre_data ("set/26").
