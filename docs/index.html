@@ -869,7 +869,11 @@ function montar(root, d) {
     // caracteres, já que são sempre números formatados no mesmo padrão), convertida em % da largura
     // do card - assim funciona pra qualquer ativo, não só pros de poucos dígitos.
     const largadorPx = txt => txt ? txt.length * 7.3 + 6 : 0;
-    const largContainer = Math.max(el.clientWidth - 28, 200);   // -28 = padding do .card (14px dos 2 lados)
+    // -42 = padding do .card (14px x2) + borda (1px x2) + margem da própria linha (.marca-cima/.regua
+    // têm margin: 0/.. 6px nas laterais) - sem contar a borda/margem da linha, a folga calculada ficava
+    // ~14px maior do que a largura real disponível, deixando rótulos nas pontas colados/sobrepostos
+    // quando a régua estica bastante pra um lado só (ex. NVDA com a régua indo até -50%)
+    const largContainer = Math.max(el.clientWidth - 42, 200);
     const pxParaPct = px => px / largContainer * 100;
     const folgas = pontosAjuste.map(x => pxParaPct(largadorPx(f(valorReal[x.k]))) / 2);   // metade: rótulo é centralizado
     const folgaEsq = pxParaPct(largadorPx(textoEsq)), folgaDir = pxParaPct(largadorPx(textoDir));
@@ -1026,10 +1030,24 @@ function montar(root, d) {
     // em cima e valor embaixo, pra não parecer o valor de hoje - os dois marcadores de 7 dias (aqui e na
     // Força) usam o mesmo visual
     const txtHojeT = sinal(dist), txt7ValorT = sinal(d.dist200d7d);
-    const largContainerT = Math.max(el.clientWidth - 28, 200);
+    const largContainerT = Math.max(el.clientWidth - 42, 200);   // -42: ver renderFaixa acima
     const [pDistBola, p7TBola] = afastarBolinhas(largContainerT, pDist, p7T);
     const linhaHojeT = `<div class="marca-cima so-valor num"><span style="${ancora(pDistBola)};color:var(--azul);font-weight:600;font-size:12px">${txtHojeT}</span></div>`;
     const linha7T = p7T === null ? '' : `<div class="marca-baixo num" style="margin-top:10px"><span style="${ancora(p7TBola)};color:var(--suave);font-weight:500;font-size:10.5px">7 dias atrás<b style="color:var(--texto)">${txt7ValorT}</b></span></div>`;
+    // quando a distância real passa de -30%/+30%, a régua estica só pro lado que precisa (ex. -50% a
+    // +30%) - os rótulos do meio (-10%/0%/+10%/+20%) não ficam mais espaçados igual nos dois lados
+    // nesse caso, podendo colar no rótulo da ponta que NÃO esticou (ex. +20% colado no +30%). Mesma
+    // técnica de afastar() da Faixa de preço: cada rótulo ganha a folga da sua própria largura (texto
+    // real, não um gap fixo) e só se afasta da ponta o mínimo necessário - os TRAÇOS da régua (cores,
+    // bolinha) continuam na posição exata, só os NÚMEROS escritos acima se ajustam.
+    const largPxT = txt => txt.length * 7.3 + 6 + 6;   // +6 extra: respiro visível, não só sem sobrepor
+    const pxParaPctLimT = px => px / largContainerT * 100;
+    const textoEsqT = pct(RMIN), textoDirT = pct(RMAX);
+    const pontosLimT = [{ k: 'neg', pos: pt(NEG), txt: '-10%' }, { k: 'zero', pos: pt(0), txt: '0%' },
+      { k: 'eq', pos: pt(EQ), txt: '+10%' }, { k: 'leve', pos: pt(LEVE), txt: '+20%' }];
+    const ajustadasLimT = afastar(pontosLimT.map(x => x.pos), pontosLimT.map(x => pxParaPctLimT(largPxT(x.txt)) / 2),
+      pxParaPctLimT(largPxT(textoEsqT)), pxParaPctLimT(largPxT(textoDirT)));
+    const mapaLimT = {}; pontosLimT.forEach((x, i) => { mapaLimT[x.k] = ajustadasLimT[i]; });
     const divisor = 'margin-top:14px;padding-top:14px;border-top:1px solid var(--borda)';
     const barraT = !tem(dist) ? '' : `<div style="${divisor}">
           <span class="rot">Força da tendência</span>
@@ -1040,8 +1058,8 @@ function montar(root, d) {
             <span style="position:absolute;right:0;color:var(--verde-forte)">Forte</span>
           </div>
           <div class="marca-cima limites num">
-            <span class="esq">${pct(RMIN)}</span><span style="left:${pt(NEG)}%">-10%</span><span style="left:${pt(0)}%">0%</span>
-            <span style="left:${pt(EQ)}%">+10%</span><span style="left:${pt(LEVE)}%">+20%</span><span class="dir">${pct(RMAX)}</span>
+            <span class="esq">${textoEsqT}</span><span style="left:${mapaLimT.neg}%">-10%</span><span style="left:${mapaLimT.zero}%">0%</span>
+            <span style="left:${mapaLimT.eq}%">+10%</span><span style="left:${mapaLimT.leve}%">+20%</span><span class="dir">${textoDirT}</span>
           </div>
           ${linhaHojeT}
           <div class="regua" style="background:${fundoT};margin-top:4px">
@@ -1055,7 +1073,7 @@ function montar(root, d) {
           <div class="destaque num">${textoT}</div>
           <div class="nota num">${notaSubirCairT}</div>
         </div>`;
-    const largContainerF = Math.max(el.clientWidth - 28, 200);
+    const largContainerF = Math.max(el.clientWidth - 42, 200);   // -42: ver renderFaixa acima
     const [forcaBola, forca7dBola] = tem(d.forca) ? afastarBolinhas(largContainerF, d.forca, tem(d.forca7d) ? d.forca7d : null) : [null, null];
     el.innerHTML = `<h2>Tendência e força</h2>
       <div class="card">

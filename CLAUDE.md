@@ -368,6 +368,15 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Zonas da barra de Força da tendência: escala fixa de -30% a +30% (só estica além disso se a distância real
   passar desses limites) - abaixo de -10% é "Baixa"; de -10% a +10% é "Equilíbrio" (com a própria média
   de 200 dias, 0%, marcada no meio dessa faixa); de +10% a +20% é "Alta leve"; acima de +20% é "Forte".
+  Quando a régua estica bem mais pra um lado só (ex. distância de -38% faz a régua ir de -50% a +30%, bem
+  mais aberta à esquerda que à direita), os números do meio (-10%/0%/+10%/+20%) usam a mesma técnica de
+  `afastar()` da Faixa de preço: cada um ganha a folga da largura real do próprio texto (+ respiro) e só se
+  afasta da borda o mínimo necessário, pra nunca colar no número da ponta que NÃO esticou (ex. "+20%" colado
+  em "+30%") - os TRAÇOS de cor na régua continuam na posição exata, só os números escritos acima se ajustam.
+  `largContainer`/`largContainerT`/`largContainerF` (largura usada pra converter pixel em %, nessas contas e
+  nas de `afastarBolinhas`) descontam, além do padding do `.card` (14px × 2), a borda do card (1px × 2) e a
+  margem lateral da própria linha (`.marca-cima`/`.regua` têm `margin` de 6px × 2) - sem contar a borda/margem
+  da linha, a largura calculada ficava maior que a real e os rótulos saíam mais próximos do que deveriam.
   A barra de Força (IFR, título "Força - RSI") tem 5 zonas, não 4, no PADRÃO DE MERCADO (regra travada):
   "Muita venda" (vermelho, <30) | "Venda" (âmbar, 30-40) | "Neutro" (cinza, 40-60, com 50 marcado com um traço
   na própria régua, além dos traços de 30/40/60/70 - mesma frase de referência da Força da tendência, adaptada:
