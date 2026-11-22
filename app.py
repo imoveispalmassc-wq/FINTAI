@@ -21,6 +21,7 @@ import yfinance as yf
 import calculos
 import tela.dados
 import utils.benchmarks
+import utils.dados_fixos
 import utils.formato
 import utils.lynch
 import utils.override
@@ -31,7 +32,7 @@ import utils.simons
 # O Streamlit Cloud pode manter versões antigas dos módulos na memória depois de uma
 # atualização; recarregar (na ordem das dependências) mantém tudo na mesma versão.
 for _modulo in (utils.formato, utils.percentile, utils.signals, utils.benchmarks, utils.lynch, utils.override,
-                utils.simons, calculos, tela.dados):
+                utils.simons, utils.dados_fixos, calculos, tela.dados):
     importlib.reload(_modulo)
 
 from calculos import calcular, normalizar_ticker, retorno_periodo
@@ -360,6 +361,20 @@ def outlook_trimestral_eua(ticker: str, max_docs: int = 3) -> dict | None:
         return None
 
 
+@st.cache_data(ttl=86400, show_spinner=False)   # ações/lucro/dividendo só mudam com balanço novo
+def dados_fixos_fonte(ticker: str) -> dict:
+    """Fundamentos fixos (Issue #29, utils/dados_fixos.py): ações, lucro e dividendo de 12 meses,
+    SÓ da fonte oficial (release/ITR/DFP na CVM ou SEC EDGAR - nunca Yahoo). Lista sob demanda:
+    ticker novo busca 1x e grava em utils/dados_fixos.json; ticker já salvo só é lido daqui -
+    cotacao=None pra essa função nunca recalcular com o preço do dia (isso é feito em
+    tela.dados.montar, com a cotação já buscada pela tela). ttl de 1 dia: evita bater na CVM/SEC
+    de novo a cada refresh de página (o próprio dados_fixos.json já cacheia entre reinícios)."""
+    try:
+        return utils.dados_fixos.obter(ticker, dt.date.today(), None)
+    except Exception as e:  # noqa: BLE001 - nunca derruba a tela por falha na fonte oficial
+        return {"status": "nao_encontrado", "mensagem": utils.dados_fixos.MENSAGEM_NAO_ENCONTRADO, "motivo": str(e)}
+
+
 @st.cache_data(ttl=60, show_spinner=False)   # mesmo ritmo de baixar() e do fragment: cotação mais dinâmica
 def pacote(ticker: str, versao: str = "") -> dict:
     """Tudo o que a tela de um ticker precisa, calculado uma única vez."""
@@ -382,7 +397,8 @@ def pacote(ticker: str, versao: str = "") -> dict:
     proventos = hist["Dividends"][hist["Dividends"] > 0] if "Dividends" in hist else None
     r = calcular(hist, proventos)
     comps, padrao = comparadores(ticker, r.data_ultimo, d["info"])
-    dados = montar(ticker, d, r, comps, padrao)
+    fixos = dados_fixos_fonte(ticker)
+    dados = montar(ticker, d, r, comps, padrao, dados_fixos=fixos)
     if not dados.get("outlookTrimestral"):
         # o robô ainda não gravou (ticker novo, ou travado no anual e ainda não reprocessado):
         # busca na hora, pra não depender do próximo ciclo do workflow noturno

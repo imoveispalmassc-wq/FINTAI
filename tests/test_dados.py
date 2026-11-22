@@ -426,3 +426,30 @@ def test_outlook_trimestral_eua_b3_e_ticker_sem_dado_devolvem_none(tmp_path, mon
     monkeypatch.setattr("tela.dados.ARQ_OUTLOOK_TRI", tmp_path / "nao_existe.json")
     assert outlook_trimestral_eua("PETR4.SA") is None
     assert outlook_trimestral_eua("ZZZZ") is None
+
+
+# ------------------------------------------------------------ card "Dados fixos (fonte oficial)" (Issue #29)
+def test_dados_fixos_tela_nao_encontrado():
+    from tela.dados import dados_fixos_tela
+
+    r = dados_fixos_tela({"status": "nao_encontrado", "mensagem": "Ticker não encontrado na fonte oficial.",
+                          "ticker": "ZZZZ9"}, 10.0)
+    assert r == {"status": "nao_encontrado", "ticker": "ZZZZ9", "mensagem": "Ticker não encontrado na fonte oficial."}
+
+
+def test_dados_fixos_tela_none_sem_busca():
+    from tela.dados import dados_fixos_tela
+
+    assert dados_fixos_tela(None, 10.0) is None
+
+
+def test_dados_fixos_tela_calcula_com_a_cotacao_do_dia():
+    from tela.dados import dados_fixos_tela
+
+    fixos = {"status": "ok", "ticker": "PETR4", "acoes_total": 12.89e9, "lucro_12m": 140.4e9,
+             "dividendo_12m": None, "fator_adr": 1, "moeda_resultado": "BRL",
+             "fonte_oficial": "PDF RI (CVM/IPE)", "data_ultimo_balanco": "30/09/2026", "avisoBalancoNovo": None}
+    r = dados_fixos_tela(fixos, 42.67)
+    assert r["status"] == "ok" and round(r["lpa"], 2) == 10.89 and round(r["pl"], 2) == 3.92
+    assert r["fonteOficial"] == "PDF RI (CVM/IPE)" and r["dataUltimoBalanco"] == "30/09/2026"
+    assert "LPA:" in r["contas"]["lpa"]
