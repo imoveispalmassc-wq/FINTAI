@@ -6,10 +6,34 @@
     "margem_bruta": 55.0,
     "lpa_min": null,
     "lpa_max": null,
+    "moeda": null,
     "trecho": "For the fourth quarter of 2026, AMD expects revenue to be approximately $17 billion, plus or minus 3%. The mid-point of the revenue range represents year-over-year growth of approximately 66% and a sequential increase of approximately 27%. Non-GAAP gross margin is expected to be approximately 55%. AMD Teleconference AMD will hold a conferenc",
     "fonte": "ADVANCED MICRO DEVICES INC, Form 8-K Exhibit 99.1 de 03/11/2026 (SEC)",
     "data": "03/11/2026",
-    "url": "https://www.sec.gov/Archives/edgar/data/2488/000000248826000188/q32026991.htm"
+    "url": "https://www.sec.gov/Archives/edgar/data/2488/000000248826000188/q32026991.htm",
+    "atualizado_em": "22/11 08:48",
+    "proximo_anuncio": "02/02/2027"
+  },
+  "ASML": {
+    "periodo": "4T FY2026",
+    "receita_min": 15910364890.098572,
+    "receita_max": 17030813121.795654,
+    "margem_bruta": 57.0,
+    "lpa_min": null,
+    "lpa_max": null,
+    "moeda": "USD",
+    "trecho": "ASML expects Q4 2026 total net sales between €14.2 billion and €15.2 billion, and a gross margin around 57% • Full-year 2026 total net sales expected to be between €44 billion and €45 billion, with a gross margin around 56% (Figures in millions of euros unless otherwise indicated) Q2 2026 Q3 2026 Total net sales 9,326",
+    "moeda_original": "EUR",
+    "taxa_cambio": 1.1204,
+    "taxa_cambio_data": "14/10/2026",
+    "taxa_cambio_fonte": "Yahoo Finance (EURUSD=X)",
+    "receita_min_eur": 14200000000.0,
+    "receita_max_eur": 15200000000.0,
+    "fonte": "ASML HOLDING NV, Form 6-K Exhibit 99.1 de 14/10/2026 (SEC)",
+    "data": "14/10/2026",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000162828026065813/pressreleasefinancialresul.htm",
+    "atualizado_em": "22/11 08:48",
+    "proximo_anuncio": "27/01/2027"
   },
   "MU": {
     "periodo": "1T FY2027",
@@ -18,10 +42,13 @@
     "margem_bruta": 85.95,
     "lpa_min": 36.84,
     "lpa_max": 38.84,
+    "moeda": null,
     "trecho": "guidance for the first quarter of 2027: FQ1-27 GAAP (1) Outlook Non-GAAP (2) Outlook Revenue $61.5 billion ± $1.5 billion $61.5 billion ± $1.5 billion Gross margin Approximately 85.95% Approximately 86.25% Operating expenses Approximately $2.31 billion Approximately $2.06 billion Diluted earnings per share $37.84 ± $1.00 $38.15 ± $1.00",
     "fonte": "MICRON TECHNOLOGY INC, Form 8-K Exhibit 99.1 de 30/09/2026 (SEC)",
     "data": "30/09/2026",
-    "url": "https://www.sec.gov/Archives/edgar/data/723125/000072312526000018/a2026q4ex991-pressrelease.htm"
+    "url": "https://www.sec.gov/Archives/edgar/data/723125/000072312526000018/a2026q4ex991-pressrelease.htm",
+    "atualizado_em": "22/11 08:48",
+    "proximo_anuncio": "17/12/2026"
   },
   "NVDA": {
     "periodo": "4T FY2027",
@@ -30,10 +57,13 @@
     "margem_bruta": 71.5,
     "lpa_min": null,
     "lpa_max": null,
+    "moeda": null,
     "trecho": "’s outlook for the fourth quarter of fiscal 2027, which includes an additional week, is as follows: • Revenue is expected to be $130.0 billion, plus or minus 3%. NVIDIA is not assuming any Data Center compute revenue from China in its outlook. • GAAP and non-GAAP gross margins are expected to be between 71.0% and 72.0%. • GAAP and non-GAAP operat",
     "fonte": "NVIDIA CORP, Form 8-K Exhibit 99.1 de 17/11/2026 (SEC)",
     "data": "17/11/2026",
-    "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000088/q3fy27pr.htm"
+    "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000088/q3fy27pr.htm",
+    "atualizado_em": "22/11 08:48",
+    "proximo_anuncio": "17/11/2026"
   },
   "PANW": {
     "periodo": "2T FY2027",
@@ -42,9 +72,12 @@
     "margem_bruta": null,
     "lpa_min": 1.01,
     "lpa_max": 1.03,
+    "moeda": null,
     "trecho": "For the fiscal second quarter 2027, we expect: • Next-Generation Security ARR of $10.20 billion to $10.22 billion, representing year-over-year growth of 61%. • Remaining performance obligations of $21.5 billion to $21.6 billion, representing year-over-year growth of 34% to 35%. • Total revenue in the range of $3.530 billion to $3.550 billion,",
     "fonte": "Palo Alto Networks Inc, Form 8-K Exhibit 99.1 de 18/11/2026 (SEC)",
     "data": "18/11/2026",
-    "url": "https://www.sec.gov/Archives/edgar/data/1327567/000132756726000030/ex991q127earningsrelease.htm"
+    "url": "https://www.sec.gov/Archives/edgar/data/1327567/000132756726000030/ex991q127earningsrelease.htm",
+    "atualizado_em": "22/11 08:48",
+    "proximo_anuncio": "16/02/2027"
   }
 }
