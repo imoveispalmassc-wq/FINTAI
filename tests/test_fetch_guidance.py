@@ -395,14 +395,15 @@ def _aj(valores):
     return {fim: {"lpa": v, "fonte": "SEC Form 8-K Exhibit 99.1, LPA Ajustado", "data": "x", "url": ""} for fim, v in valores.items()}
 
 
-def test_contabil_ajustado_da_adm_soma_5_19_e_nao_5_12():
+def test_regra1_tela_usa_gaap_5_12_e_ajustado_5_19_so_como_nota():
+    """REGRA 1 (travada): LPA ajustado NUNCA vai para o campo principal (lpa_12m)."""
     gaap = fg.lpa_ttm_sec(_fatos_adm(), dt.date(2026, 11, 17))
     assert gaap["lpa_12m"] == pytest.approx(5.12)                          # GAAP
     c = fg.contabil_ajustado(gaap, _aj(ADM_AJ))
-    assert c["lpa_12m"] == pytest.approx(5.19) and c["base"] == "ajustado" and c["trimestres_gaap"] == 0
-    assert sum(t["lpa"] for t in c["trimestres"][1:]) == pytest.approx(4.32)   # 2026 até o 3T
-    assert c["fonte"] == "SEC 8-K Exhibit 99.1, LPA Ajustado"
-    assert [t["tipo"] for t in c["trimestres"]] == ["ajustado"] * 4
+    assert c["lpa_12m"] == pytest.approx(5.12) and c["base"] == "GAAP"
+    assert c["lpa_ajustado"] == pytest.approx(5.19) and "nota" in c["nota_ajustado"]
+    assert [t["tipo"] for t in c["trimestres"]] == ["GAAP"] * 4
+    assert [t["lpa_ajustado"] for t in c["trimestres"]] == [0.87, 0.71, 1.84, 1.77]
     # o LPA ajustado do trimestre sai do press release, sem confundir com o acumulado, o ano ou a projeção
     q3 = ("ADM Reports Third Quarter 2026 Results. Third quarter adjusted EPS of $1.77; year-to-date adjusted EPS "
           "of $4.32. The Company now expects 2026 adjusted EPS of approximately $5.50 to $5.80.")
@@ -410,19 +411,73 @@ def test_contabil_ajustado_da_adm_soma_5_19_e_nao_5_12():
     assert fg.extrair_eps_ajustado_trimestre(q3) == 1.77 and fg.extrair_eps_ajustado_trimestre(q4) == 0.87
 
 
-def test_falta_ajustado_em_um_trimestre_usa_gaap_so_nele_e_marca_no_card():
-    import pathlib
+def test_falta_ajustado_em_um_trimestre_nao_cria_lpa_ajustado_e_tela_segue_gaap():
     from tela.dados import contabil_12m
     gaap = fg.lpa_ttm_sec(_fatos_adm(), dt.date(2026, 11, 17))
     sem_1t = {k: v for k, v in ADM_AJ.items() if k != "31/03/2026"}
     c = fg.contabil_ajustado(gaap, _aj(sem_1t))
-    assert [t["tipo"] for t in c["trimestres"]] == ["ajustado", "GAAP", "ajustado", "ajustado"]
-    assert c["lpa_12m"] == pytest.approx(0.87 + 1.07 + 1.84 + 1.77)        # 1T26 pelo GAAP (1,07)
-    assert c["fonte"] == "SEC 8-K Exhibit 99.1, LPA Ajustado (1 trimestre GAAP por falta de Ajustado)"
+    assert c["lpa_12m"] == pytest.approx(5.12) and "lpa_ajustado" not in c
     lpa, fonte, _ = contabil_12m("ADM", 5.12, {"ADM": c})
-    assert lpa == pytest.approx(5.55) and "1 trimestre GAAP por falta de Ajustado" in fonte
-    js = pathlib.Path(fg.__file__).resolve().parent.parent.joinpath("tela", "detalhe.js").read_text(encoding="utf-8")
-    assert "GAAP por falta de Ajustado" in js and "Contábil Ajustado 12 meses" in js
+    assert lpa == pytest.approx(5.12) and "GAAP" in fonte
+
+
+def _fatos_tgt():
+    """TGT (valores dos releases): 4T25 2,30 · 1T26 1,71 · 2T26 4,11 · 3T26 2,65 GAAP."""
+    e = [_fato("2025-11-02", "2026-01-31", 2.30, "10-K", "2026-03-11"),
+         _fato("2026-02-01", "2026-05-02", 1.71, "10-Q", "2026-05-28"),
+         _fato("2026-05-03", "2026-08-01", 4.11, "10-Q", "2026-08-27"),
+         _fato("2026-08-02", "2026-10-31", 2.65, "10-Q", "2026-11-25")]
+    return {"facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"USD/shares": e}}}}}
+
+
+def test_obrigatorio_tgt_sai_10_77_gaap_e_nao_10_91():
+    aj = {"31/01/2026": 2.44, "02/05/2026": 1.71, "01/08/2026": 4.11, "31/10/2026": 2.65}
+    c = fg.contabil_ajustado(fg.lpa_ttm_sec(_fatos_tgt(), dt.date(2026, 11, 22)), _aj(aj))
+    assert c["lpa_12m"] == pytest.approx(10.77) and c["lpa_ajustado"] == pytest.approx(10.91)
+
+
+def _fatos_acm():
+    """AECOM (ano fiscal out-set). Contínuas: 1,06 / 1,42 / -0,65 / ano 2,84. Total: 0,56 / 1,39 / -0,67 / ano 2,25."""
+    def serie(q1, q2, q3, nove, ano):
+        return [_fato("2025-10-01", "2025-12-31", q1, "10-Q", "2026-02-09"),
+                _fato("2026-01-01", "2026-03-31", q2, "10-Q", "2026-05-11"),
+                _fato("2026-04-01", "2026-06-30", q3, "10-Q", "2026-08-10"),
+                _fato("2025-10-01", "2026-06-30", nove, "10-Q", "2026-08-10"),
+                _fato("2025-10-01", "2026-09-30", ano, "10-K", "2026-11-18")]
+    return {"facts": {"us-gaap": {
+        "EarningsPerShareDiluted": {"units": {"USD/shares": serie(0.56, 1.39, -0.67, 1.28, 2.25)}},
+        "IncomeLossFromContinuingOperationsPerDilutedShare": {"units": {"USD/shares": serie(1.06, 1.42, -0.65, 1.85, 2.84)}}}}}
+
+
+def test_obrigatorio_acm_sai_2_84_continuas_e_2_25_total_so_na_nota():
+    c = fg.contabil_ajustado(fg.lpa_ttm_sec(_fatos_acm(), dt.date(2026, 11, 22), "ACM"), {})
+    assert c["lpa_12m"] == pytest.approx(2.84) and c["tem_descontinuadas"] is True
+    assert c["lpa_12m_total"] == pytest.approx(2.25) and "2.25" in c["nota"]
+
+
+def _fatos_panw():
+    """PANW (ano fiscal ago-jul). 2T26 0,61 · 3T26 -0,22 · 9M FY26 0,79 · ano FY26 0,40 · 1T27 0,57."""
+    e = [_fato("2025-08-01", "2025-10-31", 0.47, "10-Q", "2025-11-20"),
+         _fato("2025-11-01", "2026-01-31", 0.61, "10-Q", "2026-02-18"),
+         _fato("2026-02-01", "2026-04-30", -0.22, "10-Q", "2026-06-03"),
+         _fato("2025-08-01", "2026-04-30", 0.79, "10-Q", "2026-06-03"),
+         _fato("2025-08-01", "2026-07-31", 0.40, "10-K", "2026-09-05"),
+         _fato("2026-08-01", "2026-10-31", 0.57, "10-Q", "2026-11-19")]
+    return {"facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"USD/shares": e}}}}}
+
+
+def test_obrigatorio_panw_sai_0_61_com_q4_do_release_e_registra_divergencia(monkeypatch):
+    sem = fg.lpa_ttm_sec(_fatos_panw(), dt.date(2026, 11, 22))
+    assert sem["lpa_12m"] == pytest.approx(0.57) and sem["q4_calculado"] == pytest.approx(-0.39)   # regra padrão
+    monkeypatch.setattr(fg, "q4_release_cfg", lambda t: {"31/07/2026": {"lpa": -0.35, "fonte": "release", "url": "u"}})
+    c = fg.contabil_ajustado(fg.lpa_ttm_sec(_fatos_panw(), dt.date(2026, 11, 22), "PANW"), {})
+    assert c["lpa_12m"] == pytest.approx(0.61)
+    assert (c["q4_calculado"], c["q4_release"], c["q4_usado"]) == (pytest.approx(-0.39), -0.35, -0.35)
+
+
+def test_q4_release_do_repositorio_tem_panw_com_fonte():
+    cfg = fg.q4_release_cfg("PANW")
+    assert cfg["31/07/2026"]["lpa"] == -0.35 and cfg["31/07/2026"]["url"].startswith("https://")
 
 
 
@@ -445,7 +500,7 @@ def test_bbas3_soma_4_trimestres_do_release_e_lpa_2_50():
         assert v == pytest.approx(BB_LUCRO[tri] * 1e9) and como == "tabela"
     docs = [{"data": BB_DATAS[t], "categoria": "Dados Econômico-Financeiros", "assunto": "Divulgação de Resultados",
              "link": f"https://cvm/{t}.pdf"} for t in ("3T26", "2T26", "1T26", "4T25")]
-    c = fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {"fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado"},
+    c = fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {"linha": "Lucro Líquido Ajustado", "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado"},
                        buscar_cnpj=lambda t, h: ("00000000000191", "BCO BRASIL S.A."), buscar_docs=lambda c, h: docs,
                        ler_pdf=lambda link: (b"", _release_bb(link.split("/")[-1][:4])), buscar_acoes=lambda t: 5.71e9)
     assert c["status"] == "ok" and [t["tri"] for t in c["trimestres"]] == ["4T25", "1T26", "2T26", "3T26"]
@@ -456,7 +511,7 @@ def test_bbas3_soma_4_trimestres_do_release_e_lpa_2_50():
 
 def test_bbas3_sem_ler_todos_os_releases_fica_pendente_sem_inventar():
     docs = [{"data": BB_DATAS["3T26"], "categoria": "Resultado", "assunto": "Divulgação de Resultados", "link": "x"}]
-    c = fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {}, buscar_cnpj=lambda t, h: ("1", "BB"),
+    c = fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {"linha": "Lucro Líquido Ajustado"}, buscar_cnpj=lambda t, h: ("1", "BB"),
                        buscar_docs=lambda c, h: docs, ler_pdf=lambda link: (b"", _release_bb("3T26")),
                        buscar_acoes=lambda t: 5.71e9)
     assert c["status"] == "pendente" and "lpa_12m" not in c
@@ -493,7 +548,7 @@ def test_log_uma_linha_por_trimestre_e_documento_press_release():
     docs = [{"data": BB_DATAS["3T26"], "categoria": "Dados Econômico-Financeiros", "tipo": "Press-release",
              "assunto": "Análise do Desempenho 3T26", "link": "https://cvm/3T26.pdf"}]
     linhas = []
-    fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {}, buscar_cnpj=lambda t, h: ("1", "BB"), buscar_docs=lambda c, h: docs,
+    fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {"linha": "Lucro Líquido Ajustado"}, buscar_cnpj=lambda t, h: ("1", "BB"), buscar_docs=lambda c, h: docs,
                    ler_pdf=lambda link: (b"", _release_bb("3T26")), buscar_acoes=lambda t: 5.71e9, registrar=linhas.append)
     tri = next(l for l in linhas if l.startswith("BBAS3 3T26:"))
     assert "frase=1.27 bi" in tri and "tabela=1.27 bi" in tri and "divergência=0.0%" in tri and "gravou=sim" in tri
@@ -536,7 +591,7 @@ def test_bbas3_fluxo_com_os_formatos_do_log_fica_consecutivo():
     docs = [{"data": BB_DATAS[t], "categoria": "Dados Econômico-Financeiros", "tipo": "Press-release",
              "assunto": f"Análise do Desempenho {t}", "link": f"https://cvm/{t}.pdf"} for t in ("3T26", "2T26", "1T26", "4T25")]
     linhas = []
-    c = fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {"fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado"},
+    c = fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {"linha": "Lucro Líquido Ajustado", "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado"},
                        buscar_cnpj=lambda t, h: ("1", "BB"), buscar_docs=lambda c, h: docs,
                        ler_pdf=lambda link: (b"", textos[link.split("/")[-1][:4]]), buscar_acoes=lambda t: 5.709e9,
                        registrar=linhas.append)
@@ -598,7 +653,7 @@ def test_trimestre_sem_abrir_usa_a_coluna_da_tabela_do_release_seguinte():
     docs = [{**REL, "data": BB_DATAS[t], "assunto": f"Análise do Desempenho {t}", "link": f"https://cvm/{t}.pdf"}
             for t in ("3T26", "2T26", "1T26", "4T25")]
     linhas = []
-    c = fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {"fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado"},
+    c = fg.contabil_br("BBAS3", dt.date(2026, 11, 17), {"linha": "Lucro Líquido Ajustado", "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado"},
                        buscar_cnpj=lambda t, h: ("1", "BB"), buscar_docs=lambda c, h: docs, ler_pdf=ler,
                        buscar_acoes=lambda t: 5.709e9, registrar=linhas.append)
     assert c["status"] == "ok" and c["lidos"] == {"4T25": 5.737, "1T26": 3.43, "2T26": 3.906, "3T26": 1.27}
@@ -1420,3 +1475,76 @@ def test_anexo_sec_8k_sem_exhibit_99_nao_usa_o_corpo_como_fallback(monkeypatch):
     monkeypatch.setattr(fg, "_get_sec", lambda url, cab: FakeResp(index_html))
     doc = {"form": "8-K", "data": "2026-11-05", "acc": "0000000000-00-000001", "cik": "1"}
     assert fg.anexo_sec(doc, cab={"User-Agent": "x"}) is None
+
+
+# ------------------------------------------------------------ REGRA 1 na B3: contábil principal, ajustado só nota
+def _release_bb_dois(tri, contabil, ajustado):
+    return (f"Análise do Desempenho {tri}. R$ milhões {tri} Lucro Líquido Contábil {contabil} RSPL 9,0% "
+            f"R$ milhões {tri} Lucro Líquido Ajustado {ajustado} RSPL 10,0%")
+
+
+def test_b3_regra1_contabil_principal_e_ajustado_so_nota():
+    """BB (Análise do Desempenho): contábil 4.972 / 3.090 / 3.175 / 1.216; ajustado 5.742 / 3.431 / 3.908 / 1.270."""
+    dados = {"4T25": ("4.972", "5.742"), "1T26": ("3.090", "3.431"), "2T26": ("3.175", "3.908"), "3T26": ("1.216", "1.270")}
+    datas = {"4T25": "2026-02-11", "1T26": "2026-05-13", "2T26": "2026-08-12", "3T26": "2026-11-11"}
+    docs = [{"data": datas[t], "link": t, "categoria": "Comunicado ao Mercado", "tipo": "Divulgação de Resultados",
+             "assunto": "Análise do Desempenho"} for t in dados]
+    cfg = {"linha": "Lucro Líquido Contábil", "linha_ajustado": "Lucro Líquido Ajustado", "fonte": "BB contábil"}
+    c = fg.contabil_br("BBAS3", dt.date(2026, 11, 17), cfg, buscar_cnpj=lambda t, h: ("1", "BB"),
+                       buscar_docs=lambda cnpj, h: docs, ler_pdf=lambda link: (link, _release_bb_dois(link, *dados[link])),
+                       buscar_acoes=lambda t: 5708922664.0, registrar=lambda m: None)
+    assert c["base"] == "contábil" and c["lucro_12m"] == pytest.approx(12453e6)
+    assert c["lucro_ajustado_12m"] == pytest.approx(14351e6) and c["lpa_ajustado"] > c["lpa_12m"]
+
+
+def test_petr4_acoes_oficiais_on_mais_pn_ganham_do_yahoo():
+    import json, pathlib
+    cfg = json.loads(pathlib.Path(fg.ARQ_CONTABIL_BR_CFG).read_text(encoding="utf-8"))["PETR4"]
+    assert cfg["acoes"] == 7442231382 + 5446501379
+    tri = [{"tri": t, "lucro": v, "data": "x"} for t, v in
+           (("4T25", 15563e6), ("1T26", 32663e6), ("2T26", 52445e6), ("3T26", 39750e6))]
+    c = fg.contabil_br_de_trimestres(tri, cfg["acoes"], "Petrobras", dt.date(2026, 11, 22), base="contábil")
+    assert c["lpa_12m"] == pytest.approx(10.895, abs=0.001)          # nunca 28,16 (ações só PN)
+
+
+# ------------------------------------------------------------ issue #26: PDFs da Petrobras (coluna do trimestre)
+PB_LINHA = "Lucro líquido (Prejuízo) - Acionistas Petrobras"
+# Valores reais (Relatórios de Desempenho). O texto do PDF gruda um rótulo solto antes do cabeçalho
+# ("4T25" de um gráfico/título) - era isso que fazia o robô ler a coluna do trimestre anterior.
+PB_TEXTOS = {
+    "4T25": "Destaques 3T25 R$ milhões 4T25 3T25 4T24 2025 2024 " + PB_LINHA + " 15.563 32.705 (17.044) 110.129 36.606",
+    "1T26": "Destaques 4T25 R$ milhões 1T26 4T25 1T25 1T26 X 4T25 (%) " + PB_LINHA + " 32.663 15.563 35.200 109,9 (7,2)",
+    "2T26": "Destaques 1T26 R$ milhões 2T26 1T26 2T25 6M26 6M25 " + PB_LINHA + " 52.445 32.663 26.661 85.108 61.861",
+    "3T26": "Destaques 2T26 R$ milhões 3T26 2T26 3T25 9M26 9M25 " + PB_LINHA + " 39.750 52.445 32.705 124.858 94.566",
+}
+PB_DATAS = {"4T25": "2026-03-05", "1T26": "2026-05-13", "2T26": "2026-08-06", "3T26": "2026-11-10"}
+
+
+def _contabil_pb(textos):
+    docs = [{"data": PB_DATAS[t], "categoria": "Comunicado ao Mercado", "tipo": "Press-release",
+             "assunto": f"Relatório de Desempenho {t}", "link": f"https://cvm/{t}.pdf"} for t in PB_TEXTOS]
+    return fg.contabil_br("PETR4", dt.date(2026, 11, 22), {"linha": PB_LINHA, "acoes": 12888732761, "fonte": "Petrobras"},
+                          buscar_cnpj=lambda t, h: ("1", "PB"), buscar_docs=lambda c, h: docs,
+                          ler_pdf=lambda link: (b"", textos[link.split("/")[-1][:4]]),
+                          buscar_acoes=lambda t: 5446501379.0, registrar=lambda m: None)
+
+
+def test_issue26_cabecalho_com_rotulo_grudado_nao_desloca_a_coluna():
+    assert fg.colunas_do_cabecalho(["2T26", "3T26", "2T26", "3T25"], "3T26") == ["3T26", "2T26", "3T25"]
+    assert fg.colunas_do_cabecalho(["4T25", "1T26", "4T25", "1T25"], "1T26") == ["1T26", "4T25", "1T25"]
+    # colunas de variação ("1T26 X 4T25") coladas no fim: fica o cabeçalho do começo
+    assert fg.colunas_do_cabecalho(["1T26", "4T25", "1T25", "1T26"], "1T26") == ["1T26", "4T25", "1T25"]
+    assert fg.colunas_do_cabecalho(["3T25", "2T26", "3T26"], "3T26") == ["3T25", "2T26", "3T26"]   # BB: sem repetição, igual
+
+
+def test_issue26_petrobras_le_o_trimestre_certo_e_soma_140_4_bi():
+    c = _contabil_pb(PB_TEXTOS)
+    assert c["status"] == "ok", c
+    assert c["lidos"] == {"4T25": 15.563, "1T26": 32.663, "2T26": 52.445, "3T26": 39.75}
+    assert round(c["lucro_12m"] / 1e9, 1) == 140.4 and round(c["lpa_12m"], 2) == 10.89
+
+
+def test_issue26_trava_quando_o_comparativo_do_release_seguinte_nao_bate():
+    textos = dict(PB_TEXTOS, **{"2T26": PB_TEXTOS["2T26"].replace("52.445 32.663", "52.445 25.743")})
+    c = _contabil_pb(textos)
+    assert c["status"] == "pendente" and "coluna suspeita" in c["motivo"]

@@ -204,7 +204,16 @@ def contabil_12m(ticker: str | None, lpa_yahoo: float | None, tabela: dict | Non
         return lpa_yahoo, "Yahoo - SEC ainda não lida pelo robô", None
     if c.get("status") != "ok" or c.get("lpa_12m") is None:
         return lpa_yahoo, "Yahoo - SEC incompleto", c
-    return float(c["lpa_12m"]), c.get("fonte") or "SEC 8-K Exhibit 99.1, LPA Ajustado", c
+    return float(c["lpa_12m"]), c.get("fonte") or "SEC 10-Q/10-K, lucro por ação diluído (GAAP)", c
+
+
+def acoes_oficiais(info: dict, lpa_sec: dict | None) -> tuple[float | None, str]:
+    """Número de ações para lucro total = LPA × ações. O contábil do robô traz o número usado no próprio LPA
+    (ex.: PETR4 ON+PN oficial do 6-K/ITR, 12,89 bi) - esse ganha do Yahoo, que para a PETR4 devolve só a PN
+    (5,45 bi) e deixava o lucro total 2,4x menor que o oficial (issue #25)."""
+    if lpa_sec and lpa_sec.get("status") == "ok" and lpa_sec.get("acoes"):
+        return float(lpa_sec["acoes"]), lpa_sec.get("fonte_acoes") or "mesmo número de ações do LPA contábil"
+    return info.get("sharesOutstanding") or info.get("impliedSharesOutstanding"), "Yahoo"
 
 
 def fundamentos(d: dict, r: Resultado, ticker: str | None = None) -> dict:
@@ -213,13 +222,14 @@ def fundamentos(d: dict, r: Resultado, ticker: str | None = None) -> dict:
     preco, fim = r.preco_atual, r.data_ultimo
     lpa, lpa_fonte, lpa_sec = contabil_12m(ticker, info.get("trailingEps") or info.get("epsTrailingTwelveMonths"))
     pl = preco / lpa if lpa and lpa > 0 else None       # sempre preço ÷ LPA, para as contas baterem
+    acoes, acoes_fonte = acoes_oficiais(info, lpa_sec)
     splits = hist["Stock Splits"] if "Stock Splits" in hist else None
     pl_medio, metodo = pl_medio_12m(r.fechamentos_1a, lpa_tri, lpa, splits)
     preco_medio = float(r.fechamentos_1a.mean()) if len(r.fechamentos_1a) else None
     media_desde, media_meses = None, None
     if metodo == "simplificado":
         # série trimestral em outra base: tenta o lucro contábil de cada balanço (demonstrativos do Yahoo)
-        acoes_ = info.get("sharesOutstanding") or info.get("impliedSharesOutstanding")
+        acoes_ = acoes
         tem_split = splits is not None and (splits[splits.index > hist.index[-1] - pd.DateOffset(years=2)] != 0).any()
         if not tem_split:
             try:
@@ -266,7 +276,7 @@ def fundamentos(d: dict, r: Resultado, ticker: str | None = None) -> dict:
         lpa_agora=lpa_agora, lpa_antes=lpa_antes, base_lpa=base_lpa,
         div=div12, div_antes=div12_antes, dy=dy, dy_medio=dy_medio,
         div5=soma(5, 0) if cobre_5 else None,
-        acoes=info.get("sharesOutstanding") or info.get("impliedSharesOutstanding"),
+        acoes=acoes, acoes_fonte=acoes_fonte,
         vpa=vpa, graham=preco_justo_graham(lpa, vpa), bazin=bazin, div_medio5=div_medio5,
         pl_hist=pl_hist, anos_hist=anos_hist,
         justo_pl=pl_hist * lpa if pl_hist and lpa and lpa > 0 else None,
@@ -595,7 +605,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str, 
         "receitaPrev": _n(f["receita_prev"], 0), "analistasReceitaAno": f["analistas_rec"],
         "dividendo": _n(f["div"], 4), "dividendo12Atras": _n(f["div_antes"], 4),
         "dyMedio12": _n(f["dy_medio"], 4), "dividendos5Anos": _n(f["div5"], 4),
-        "acoes": _n(f["acoes"], 0), "vpa": _n(f["vpa"], 4),
+        "acoes": _n(f["acoes"], 0), "acoesFonte": f["acoes_fonte"], "vpa": _n(f["vpa"], 4),
         "plHistorico": _n(f["pl_hist"], 4), "plHistAnos": _n(f["anos_hist"], 1),
         "graham": _n(graham["usado"], 4), "grahamAtual": _n(graham["atual"], 4),
         "grahamMedia": _n(graham["media"], 4), "grahamBase": graham["base"], "grahamAviso": graham["aviso"],

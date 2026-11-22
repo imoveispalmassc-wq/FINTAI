@@ -55,7 +55,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python -m utils.fetch_guidance aplicar plano.json --tipo commit --aviso publicado.md
-          arquivos="utils/guidance_auto.json utils/guidance_inicial.json utils/contabil_sec.json utils/contabil_br.json utils/guidance_log.json utils/guidance_trimestral_eua.json"
+          # contabil_sec.json / contabil_br.json (TTM) NÃO entram aqui: REGRA 6 - TTM automático vai por PR (passo final)
+          arquivos="utils/guidance_auto.json utils/guidance_inicial.json utils/guidance_log.json utils/guidance_trimestral_eua.json"
           if ! git diff --quiet -- $arquivos; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -92,3 +93,33 @@ jobs:
           else
             echo "Nada novo travado."
           fi
+
+      # REGRA 6 (travada): o TTM da tela (contabil_sec.json / contabil_br.json) NUNCA vai direto para a main.
+      # Sempre o mesmo ramo (recriado da main): o PR aberto é atualizado. Divergências no topo do PR.
+      - name: Abrir/atualizar pull request do TTM (contábil 12 meses)
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          arquivos="utils/contabil_sec.json utils/contabil_br.json"
+          git fetch origin main
+          mkdir -p /tmp/contabil && cp $arquivos /tmp/contabil/
+          if git diff --quiet origin/main -- $arquivos; then
+            echo "TTM (contábil) sem mudança."
+            exit 0
+          fi
+          pip install -q -r requirements.txt pytest
+          python -m pytest -q
+          python tools/resumo_ttm_pr.py --base origin/main --saida /tmp/pr_contabil.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git stash --include-untracked || true
+          ramo="ttm/contabil-revisar"
+          git checkout -B "$ramo" origin/main
+          cp /tmp/contabil/contabil_sec.json /tmp/contabil/contabil_br.json utils/
+          git add $arquivos
+          git commit -m "Atualização automática TTM (contábil) - $(date -u +%d/%m/%Y) [revisar]"
+          git push --force origin "$ramo"
+          gh pr create --base main --head "$ramo" \
+            --title "TTM contábil automático: revisar ($(date -u +%d/%m/%Y))" --body-file /tmp/pr_contabil.md \
+            || gh pr edit "$ramo" --body-file /tmp/pr_contabil.md

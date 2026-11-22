@@ -182,15 +182,135 @@ class TestTrimestres(unittest.TestCase):
         self.assertIsNone(t.ultimos_4_consecutivos(t.trimestres_de_fatos(fatos)))
 
     def test_pl_xp_converte_moeda(self):
-        reg = {"lpa_ttm": 10.41, "lpa_moeda": "BRL", "preco": 14.06, "preco_moeda": "USD"}
+        reg = {"lpa_ttm": 10.41, "lpa_moeda": "BRL", "preco": 14.06, "preco_moeda": "USD",
+               "preco_fonte": "Yahoo Finance (XP)"}
         pl, _ = t.calcular_pl(reg, 5.8667)
         self.assertAlmostEqual(pl, round(14.06 * 5.8667 / 10.41, 2))
 
     def test_pl_negativo(self):
         pl, obs = t.calcular_pl({"lpa_ttm": -0.5, "preco": 10, "lpa_moeda": "USD",
-                                 "preco_moeda": "USD"}, None)
+                                 "preco_moeda": "USD", "preco_fonte": "Yahoo"}, None)
         self.assertIsNone(pl)
         self.assertIn("negativo", obs)
+
+
+def _f(ini, fim, val, filed="2026-11-20", accn="0000000000-26-000001"):
+    return {"start": ini, "end": fim, "val": val, "filed": filed, "accn": accn}
+
+
+class RedeFalsa:
+    """companyconcept da SEC por tag: {tag: [fatos]}."""
+
+    def __init__(self, por_tag):
+        self.por_tag = por_tag
+
+    def json(self, url):
+        if url.endswith("company_tickers.json"):
+            return {"0": {"ticker": "TGT", "cik_str": 27419}, "1": {"ticker": "ACM", "cik_str": 868857},
+                    "2": {"ticker": "PANW", "cik_str": 1327567}}
+        tag = url.rsplit("/", 1)[-1].replace(".json", "")
+        fatos = self.por_tag.get(tag)
+        if fatos is None:
+            return None
+        unidade = "USD/shares" if "Share" in tag else "USD"
+        return {"units": {unidade: [dict(x) for x in fatos]}}
+
+
+class TestRegrasTravadas(unittest.TestCase):
+    """TESTE OBRIGATÓRIO (prompt travado de 22/11/2026)."""
+
+    def test_tgt_sai_10_77_gaap_e_nao_10_91(self):
+        rede = RedeFalsa({"EarningsPerShareDiluted": [
+            _f("2025-11-02", "2026-01-31", 2.30), _f("2026-02-01", "2026-05-02", 1.71),
+            _f("2026-05-03", "2026-08-01", 4.11), _f("2026-08-02", "2026-10-31", 2.65)]})
+        r = t.Fontes(rede).calcular_ttm("TGT")
+        self.assertAlmostEqual(r["lpa_ttm"], 10.77, places=4)
+        self.assertEqual(r["lpa_tipo"], "diluido_gaap")
+        self.assertNotIn("lpa_guidance", t.config_ativo("TGT"))   # REGRA 5: guidance fora do TTM
+
+    def test_acm_sai_2_84_continuas_e_2_25_total_so_na_nota(self):
+        def serie(q1, q2, q3, nove, ano):
+            return [_f("2025-10-01", "2025-12-31", q1), _f("2026-01-01", "2026-03-31", q2),
+                    _f("2026-04-01", "2026-06-30", q3), _f("2025-10-01", "2026-06-30", nove),
+                    _f("2025-10-01", "2026-09-30", ano)]
+        rede = RedeFalsa({"EarningsPerShareDiluted": serie(0.56, 1.39, -0.67, 1.28, 2.25),
+                          "IncomeLossFromContinuingOperationsPerDilutedShare": serie(1.06, 1.42, -0.65, 1.85, 2.84)})
+        r = t.Fontes(rede).calcular_ttm("ACM")
+        self.assertAlmostEqual(r["lpa_ttm"], 2.84, places=4)
+        self.assertTrue(r["tem_descontinuadas"])
+        self.assertAlmostEqual(r["lpa_total"], 2.25, places=4)
+        self.assertEqual(r["lpa_tipo"], "diluido_operacoes_continuas")
+
+    def test_panw_sai_0_61_com_q4_do_release_e_registra_divergencia(self):
+        rede = RedeFalsa({"EarningsPerShareDiluted": [
+            _f("2025-08-01", "2025-10-31", 0.47), _f("2025-11-01", "2026-01-31", 0.61),
+            _f("2026-02-01", "2026-04-30", -0.22), _f("2025-08-01", "2026-04-30", 0.79),
+            _f("2025-08-01", "2026-07-31", 0.40), _f("2026-08-01", "2026-10-31", 0.57)]})
+        r = t.Fontes(rede).calcular_ttm("PANW")
+        self.assertAlmostEqual(r["lpa_ttm"], 0.61, places=4)
+        self.assertAlmostEqual(r["q4_calculado"], -0.39, places=4)
+        self.assertEqual((r["q4_release"], r["q4_usado"]), (-0.35, -0.35))
+
+    def test_nenhum_pl_com_cotacao_copiada(self):
+        for fonte in ("COPIADO - NÃO VERIFICADO (robô)", "", None):
+            reg = {"lpa_ttm": 4.5, "lpa_moeda": "BRL", "preco": 40.07, "preco_moeda": "BRL", "preco_fonte": fonte}
+            pl, _ = t.calcular_pl(reg, None)
+            self.assertIsNone(pl)
+            self.assertEqual(t.status_pl({**reg, "pl": pl}), "cotação pendente")
+
+    def test_marcacao_nunca_some_e_ativo_com_ttm_nao_volta_para_pendente(self):
+        tmp = tempfile.TemporaryDirectory()
+        pasta = Path(tmp.name)
+        marca = {"last_updated": "22/11/2026 às 10:31", "updated_by": "robo-claude-10h", "source_date": "17/11/2026"}
+        ant = {"data": "2026-11-22", "ticker": "NVDA", "lucro_ttm": 226256e6, "lucro_moeda": "USD", "lpa_ttm": 9.31,
+               "lpa_moeda": "USD", "trimestres": ["2026-10-25"], "fonte": "release", "link_oficial": SEC,
+               "status": "ATUALIZADO", "pendencias": [], **marca}
+        preparar(pasta, ["NVDA"], last_run="2026-11-22", historico=[ant])
+
+        class Pendente(FontesFalsas):
+            def calcular_ttm(self, ticker):
+                return t.vazio("PENDENTE_XBRL", "10-Q ainda não no XBRL")
+        # dia 23: sem documento (mantém); dia 24: documento novo, mas o cálculo volta pendente
+        f = Pendente(docs={("NVDA", "2026-11-24"): [{"form": "10-Q", "data": "2026-11-24", "link": SEC}]})
+        self.assertEqual(t.executar(pasta, date(2026, 11, 24), f), 0)
+        for r in ler(pasta, "ttm_diario.json"):
+            for c, v in marca.items():
+                self.assertEqual(r[c], v)
+            self.assertFalse(r["status"].startswith("PENDENTE"))
+            self.assertEqual(r["lpa_ttm"], 9.31)
+        tmp.cleanup()
+
+    def test_recalculo_grava_marcacao(self):
+        tmp = tempfile.TemporaryDirectory()
+        pasta = Path(tmp.name)
+        preparar(pasta, ["ADM"], last_run="2026-11-17", historico=[])
+        self.assertEqual(t.executar(pasta, date(2026, 11, 18), FontesFalsas()), 0)
+        r = ler(pasta, "ttm_diario.json")[0]
+        self.assertEqual(r["updated_by"], "ttm_auto.py")
+        self.assertRegex(r["last_updated"], r"^\d{2}/\d{2}/\d{4} às \d{2}:\d{2}$")
+        self.assertEqual(r["pl_status"], "ok")
+        tmp.cleanup()
+
+
+class TestFonteOficialB3(unittest.TestCase):
+    """Issue #26: release de resultados > CVM. BBAS3 = R$ 12,45 bi (Análise do Desempenho), não 11,02 bi (DRE CVM)."""
+
+    def test_bbas3_usa_o_release_e_guarda_a_cvm_so_como_conferencia(self):
+        class F(t.Fontes):
+            def _ttm_cvm_dre(self, ticker, cfg):
+                r = t.vazio("ATUALIZADO")
+                r.update(lucro_ttm=11016424000.0, lpa_ttm=1.9226, trimestres=["2026-09-30"], link_oficial=CVM)
+                return r
+        r = F(RedeFalsa({})).calcular_ttm("BBAS3")
+        self.assertAlmostEqual(r["lucro_ttm"] / 1e9, 12.453, places=3)
+        self.assertAlmostEqual(r["lpa_ttm"], 2.1813, places=4)
+        self.assertAlmostEqual(r["lucro_cvm"] / 1e9, 11.016, places=3)
+        self.assertGreater(r["divergencia_cvm"], 0.1)
+        self.assertIn("contabil_br.json", r["fonte"])
+
+    def test_link_do_release_no_ri_e_aceito_como_oficial(self):
+        self.assertTrue(t.link_oficial_valido("https://filemanager-cdn.mziq.com/published/x", t.config_ativo("PETR4")["ri"]))
+        self.assertFalse(t.link_oficial_valido("https://investidor10.com.br/x", t.config_ativo("BBAS3")["ri"]))
 
 
 if __name__ == "__main__":

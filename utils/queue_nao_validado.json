@@ -39,6 +39,10 @@
     "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes)",
     "data": "20/11/2026"
   },
+  "MXRF11": {
+    "motivo": "CNPJ não encontrado no cadastro da CVM",
+    "data": "22/11/2026"
+  },
   "NVO": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior",
     "data": "21/11/2026"

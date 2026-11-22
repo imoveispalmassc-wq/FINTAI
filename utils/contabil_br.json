@@ -1,116 +1,154 @@
 {
   "BBAS3": {
     "status": "ok",
-    "base": "ajustado",
-    "lucro_12m": 14351000000.0,
+    "base": "contábil",
+    "lucro_12m": 12453000000.0,
     "acoes": 5708922664.0,
-    "lpa_12m": 2.5138,
+    "lpa_12m": 2.1813,
     "trimestres": [
       {
         "tri": "4T25",
         "fim": "31/12/2025",
-        "lucro": 5742000000.0,
-        "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado",
+        "lucro": 4972000000.0,
+        "fonte": "BB, Análise do Desempenho, Lucro Líquido Contábil",
         "data": "24/02/2026",
         "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1481390&numSequencia=1006096&numVersao=3",
-        "leitura": "tabela do relatório (frase 20.70 bi descartada: diverge 260.5%)"
+        "leitura": "Análise do Desempenho 1T26, Tabela 1, Lucro Líquido Contábil, coluna 4T25",
+        "lucro_ajustado": 5742000000.0,
+        "url_ajustado": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1481390&numSequencia=1006096&numVersao=3",
+        "url_contabil": "https://investidor10.com.br/acoes/link_comunicado/BBAS3/42101/"
       },
       {
         "tri": "1T26",
         "fim": "31/03/2026",
-        "lucro": 3431000000.0,
-        "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado",
+        "lucro": 3090000000.0,
+        "fonte": "BB, Análise do Desempenho, Lucro Líquido Contábil",
         "data": "13/05/2026",
         "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1521600&numSequencia=1046306&numVersao=1",
-        "leitura": "tabela do relatório"
+        "leitura": "Análise do Desempenho 1T26, Lucro Líquido Contábil (confirmado no 2T26)",
+        "lucro_ajustado": 3431000000.0,
+        "url_ajustado": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1521600&numSequencia=1046306&numVersao=1",
+        "url_contabil": "https://investidor10.com.br/acoes/link_comunicado/BBAS3/42101/"
       },
       {
         "tri": "2T26",
         "fim": "30/06/2026",
-        "lucro": 3908000000.0,
-        "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado",
+        "lucro": 3175000000.0,
+        "fonte": "BB, Análise do Desempenho, Lucro Líquido Contábil",
         "data": "17/08/2026",
         "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1558772&numSequencia=1083478&numVersao=2",
-        "leitura": "tabela do relatório"
+        "leitura": "Análise do Desempenho 3T26, Lucro Líquido Contábil, coluna 2T26",
+        "lucro_ajustado": 3908000000.0,
+        "url_ajustado": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1558772&numSequencia=1083478&numVersao=2",
+        "url_contabil": "https://filemanager-cdn.mziq.com/published/5760dff3-15e1-4962-9e81-322a0b3d0bbd/0e3bf08c-f87e-4e9a-b013-191b564d84cf"
       },
       {
         "tri": "3T26",
         "fim": "30/09/2026",
-        "lucro": 1270000000.0,
-        "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado",
+        "lucro": 1216000000.0,
+        "fonte": "BB, Análise do Desempenho, Lucro Líquido Contábil",
         "data": "13/11/2026",
         "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1589018&numSequencia=1113724&numVersao=2",
-        "leitura": "tabela do relatório"
+        "leitura": "Análise do Desempenho 3T26, Lucro Líquido Contábil, coluna 3T26",
+        "lucro_ajustado": 1270000000.0,
+        "url_ajustado": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1589018&numSequencia=1113724&numVersao=2",
+        "url_contabil": "https://filemanager-cdn.mziq.com/published/5760dff3-15e1-4962-9e81-322a0b3d0bbd/0e3bf08c-f87e-4e9a-b013-191b564d84cf"
       }
     ],
-    "fonte": "BB, Divulgação de Resultados, Lucro Líquido Ajustado",
+    "fonte": "BB, Análise do Desempenho, Lucro Líquido Contábil",
     "data": "13/11/2026",
-    "atualizado": "21/11/2026",
+    "atualizado": "22/11/2026",
     "lidos": {
-      "4T25": 5.742,
-      "1T26": 3.431,
-      "2T26": 3.908,
-      "3T26": 1.27
+      "4T25": 4.972,
+      "1T26": 3.09,
+      "2T26": 3.175,
+      "3T26": 1.216
     },
-    "atualizado_em": "21/11 08:50",
+    "atualizado_em": "22/11 08:48",
     "trimestre_ref": "3T26",
-    "trimestre_data": "set/26"
+    "trimestre_data": "set/26",
+    "lucro_ajustado_12m": 14351000000.0,
+    "lpa_ajustado": 2.5138,
+    "nota_ajustado": "Lucro Líquido Ajustado 12m R$ 14.35 bi (LPA 2.51) só como nota; a tela usa o contábil.",
+    "correcao": "22/11/2026: Regra 1 - contábil vira principal; Lucro Líquido Ajustado só nota.",
+    "last_updated": "22/11/2026 às 11:35",
+    "updated_by": "robo-claude-10h",
+    "source_date": "11/11/2026"
   },
   "PETR4": {
     "status": "ok",
-    "base": "ajustado",
-    "lucro_12m": 134116000000.0,
-    "acoes": 5446501379.0,
-    "lpa_12m": 24.6242,
+    "base": "contábil",
+    "lucro_12m": 140421000000.0,
+    "acoes": 12888732761.0,
+    "lpa_12m": 10.8949,
     "trimestres": [
       {
         "tri": "4T25",
         "fim": "31/12/2025",
-        "lucro": 28651000000.0,
-        "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
+        "lucro": 15563000000.0,
+        "fonte": "Petrobras, Relatório de Desempenho, Lucro líquido - Acionistas Petrobras (contábil)",
         "data": "05/03/2026",
-        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1486338&numSequencia=1011044&numVersao=1",
-        "leitura": "tabela do relatório"
+        "url": "https://api.mziq.com/mzfilemanager/v2/d/25fdf098-34f5-4608-b7fa-17d60b2de47d/ff03b826-dc9a-f3e5-33a5-629148e15e31?origin=2",
+        "leitura": "Relatório de Desempenho 4T25, Tabela 1, Acionistas Petrobras",
+        "lucro_ajustado": 25653000000.0
       },
       {
         "tri": "1T26",
         "fim": "31/03/2026",
-        "lucro": 25743000000.0,
-        "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
+        "lucro": 32663000000.0,
+        "fonte": "Petrobras, Relatório de Desempenho, Lucro líquido - Acionistas Petrobras (contábil)",
         "data": "13/05/2026",
-        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1521702&numSequencia=1046408&numVersao=1",
-        "leitura": "tabela do relatório"
+        "url": "https://api.mziq.com/mzfilemanager/v2/d/25fdf098-34f5-4608-b7fa-17d60b2de47d/c59102ba-ab78-db77-c32c-ba5923cfa6ff?origin=2",
+        "leitura": "Relatório de Desempenho 1T26, Acionistas Petrobras (confere com 9M26 124.858 − 52.445 − 39.750)",
+        "lucro_ajustado": 23811000000.0
       },
       {
         "tri": "2T26",
         "fim": "30/06/2026",
-        "lucro": 23909000000.0,
-        "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
+        "lucro": 52445000000.0,
+        "fonte": "Petrobras, Relatório de Desempenho, Lucro líquido - Acionistas Petrobras (contábil)",
         "data": "06/08/2026",
-        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1553785&numSequencia=1078491&numVersao=1",
-        "leitura": "tabela do relatório"
+        "url": "https://filemanager-cdn.mziq.com/published/25fdf098-34f5-4608-b7fa-17d60b2de47d/fbcafe5c-10a1-4ea6-b4df-bd03e7aa0366",
+        "leitura": "Relatório de Desempenho 3T26, Tabela 11 (DRE), coluna 2T26",
+        "lucro_ajustado": 55763000000.0
       },
       {
         "tri": "3T26",
         "fim": "30/09/2026",
-        "lucro": 55813000000.0,
-        "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
+        "lucro": 39750000000.0,
+        "fonte": "Petrobras, Relatório de Desempenho, Lucro líquido - Acionistas Petrobras (contábil)",
         "data": "10/11/2026",
-        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1587565&numSequencia=1112271&numVersao=1",
-        "leitura": "tabela do relatório"
+        "url": "https://filemanager-cdn.mziq.com/published/25fdf098-34f5-4608-b7fa-17d60b2de47d/fbcafe5c-10a1-4ea6-b4df-bd03e7aa0366",
+        "leitura": "Relatório de Desempenho 3T26, Tabela 11 (DRE), coluna 3T26; confere com o 6-K (ITR) 3T26",
+        "lucro_ajustado": 47877000000.0
       }
     ],
-    "fonte": "Petrobras, Divulgação de Resultados, Lucro Líquido sem Eventos Exclusivos",
+    "fonte": "Petrobras, Relatório de Desempenho, Lucro líquido - Acionistas Petrobras (contábil)",
     "data": "10/11/2026",
-    "atualizado": "21/11/2026",
+    "atualizado": "22/11/2026",
     "lidos": {
+      "4T25": 15.563,
+      "1T26": 32.663,
+      "2T26": 52.445,
+      "3T26": 39.75
+    },
+    "atualizado_em": "22/11 08:48",
+    "trimestre_ref": "3T26",
+    "trimestre_data": "set/26",
+    "correcao": "22/11/2026: (1) série do robô estava 1 trimestre atrasada; (2) Regra 1: contábil vira principal, sem eventos exclusivos só nota; (3) ações = ON+PN oficiais (antes 5,45 bi = só PN, do Yahoo).",
+    "lidos_antes_da_correcao": {
       "4T25": 28.651,
       "1T26": 25.743,
       "2T26": 23.909,
       "3T26": 55.813
     },
-    "atualizado_em": "21/11 08:50",
-    "trimestre_ref": "3T26",
-    "trimestre_data": "set/26"
+    "last_updated": "22/11/2026 às 11:35",
+    "updated_by": "robo-claude-10h",
+    "source_date": "10/11/2026",
+    "lucro_ajustado_12m": 153104000000.0,
+    "lpa_ajustado": 11.8789,
+    "nota_ajustado": "Lucro sem eventos exclusivos 12m R$ 153.10 bi (LPA 11.88) só como nota; a tela usa o contábil.",
+    "fonte_acoes": "Petrobras, demonstrações financeiras 3T26 (6-K SEC, nota 26): ON 7.442.231.382 + PN 5.446.501.379 = 12.888.732.761 em 30/09/2026",
+    "url_acoes": "https://www.sec.gov/Archives/edgar/data/1119639/000129281426005249/pbrfs3q26rs_6k.htm"
   }
 }
