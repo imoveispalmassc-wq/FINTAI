@@ -343,23 +343,22 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   de 200 dias." e "26,5% para voltar à média." - sem repetir a mesma distância numa segunda frase ("Preço X
   está Y% abaixo da média de Z"); logo acima desses textos, uma frase fixa lembra o valor da média de 200 dias
   e que ela é o ponto 0% da régua.
-  O título/badge "Direção da tendência" (Alta verde / Baixa vermelho / Equilíbrio cinza) usa a MESMA direção
-  calculada pela distância preço÷MM200 de hoje (ver regra abaixo) - não pode divergir do "Hoje" mostrado na
-  linha de evolução logo abaixo (bug corrigido: o título vinha de um cálculo à parte, baseado na inclinação da
-  própria MM200, que podia contradizer a distância mostrada ao lado, ex. título "Alta" com a distância em
-  -20,94%). Evolução da Direção da tendência: logo abaixo do título, 2 linhas em cinza pequeno, só quando há os
-  7 pregões de histórico (`dist200d7d`) - nunca inventa. Direção (Alta/Baixa/Equilíbrio) é calculada pela
-  distância preço÷MM200 arredondada em 2 casas (mesma precisão do valor ao lado): positiva = Alta, negativa =
-  Baixa, só exatos 0,00% = Equilíbrio (ex.: -4,20% já é Baixa, não "perto de zero"). 1ª linha: "7 dias atrás: [Direção 7 dias]
-  ([valor 7 dias]) → Hoje: [Direção hoje] ([valor hoje])" (ex.: "7 dias atrás: Baixa (-4,20%) → Hoje: Baixa
-  (-20,94%)"). 2ª linha, automática, NUNCA usa a sigla "p.p." (pouca gente conhece): manteve a direção e o
-  valor absoluto cresceu = "Continuou em [direção, minúsculo] e piorou: de [valor 7 dias] para [valor hoje]
-  acima/abaixo da média." (ex.: "Continuou em baixa e piorou: de 4,20% para 20,94% abaixo da média." - palavra
-  acima/abaixo conforme a direção, omitida em Equilíbrio); manteve e o valor absoluto caiu = mesma forma trocando
-  "piorou" por "melhorou"; trocou de direção = "Virou de [direção 7 dias] para [direção hoje]: de [valor 7 dias
-  com sinal] para [valor hoje com sinal]." (ex.: "Virou de baixa para alta: de -4,20% para +1,66%." - usa o
-  sinal em vez de acima/abaixo porque a referência muda de lado) - mesma regra pra qualquer ativo, sem mudar
-  cor/layout da barra.
+  O título/badge "Direção da tendência" usa a MESMA zona/limiar da régua "Força da tendência" logo abaixo -
+  "Perdeu força" (vermelho) / "Equilíbrio" (cinza, #aab4c6) / "Alta leve" (verde-claro) / "Forte" (verde-forte),
+  nos mesmos limiares -10/+10/+20 - NUNCA um limiar à parte (era Alta/Baixa/Equilíbrio cortando só em 0%, que
+  podia contradizer a cor/posição da bolinha na régua, ex. título "Alta" com a bolinha já na faixa vermelha de
+  "Perdeu força"; mesmo ajuste feito na Força/IFR, ver zonaIFR abaixo). Evolução da Direção da tendência: logo
+  abaixo do título, 2 linhas em cinza pequeno, só quando há os 7 pregões de histórico (`dist200d7d`) - nunca
+  inventa, com a MESMA zona/limiar do título/régua (nunca Sobrecomprada/Sobrevendida nem Alta/Baixa separados).
+  1ª linha: "7 dias atrás: [Zona 7 dias] ([valor 7 dias]) → Hoje: [Zona hoje] ([valor hoje])" (ex.: "7 dias
+  atrás: Equilíbrio (-4,20%) → Hoje: Perdeu força (-20,94%)"). 2ª linha, automática, NUNCA usa a sigla "p.p."
+  (pouca gente conhece): mesma zona e o valor absoluto cresceu = "Continuou em [zona, minúsculo] e piorou: de
+  [valor 7 dias] para [valor hoje] acima/abaixo da média." (palavra acima/abaixo pelo SINAL real de hoje, não
+  pelo nome da zona - a zona "Equilíbrio" pode ter valor levemente negativo ou positivo); mesma zona e o valor
+  absoluto caiu = mesma forma trocando "piorou" por "melhorou"; zona diferente = "Virou de [zona 7 dias] para
+  [zona hoje]: de [valor 7 dias com sinal] para [valor hoje com sinal]." (ex.: "Virou de equilíbrio para
+  perdeu força: de -4,20% para -20,94%." - usa o sinal em vez de acima/abaixo porque a referência muda de lado)
+  - mesma regra pra qualquer ativo, sem mudar cor/layout da barra.
   Os nomes das zonas são os MESMOS nas 2 barras: "Perdeu força"/"Muita venda" (vermelho) | "Equilíbrio" (cinza)
   | "Alta leve" (verde-claro) | "Forte" (verde-forte) - a barra de Força da tendência usava antes "Leve compra"
   e "Compra forte", renomeados para padronizar com a barra de Força (IFR).
@@ -374,15 +373,20 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   exato dos limites da zona (`position:absolute;left:[meio]%;transform:translateX(-50%)`) - essas 2 barras não
   usam a classe `.zonas-rot` (grade CSS compartilhada com SIMONS/Lynch/Conservador), porque o `gap` da grade
   deixava o nome fora do centro real da faixa; a mudança é só nessas 2 barras, pra não arriscar as outras.
-  O texto de leitura da Força (destaque abaixo da régua de IFR, ex. "Sobrevendida") segue o MESMO padrão "de X
-  para Y" da evolução da Direção da tendência, pra mostrar a evolução em vez de só o estado de hoje - zona
-  (Sobrecomprada ≥70 / Sobrevendida ≤30 / Neutra no meio, limiares à parte dos nomes Muita venda/Alta leve/Forte
-  da régua) calculada pro valor de hoje e pro de 7 dias atrás (`forca7d`): mesma zona e subiu = "[Zona]. Subiu
-  de [7 dias] para [hoje]."; mesma zona e caiu = "...Caiu de [7 dias] para [hoje]."; zona diferente = "Virou de
-  [zona 7 dias] para [zona hoje]: de [7 dias] para [hoje]." (ex.: "Virou de Neutra para Sobrevendida: de 45
-  para 29." - 45 fica entre 30 e 70, Neutra, mesmo ficando perto do limite). Sem `forca7d` (menos de 8 pregões
-  de histórico): mantém o texto antigo, só com a zona de hoje (ex.: "Sobrevendida. Caiu rápido demais."), nunca
-  inventando uma comparação sem dado.
+  O texto de leitura da Força (destaque abaixo da régua de IFR) segue o MESMO padrão "de X para Y" da evolução
+  da Direção da tendência, pra mostrar a evolução em vez de só o estado de hoje - zona calculada com as MESMAS
+  4 faixas/limiares da régua logo acima (Muita venda <40 / Equilíbrio 40-60 / Alta leve 60-80 / Forte >=80;
+  NÃO usa limiares diferentes dos mostrados na própria barra, tipo o antigo Sobrecomprada/Sobrevendida 70/30 -
+  um texto com zona diferente da cor/posição da bolinha na régua já foi bug reportado e corrigido) pro valor de
+  hoje e pro de 7 dias atrás (`forca7d`): mesma zona e subiu = "[Zona]. Subiu de [7 dias] para [hoje]."; mesma
+  zona e caiu = "...Caiu de [7 dias] para [hoje]."; zona diferente = "Virou de [zona 7 dias] para [zona hoje]:
+  de [7 dias] para [hoje]." (ex.: "Virou de Equilíbrio para Muita venda: de 45 para 29." - 45 fica entre 40 e
+  60, Equilíbrio). Sem `forca7d` (menos de 8 pregões de histórico): mantém uma frase descritiva só da zona de
+  hoje (Forte: "Subiu rápido demais."; Muita venda: "Caiu rápido demais."; Alta leve: "Pressão de compra
+  moderada."; Equilíbrio: "Sem pressão de compra nem de venda."), nunca inventando uma comparação sem dado.
+  NÃO é bug o valor de hoje ficar na mesma zona de 7 dias atrás mesmo perto de um limite (ex.: AXIA3 com "Muita
+  venda. Caiu de 35 para 31.": 31 já está abaixo de 40, mesma zona Muita venda de 35, por isso "Caiu" e não
+  "Virou de..."); "Virou de..." só aparece quando o valor de hoje realmente cruza um dos limiares 40/60/80.
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
 

@@ -569,16 +569,24 @@ function montar(root, d) {
   /* ---------------- tendência e força */
   (function TrendStrength(el) {
     const dist = tem(d.mm200) ? (d.preco / d.mm200 - 1) * 100 : null;
-    // Direção (Alta/Baixa/Equilíbrio) pela distância preço÷MM200 arredondada em 2 casas (mesma precisão do
-    // valor mostrado ao lado): positiva = Alta, negativa = Baixa, só exatos 0,00% = Equilíbrio - é a MESMA
-    // regra usada na linha de evolução abaixo, pro título nunca contradizer o "Hoje" dessa linha
-    const direcaoDist = v => { const r = Math.round(v * 100) / 100; return r > 0 ? 'Alta' : r < 0 ? 'Baixa' : 'Equilíbrio'; };
+    // Força da tendência: distância do preço até a média de 200 dias. Escala fixa de -30% a +30%
+    // (só estica além disso se a distância real passar desses limites): abaixo de -10% perdeu força;
+    // de -10% a +10% é equilíbrio (a própria média, 0%, fica no meio dessa faixa); +10% a +20% é leve
+    // compra; acima de +20% é compra forte.
+    const NEG = -10, EQ = 10, LEVE = 20;
+    // Título/badge "Direção da tendência" e evolução abaixo usam as MESMAS 4 faixas/limiares da régua
+    // logo abaixo (Perdeu força/Equilíbrio/Alta leve/Forte, -10/+10/+20) - nunca um limiar à parte (era
+    // Alta/Baixa/Equilíbrio cortando em 0%, que podia contradizer a cor/posição da bolinha na régua; mesmo
+    // ajuste feito na Força/IFR, ver zonaIFR abaixo)
+    const direcaoDist = v => v < NEG ? 'Perdeu força' : v < EQ ? 'Equilíbrio' : v < LEVE ? 'Alta leve' : 'Forte';
     const tituloT = tem(dist) ? direcaoDist(dist) : '—';
-    const corT = { Alta: 'var(--verde)', Baixa: 'var(--vermelho)', Equilíbrio: 'var(--suave)' }[tituloT] || 'var(--texto)';
+    const corT = { 'Perdeu força': 'var(--vermelho)', 'Equilíbrio': '#aab4c6', 'Alta leve': 'var(--verde-claro)', Forte: 'var(--verde-forte)' }[tituloT] || 'var(--texto)';
     // texto da Força (IFR) no mesmo padrão "de X para Y" da evolução da Direção da tendência acima, pra
-    // mostrar a evolução em vez de só o estado de hoje - sem o histórico de 7 dias, mantém o texto antigo
-    // (nunca inventa uma comparação sem dado)
-    const zonaIFR = v => v >= 70 ? 'Sobrecomprada' : v <= 30 ? 'Sobrevendida' : 'Neutra';
+    // mostrar a evolução em vez de só o estado de hoje - zona calculada com as MESMAS 4 faixas/limiares da
+    // régua abaixo (Muita venda/Equilíbrio/Alta leve/Forte, 0-40/40-60/60-80/80-100), nunca com limiares
+    // diferentes dos mostrados na própria barra (senão o texto pode contradizer a cor/posição da bolinha).
+    // Sem o histórico de 7 dias, mantém uma frase descritiva da zona de hoje (nunca inventa uma comparação)
+    const zonaIFR = v => v < 40 ? 'Muita venda' : v < 60 ? 'Equilíbrio' : v < 80 ? 'Alta leve' : 'Forte';
     let leitura = '';
     if (tem(d.forca)) {
       const zonaHoje = zonaIFR(d.forca);
@@ -591,16 +599,12 @@ function montar(root, d) {
           leitura = verbo ? `${zonaHoje}. ${verbo} de ${f(d.forca7d, 0)} para ${f(d.forca, 0)}.` : `${zonaHoje}. Manteve em ${f(d.forca, 0)}.`;
         }
       } else {
-        leitura = zonaHoje === 'Sobrecomprada' ? 'Sobrecomprada. Subiu rápido demais.'
-          : zonaHoje === 'Sobrevendida' ? 'Sobrevendida. Caiu rápido demais.' : 'Neutra. Sem pressão de compra nem de venda.';
+        leitura = zonaHoje === 'Forte' ? 'Forte. Subiu rápido demais.'
+          : zonaHoje === 'Muita venda' ? 'Muita venda. Caiu rápido demais.'
+          : zonaHoje === 'Alta leve' ? 'Alta leve. Pressão de compra moderada.' : 'Equilíbrio. Sem pressão de compra nem de venda.';
       }
     }
     const fundo = 'linear-gradient(90deg,var(--vermelho) 0 40%,var(--ardosia) 40% 60%,var(--verde-claro) 60% 80%,var(--verde-forte) 80% 100%)';
-    // Força da tendência: distância do preço até a média de 200 dias. Escala fixa de -30% a +30%
-    // (só estica além disso se a distância real passar desses limites): abaixo de -10% perdeu força;
-    // de -10% a +10% é equilíbrio (a própria média, 0%, fica no meio dessa faixa); +10% a +20% é leve
-    // compra; acima de +20% é compra forte.
-    const NEG = -10, EQ = 10, LEVE = 20;
     const RMIN = tem(dist) && dist < -30 ? Math.floor((dist - 5) / 10) * 10 : -30;
     const RMAX = tem(dist) && dist > 30 ? Math.ceil((dist + 5) / 10) * 10 : 30;
     const pt = v => (v - RMIN) / (RMAX - RMIN) * 100;
@@ -610,9 +614,10 @@ function montar(root, d) {
     if (tem(dist) && tem(d.dist200d7d)) {
       const dirHoje = direcaoDist(dist), dir7 = direcaoDist(d.dist200d7d);
       const absHoje = Math.abs(dist), abs7 = Math.abs(d.dist200d7d);
-      // nunca usa "p.p." (pouca gente conhece a sigla): sempre escreve "de X% para Y%", com a
-      // palavra abaixo/acima da média quando a direção se mantém (mesma referência nos 2 valores)
-      const qualif = dirHoje === 'Alta' ? ' acima da média' : dirHoje === 'Baixa' ? ' abaixo da média' : '';
+      // nunca usa "p.p." (pouca gente conhece a sigla): sempre escreve "de X% para Y%", com a palavra
+      // abaixo/acima da média pelo sinal real de hoje (a zona "Equilíbrio" pode ter valor levemente negativo
+      // ou positivo, então a palavra não pode depender só do nome da zona)
+      const qualif = dist > 0 ? ' acima da média' : dist < 0 ? ' abaixo da média' : '';
       const linha2 = dirHoje !== dir7 ? `Virou de ${dir7.toLowerCase()} para ${dirHoje.toLowerCase()}: de ${sinal(d.dist200d7d)} para ${sinal(dist)}.`
         : absHoje > abs7 ? `Continuou em ${dirHoje.toLowerCase()} e piorou: de ${f(abs7)}% para ${f(absHoje)}%${qualif}.`
         : absHoje < abs7 ? `Continuou em ${dirHoje.toLowerCase()} e melhorou: de ${f(abs7)}% para ${f(absHoje)}%${qualif}.`
