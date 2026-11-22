@@ -41,9 +41,14 @@ from utils.fetch_guidance import (
     cabecalho_sec,
     cik_do_ticker,
     cnpj_do_ticker,
+    colunas_do_cabecalho,
     documentos_cvm,
+    documentos_dividendo_cvm,
     fim_do_trimestre,
     ler_lucro_trimestre,
+    normalizar,
+    numero_br,
+    sem_acento,
     texto_do_pdf,
     tri_anterior,
     trimestre_do_documento,
@@ -110,8 +115,115 @@ def extrair_acoes_br(texto: str) -> tuple[float | None, str]:
     return total, " + ".join(f"{n} {v:,.0f}".replace(",", ".") for n, v in partes)
 
 
+# ------------------------------------------------------------ Brasil: dividendo/JCP por ação (Issue #31)
+# Dois jeitos possíveis de achar o dividendo+JCP DECLARADO de um trimestre num documento da CVM:
+# (a) tabela do próprio release/relatório de resultados, mesma estrutura de colunas trimestrais já
+#     usada para o Lucro Líquido (ex. BBAS3: "JCP/Dividendos por Ação - R$ 0,07 0,16 0,04 ...") - já
+#     vem em R$ por ação, sem multiplicador de milhões/bilhões;
+# (b) um documento separado (Fato Relevante/Aviso aos Acionistas) anunciando a distribuição daquele
+#     trimestre em texto corrido (ex. PETR4: "Valor a ser pago: R$ 1,18732774 por ação ... declarada
+#     com base no balanço de 30 de setembro de 2026" ou, no anúncio anual, "... relativa ao quarto
+#     trimestre de 2025"). Tentamos (a) primeiro (documento já lido, sem chamada de rede extra); só
+#     buscamos os documentos de (b), um por um, para os trimestres que (a) não achou.
+RE_LINHA_DIVIDENDO_ACAO = re.compile(
+    r"(?:JCP(?:\s*/\s*Dividendos?)?|Dividendos?(?:\s*/\s*(?:e/ou\s+)?JCP)?|Proventos?)\s+por\s+A[çc][ãa]o",
+    re.I,
+)
+RE_VALOR_PAGO_ACAO = re.compile(r"valor\s+a\s+ser\s+pago:?\s*R\$\s*(\d+(?:,\d+)?)\s*por\s+a[çc][ãa]o", re.I)
+RE_EQUIVALENTE_ACAO = re.compile(r"equivalente\s+a\s+R\$\s*(\d+(?:,\d+)?)\s*por\s+a[çc][ãa]o", re.I)
+RE_BALANCO_DE = re.compile(r"balan[çc]o\s+de\s+\d{1,2}\s+de\s+(\w+)\s+de\s+(\d{4})", re.I)
+RE_TRIMESTRE_ORDINAL = re.compile(r"(primeiro|segundo|terceiro|quarto)\s+trimestre\s+de\s+(\d{4})", re.I)
+MESES_PT = {sem_acento(nome): i for i, nome in enumerate(
+    ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
+     "outubro", "novembro", "dezembro"), 1)}
+TRI_DO_MES_FIM = {3: 1, 6: 2, 9: 3, 12: 4}             # mês de fim de trimestre -> número do trimestre
+ORDINAL_TRI = {"primeiro": 1, "segundo": 2, "terceiro": 3, "quarto": 4}
+
+
+def extrair_dividendo_tabela(texto: str, tri: str) -> float | None:
+    """Dividendo/JCP por ação do trimestre `tri`, pela tabela de destaques do release/relatório de
+    resultados (mesma técnica de `ler_lucro_trimestre`/`colunas_do_cabecalho`, mas já em R$ por ação
+    - sem multiplicador de milhões/bilhões). None sem a linha, ou sem o trimestre no cabeçalho."""
+    t = normalizar(texto)
+    padrao = rf"{RE_LINHA_DIVIDENDO_ACAO.pattern}[^\n\d]{{0,25}}((?:\(?-?\d{{1,3}}(?:\.\d{{3}})*(?:,\d+)?\)?%?\s+){{1,12}})"
+    for m in re.finditer(padrao, t, re.I):
+        antes = t[max(0, m.start() - 2500): m.start()]
+        grupos = [g for g in re.finditer(r"((?:\b[1-4]T\d{2}\b[\s/]*){1,10})", antes)
+                  if tri in re.findall(r"\b[1-4]T\d{2}\b", g.group(1))]
+        if not grupos:
+            continue
+        candidatos = [colunas_do_cabecalho(re.findall(r"\b[1-4]T\d{2}\b", g.group(1)), tri) for g in grupos]
+        colunas = max(reversed(candidatos), key=len)
+        valores = [v for v in m.group(1).split() if not v.endswith("%")]
+        if len(valores) < len(colunas):
+            continue
+        bruto = valores[colunas.index(tri)]
+        if bruto.startswith("("):
+            continue                          # dividendo nunca é negativo - linha errada
+        return numero_br(bruto)
+    return None
+
+
+def _tri_do_anuncio_dividendo(texto: str) -> str | None:
+    """Trimestre a que se refere um Fato Relevante/Aviso aos Acionistas de dividendo: pela data do
+    balanço ("declarada com base no balanço de 30 de setembro de 2026" -> 3T26) ou, no anúncio do
+    4º trimestre/exercício, pelo ordinal ("relativa ao quarto trimestre de 2025" -> 4T25)."""
+    m = RE_BALANCO_DE.search(texto)
+    if m:
+        mes, ano = m.groups()
+        q = TRI_DO_MES_FIM.get(MESES_PT.get(sem_acento(mes)))
+        if q:
+            return f"{q}T{int(ano) % 100:02d}"
+    m = RE_TRIMESTRE_ORDINAL.search(texto)
+    if m:
+        ordinal, ano = m.groups()
+        q = ORDINAL_TRI.get(sem_acento(ordinal))
+        if q:
+            return f"{q}T{int(ano) % 100:02d}"
+    return None
+
+
+def extrair_dividendo_fato_relevante(texto: str) -> tuple[float, str] | None:
+    """Dividendo/JCP por ação declarado num Fato Relevante/Aviso aos Acionistas de remuneração ao
+    acionista (texto corrido, não tabela). Devolve (valor, trimestre) ou None sem achar os dois."""
+    t = normalizar(texto)
+    m = RE_VALOR_PAGO_ACAO.search(t) or RE_EQUIVALENTE_ACAO.search(t)
+    if not m:
+        return None
+    tri = _tri_do_anuncio_dividendo(t)
+    if not tri:
+        return None
+    return numero_br(m.group(1)), tri
+
+
+def _dividendo_por_tri(tris_faltando: set[str], hoje: dt.date, empresa: tuple[str, str], *,
+                       buscar_docs_dividendo, ler_pdf) -> dict[str, float]:
+    """Busca, só para os trimestres de `tris_faltando`, o dividendo/JCP por ação num Fato
+    Relevante/Aviso aos Acionistas (2º passo - a tabela do release já foi tentada antes)."""
+    achados: dict[str, float] = {}
+    if not tris_faltando:
+        return achados
+    try:
+        docs = buscar_docs_dividendo(empresa[0], hoje)
+    except Exception as e:  # noqa: BLE001 - busca best-effort; sem ela, só fica "Sem dado"
+        log.info("documentos de dividendo indisponíveis (%s)", e.__class__.__name__)
+        return achados
+    for doc in docs:
+        if len(achados) >= len(tris_faltando):
+            break
+        try:
+            _, texto = ler_pdf(doc["link"])
+        except Exception as e:  # noqa: BLE001
+            log.info("não abriu %s (%s)", doc["link"], e.__class__.__name__)
+            continue
+        r = extrair_dividendo_fato_relevante(texto)
+        if r and r[1] in tris_faltando and r[1] not in achados:
+            achados[r[1]] = r[0]
+    return achados
+
+
 def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, buscar_docs=documentos_cvm,
-                    ler_pdf=texto_do_pdf) -> dict:
+                    ler_pdf=texto_do_pdf, buscar_docs_dividendo=documentos_dividendo_cvm) -> dict:
     """Fonte oficial do Brasil: 1º PDF RI (release/ITR/DFP), documentos entregues à CVM (IPE).
 
     2º passo (B3) não está implementado: hoje só a CVM, que já é a fonte primária (release/ITR/DFP
@@ -125,6 +237,7 @@ def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, b
     docs = sorted(docs, key=lambda d: (d["data"], bool(RE_PRIORIDADE_DOC.search(
         f"{d.get('categoria', '')} {d.get('tipo', '')} {d.get('assunto', '')}"))), reverse=True)
     lidos: dict[str, dict] = {}
+    dividendos: dict[str, float] = {}         # tri -> dividendo/JCP por ação (abordagem (a), tabela)
     acoes, acoes_detalhe, fonte_acoes = None, "", ""
     for doc in docs:
         data_doc = _data(doc["data"])
@@ -147,6 +260,10 @@ def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, b
             if r["valor"] is not None:
                 lidos[tri] = {"tri": tri, "fim": f"{fim_do_trimestre(tri):%d/%m/%Y}", "lucro": r["valor"],
                              "data": _data_br(doc["data"]), "url": doc["link"]}
+        if tri not in dividendos:
+            valor_div = extrair_dividendo_tabela(texto, tri)
+            if valor_div is not None:
+                dividendos[tri] = valor_div
         ordem = sorted(lidos, key=fim_do_trimestre)
         if acoes and len(ordem) >= 4 and all(tri_anterior(b) == a for a, b in zip(ordem[-4:], ordem[-3:])):
             break
@@ -155,13 +272,34 @@ def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, b
     ult = sorted(lidos.values(), key=lambda x: fim_do_trimestre(x["tri"]))[-4:]
     if len(ult) < 4 or any(tri_anterior(b["tri"]) != a["tri"] for a, b in zip(ult, ult[1:])):
         return {"status": "nao_encontrado", "motivo": "4 trimestres consecutivos de lucro líquido não encontrados na CVM"}
+    # dividendo/JCP: 4 trimestres de ult, mesma lógica trimestral do lucro (Issue #31). (a) tabela do
+    # release/relatório já lido (acima); (b) Fato Relevante/Aviso aos Acionistas, só para quem faltou.
+    tris_ult = [x["tri"] for x in ult]
+    faltando = {t for t in tris_ult if t not in dividendos}
+    if faltando:
+        dividendos.update(_dividendo_por_tri(faltando, hoje, empresa,
+                                             buscar_docs_dividendo=buscar_docs_dividendo, ler_pdf=ler_pdf))
+    for x in ult:
+        if x["tri"] in dividendos:
+            x["dividendo"] = dividendos[x["tri"]]
+    if all(t in dividendos for t in tris_ult):
+        dividendo_12m, dividendo_motivo = sum(dividendos[t] for t in tris_ult), None
+        fonte_dividendo = "tabela do release/relatório de resultados (por ação)" if not faltando else \
+            "tabela do release/relatório de resultados + Fato Relevante/Aviso aos Acionistas (por ação)"
+    else:
+        ainda_faltando = sorted((t for t in tris_ult if t not in dividendos), key=fim_do_trimestre)
+        dividendo_12m, dividendo_motivo = None, (
+            f"dividendo/JCP por ação não encontrado para {', '.join(ainda_faltando)} "
+            "nos documentos lidos (release/relatório de resultados e Fato Relevante/Aviso aos Acionistas)")
+        fonte_dividendo = None
     return {
         "status": "ok", "acoes_total": acoes, "acoes_detalhe": acoes_detalhe,
         "tipo_acao": "ON+PN" if " + " in acoes_detalhe else ("ON" if "ON" in acoes_detalhe else acoes_detalhe),
         "fator_adr": 1, "moeda_resultado": "BRL",
-        "fonte_oficial": f"PDF RI (CVM/IPE) - ações: {fonte_acoes}; lucro: release de resultados trimestral",
+        "fonte_oficial": f"PDF RI (CVM/IPE) - ações: {fonte_acoes}; lucro: release de resultados trimestral"
+                        + (f"; dividendo: {fonte_dividendo}" if fonte_dividendo else ""),
         "data_ultimo_balanco": ult[-1]["fim"], "lucro_12m": sum(x["lucro"] for x in ult),
-        "dividendo_12m": None, "dividendo_motivo": "dividendos dos últimos 12 meses não encontrados nos documentos lidos",
+        "dividendo_12m": dividendo_12m, "dividendo_motivo": dividendo_motivo,
         "trimestres": ult,
     }
 

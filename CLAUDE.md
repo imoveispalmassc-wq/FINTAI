@@ -465,8 +465,25 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   dos últimos 4 trimestres consecutivos lidos no release de resultados (reaproveita
   `fetch_guidance.ler_lucro_trimestre`, linha "Lucro Líquido" por padrão - frase e tabela, mesma
   lógica de divergência/unidade do contábil 12m da B3); menos de 4 trimestres consecutivos = não
-  cria. Dividendo dos últimos 12 meses: hoje não é extraído dos documentos lidos (fica
-  `dividendo_12m: null`, "Sem dado" na tela, nunca inventado) - limitação conhecida, ver PR.
+  cria. Dividendo dos últimos 12 meses (Issue #31, já em R$ por ação - nunca o valor total
+  distribuído pela empresa, que precisaria ser dividido pelas ações para comparar com a cotação):
+  soma dos mesmos 4 trimestres consecutivos do lucro, por 2 jeitos possíveis, tentados nessa ordem
+  (nunca o Yahoo): (a) a própria tabela de destaques do release/relatório de resultados já lido
+  para o lucro (`dados_fixos.extrair_dividendo_tabela`, mesma técnica de colunas por cabeçalho de
+  `ler_lucro_trimestre`/`colunas_do_cabecalho`, mas sem multiplicador de milhões/bilhões - a linha já
+  vem em R$ por ação, ex. BBAS3 "JCP/Dividendos por Ação - R$ 0,07 0,16 0,04..."); (b), só para os
+  trimestres que (a) não achou, um documento separado de Fato Relevante/Aviso aos Acionistas sobre
+  remuneração ao acionista (`fetch_guidance.documentos_dividendo_cvm`, filtro próprio por
+  "remuneração aos acionistas"/dividendo/JCP/juros sobre capital próprio/proventos - documentos que
+  `documentos_cvm`, filtrado para resultado/projeção, não lista), lido em texto corrido
+  (`dados_fixos.extrair_dividendo_fato_relevante` - "Valor a ser pago: R$ X por ação" ou
+  "equivalente a R$ X por ação"; o trimestre vem da própria frase, pela data do balanço ("declarada
+  com base no balanço de 30 de setembro de 2026" -> 3T26) ou, no anúncio do 4º trimestre/exercício,
+  pelo ordinal ("relativa ao quarto trimestre de 2025" -> 4T25); ex. PETR4, que não tem a tabela por
+  ação no release, mas tem esse Fato Relevante a cada trimestre). Só grava `dividendo_12m` com os 4
+  trimestres (mesmos do lucro) completos pelos 2 jeitos juntos; faltando 1 ou mais, `dividendo_12m:
+  null` e "Sem dado" na tela, nunca inventado (nunca mistura com o Yahoo, nunca estima pelo valor
+  total ÷ ações do Yahoo, que poderia usar uma base de ações diferente da declarada pela empresa).
   EUA = SEC EDGAR, XBRL companyfacts (`SEC_DADOS/api/xbrl/companyfacts/CIK.../json`, os mesmos
   fatos estruturados que vêm dos 10-Q/10-K - não precisou de Investor Relations como 2º passo
   porque a SEC já responde pra qualquer ticker listado). Ações = `dei:EntityCommonStockSharesOutstanding`

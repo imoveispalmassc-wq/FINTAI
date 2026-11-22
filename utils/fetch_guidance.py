@@ -481,10 +481,14 @@ def cnpj_do_ticker(ticker: str, hoje: dt.date) -> tuple[str, str] | None:
 
 PALAVRAS_PROJECAO = re.compile(r"proje|guidance|estimativ|perspectiv", re.I)
 PALAVRAS_RESULTADO = re.compile(r"resultado|desempenho|release", re.I)
+PALAVRAS_DIVIDENDO = re.compile(r"remunera[çc][ãa]o\s+aos\s+acionistas|dividendos?|\bjcp\b|"
+                                r"juros\s+sobre\s+(?:o\s+)?capital\s+pr[óo]prio|proventos?", re.I)
 
 
-def documentos_cvm(cnpj: str, hoje: dt.date) -> list[dict]:
-    """Documentos IPE da empresa que podem trazer guidance, do mais novo para o mais antigo."""
+def _documentos_ipe(cnpj: str, hoje: dt.date) -> list[dict]:
+    """Todos os documentos entregues à CVM (IPE) da empresa, sem filtro de assunto - uso interno,
+    reaproveitado por `documentos_cvm` (filtra resultado/projeção) e por
+    `documentos_dividendo_cvm` (filtra remuneração ao acionista/dividendo/JCP, Issue #31)."""
     docs = []
     for ano in (hoje.year, hoje.year - 1):
         try:
@@ -495,15 +499,30 @@ def documentos_cvm(cnpj: str, hoje: dt.date) -> list[dict]:
         for l in linhas:
             if re.sub(r"\D", "", _campo(l, "cnpj")) != re.sub(r"\D", "", cnpj):
                 continue
-            assunto = " ".join([_campo(l, "categoria"), _campo(l, "tipo"), _campo(l, "especie"), _campo(l, "assunto")])
-            if not (PALAVRAS_PROJECAO.search(assunto) or PALAVRAS_RESULTADO.search(assunto)):
-                continue
             docs.append({"data": _campo(l, "data", "entrega") or _campo(l, "data", "referencia"),
                          "categoria": _campo(l, "categoria"), "assunto": _campo(l, "assunto"),
                          "tipo": " ".join([_campo(l, "tipo"), _campo(l, "especie")]).strip(),
                          "link": _campo(l, "link")})
     docs = [d for d in docs if d["link"].startswith("http")]
     return sorted(docs, key=lambda d: d["data"], reverse=True)
+
+
+def _assunto_busca(d: dict) -> str:
+    return f"{d['categoria']} {d['tipo']} {d['assunto']}"
+
+
+def documentos_cvm(cnpj: str, hoje: dt.date) -> list[dict]:
+    """Documentos IPE da empresa que podem trazer guidance, do mais novo para o mais antigo."""
+    return [d for d in _documentos_ipe(cnpj, hoje)
+            if PALAVRAS_PROJECAO.search(_assunto_busca(d)) or PALAVRAS_RESULTADO.search(_assunto_busca(d))]
+
+
+def documentos_dividendo_cvm(cnpj: str, hoje: dt.date) -> list[dict]:
+    """Documentos IPE que podem anunciar dividendo/JCP declarado (Fato Relevante "Petrobras informa
+    sobre remuneração aos acionistas", Aviso aos Acionistas, etc.) - Issue #31, usado só por
+    `dados_fixos.buscar_fixos_br` quando a tabela do release/relatório de resultados não trouxe o
+    valor por ação."""
+    return [d for d in _documentos_ipe(cnpj, hoje) if PALAVRAS_DIVIDENDO.search(_assunto_busca(d))]
 
 
 def _baixar_pdf(link: str) -> bytes:
