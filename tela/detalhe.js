@@ -801,7 +801,13 @@ function montar(root, d) {
           const conta = !S || !S.trimestres ? '' : tem(S.lucro_12m)
             ? ` Conta: ${S.trimestres.map(t => `${t.tri} ${f(t.lucro / 1e9, 2)}`).join(' + ')} = ${f(S.lucro_12m / 1e9, 2)} bi ÷ ${f(S.acoes / 1e9, 2)} bi de ações = LPA ${f(d.lpa)}.`
             : ` Conta: ${S.trimestres.map(t => `${t.fim.slice(3)} ${f(t.lpa)}${t.tipo === 'GAAP' && aj ? ' (GAAP)' : ''}`).join(' + ')} = ${f(d.lpa)}.`;
-          return `<b>${nome}</b> (${rotBal}): cotação de hoje ÷ lucro por ação dos últimos 12 meses (soma dos 4 últimos trimestres). Muda a cada balanço. Fonte: ${d.lpaFonte || 'Yahoo Finance'}.${conta}${tem(d.acoes) && d.acoes > 0 ? ` Lucro = lucro por ação × ${f(d.acoes / 1e9, 2)} bi de ações (Yahoo).` : ''}`; })(),
+          // Regras travadas: GAAP na tela; ajustado, total (com descontinuadas) e 4º tri divergente só como nota
+          const notas = !S ? '' : [
+            S.tem_descontinuadas && tem(S.lpa_12m_total) ? ` Usamos operações contínuas; LPA total (com descontinuadas): ${f(S.lpa_12m_total)}.` : '',
+            tem(S.lpa_ajustado) ? ` LPA ajustado da empresa (só nota): ${f(S.lpa_ajustado)}.` : '',
+            tem(S.q4_release) && tem(S.q4_calculado) && S.q4_release !== S.q4_calculado ? ` 4º tri: release ${f(S.q4_release)} (usado), cálculo ano − 9 meses daria ${f(S.q4_calculado)}.` : '',
+            S.ttm_regra && tem(S.soma_trimestres) ? ` 12 meses = ano fiscal completo: LPA anual oficial (soma dos trimestres ${f(S.soma_trimestres)}).` : ''].join('');
+          return `<b>${nome}</b> (${rotBal}): cotação de hoje ÷ lucro por ação dos últimos 12 meses (soma dos 4 últimos trimestres). Muda a cada balanço. Fonte: ${d.lpaFonte || 'Yahoo Finance'}.${conta}${notas}${tem(d.acoes) && d.acoes > 0 ? ` Lucro = lucro por ação × ${f(d.acoes / 1e9, 2)} bi de ações (Yahoo).` : ''}`; })(),
         lpaGuia ? `<b>Previsão atual ${anoPrev || ''}</b>: GUIDANCE OFICIAL · ${G0.data}: ${faixaG(G0)}. Fonte: ${G0.fonte}.${G0.bases && G0.bases.length ? ` Base ${G0.bases[0].ano} recalculada pela empresa: ${din(G0.bases[0].valor)}${tem(G0.bases[0].antes) ? ` (antes ${din(G0.bases[0].antes)})` : ''}, ${sinal((lpaGuia / G0.bases[0].valor - 1) * 100, 1)} no guidance.` : ''}${lpaIni ? ` Desde o início do ano: ${sinal((lpaGuia / lpaIni - 1) * 100, 1)}.` : ''}${tem(lpaCons) ? ` Consenso Yahoo: ${din(lpaCons)}.` : ''}`
           : tem(lpaCons) ? `<b>Previsão atual ${anoPrev || ''}</b>: consenso${tem(Fp.analistas) ? ` de ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance${tem(Fp.baixa) && tem(Fp.alta) ? `, de ${din(Fp.baixa)} a ${din(Fp.alta)}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' (poucos analistas: pouco confiável)' : ''}. Pode mudar.`
           : `<b>Previsão atual</b>: sem estimativa no Yahoo nem guidance cadastrado.`,
