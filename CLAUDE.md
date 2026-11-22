@@ -336,10 +336,24 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   cada bolinha (hoje 18px cheia, 7 dias 10px vazada) mais um respiro - preservando a posição real quando já
   há espaço de sobra; com valores iguais ou muito próximos, as 2 continuam sempre visíveis lado a lado. Os
   dois textos de leitura (abaixo da barra de Força da tendência) começam direto pelo
-  percentual, sem rótulo ("Perdeu força"/"Alta"/"Precisa subir"/"Cai" tirados): "20,94% abaixo da média de 200
-  dias." e "26,5% para voltar à média." - sem repetir a mesma distância numa segunda frase ("Preço X está Y%
-  abaixo da média de Z"); logo acima desses textos, uma frase fixa lembra o valor da média de 200 dias e que
-  ela é o ponto 0% da régua.
+  percentual, com 1 casa decimal (mesma precisão da segunda frase, pra nunca mostrar "20,94%" numa linha e
+  "26,5%" na outra), sem rótulo ("Perdeu força"/"Alta"/"Precisa subir"/"Cai" tirados): "20,9% abaixo da média
+  de 200 dias." e "26,5% para voltar à média." - sem repetir a mesma distância numa segunda frase ("Preço X
+  está Y% abaixo da média de Z"); logo acima desses textos, uma frase fixa lembra o valor da média de 200 dias
+  e que ela é o ponto 0% da régua.
+  O título/badge "Direção da tendência" (Alta verde / Baixa vermelho / Equilíbrio cinza) usa a MESMA direção
+  calculada pela distância preço÷MM200 de hoje (ver regra abaixo) - não pode divergir do "Hoje" mostrado na
+  linha de evolução logo abaixo (bug corrigido: o título vinha de um cálculo à parte, baseado na inclinação da
+  própria MM200, que podia contradizer a distância mostrada ao lado, ex. título "Alta" com a distância em
+  -20,94%). Evolução da Direção da tendência: logo abaixo do título, 2 linhas em cinza pequeno, só quando há os
+  7 pregões de histórico (`dist200d7d`) - nunca inventa. Direção (Alta/Baixa/Equilíbrio) é calculada pela
+  distância preço÷MM200 arredondada em 2 casas (mesma precisão do valor ao lado): positiva = Alta, negativa =
+  Baixa, só exatos 0,00% = Equilíbrio (ex.: -4,20% já é Baixa, não "perto de zero"). 1ª linha: "7 dias atrás: [Direção 7 dias]
+  ([valor 7 dias]) → Hoje: [Direção hoje] ([valor hoje])" (ex.: "7 dias atrás: Baixa (-4,20%) → Hoje: Baixa
+  (-20,94%)"). 2ª linha, automática: manteve a direção e o valor absoluto cresceu = "Continuou em [direção,
+  minúsculo] e piorou [diferença] p.p."; manteve e o valor absoluto caiu = "...e melhorou [diferença] p.p.";
+  trocou de direção = "Virou de [direção 7 dias] para [direção hoje]." - mesma regra pra qualquer ativo, sem
+  mudar cor/layout da barra.
   Os nomes das zonas são os MESMOS nas 2 barras: "Perdeu força"/"Muita venda" (vermelho) | "Equilíbrio" (cinza)
   | "Alta leve" (verde-claro) | "Forte" (verde-forte) - a barra de Força da tendência usava antes "Leve compra"
   e "Compra forte", renomeados para padronizar com a barra de Força (IFR).

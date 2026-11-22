@@ -568,8 +568,13 @@ function montar(root, d) {
 
   /* ---------------- tendência e força */
   (function TrendStrength(el) {
-    const corT = { Alta: 'var(--verde)', Baixa: 'var(--vermelho)' }[d.tendencia] || 'var(--texto)';
     const dist = tem(d.mm200) ? (d.preco / d.mm200 - 1) * 100 : null;
+    // Direção (Alta/Baixa/Equilíbrio) pela distância preço÷MM200 arredondada em 2 casas (mesma precisão do
+    // valor mostrado ao lado): positiva = Alta, negativa = Baixa, só exatos 0,00% = Equilíbrio - é a MESMA
+    // regra usada na linha de evolução abaixo, pro título nunca contradizer o "Hoje" dessa linha
+    const direcaoDist = v => { const r = Math.round(v * 100) / 100; return r > 0 ? 'Alta' : r < 0 ? 'Baixa' : 'Equilíbrio'; };
+    const tituloT = tem(dist) ? direcaoDist(dist) : '—';
+    const corT = { Alta: 'var(--verde)', Baixa: 'var(--vermelho)', Equilíbrio: 'var(--suave)' }[tituloT] || 'var(--texto)';
     const leitura = !tem(d.forca) ? '' : d.forca >= 70 ? 'Sobrecomprada. Subiu rápido demais.'
       : d.forca <= 30 ? 'Sobrevendida. Caiu rápido demais.' : 'Neutra. Sem pressão de compra nem de venda.';
     const fundo = 'linear-gradient(90deg,var(--vermelho) 0 40%,var(--ardosia) 40% 60%,var(--verde-claro) 60% 80%,var(--verde-forte) 80% 100%)';
@@ -582,11 +587,24 @@ function montar(root, d) {
     const RMAX = tem(dist) && dist > 30 ? Math.ceil((dist + 5) / 10) * 10 : 30;
     const pt = v => (v - RMIN) / (RMAX - RMIN) * 100;
     const fundoT = `linear-gradient(90deg,var(--vermelho) 0 ${pt(NEG)}%,var(--ardosia) ${pt(NEG)}% ${pt(EQ)}%,var(--verde-claro) ${pt(EQ)}% ${pt(LEVE)}%,var(--verde-forte) ${pt(LEVE)}% 100%)`;
+    // evolução da direção nos últimos 7 pregões, com a MESMA direcaoDist() do título acima
+    let evolucaoT = '';
+    if (tem(dist) && tem(d.dist200d7d)) {
+      const dirHoje = direcaoDist(dist), dir7 = direcaoDist(d.dist200d7d);
+      const absHoje = Math.abs(dist), abs7 = Math.abs(d.dist200d7d);
+      const diffPP = Math.abs(absHoje - abs7);
+      const linha2 = dirHoje !== dir7 ? `Virou de ${dir7} para ${dirHoje}.`
+        : absHoje > abs7 ? `Continuou em ${dirHoje.toLowerCase()} e piorou ${f(diffPP)} p.p.`
+        : absHoje < abs7 ? `Continuou em ${dirHoje.toLowerCase()} e melhorou ${f(diffPP)} p.p.`
+        : `Continuou em ${dirHoje.toLowerCase()}, sem variação.`;
+      evolucaoT = `<div class="nota" style="margin-top:4px">7 dias atrás: ${dir7} (${sinal(d.dist200d7d)}) → Hoje: ${dirHoje} (${sinal(dist)})</div>
+          <div class="nota" style="margin-top:2px">${linha2}</div>`;
+    }
     let textoT = '', notaSubirCairT = '';
     if (tem(dist)) {
       const cair = (d.preco - d.mm200) / d.preco * 100, subir = (d.mm200 / d.preco - 1) * 100;
-      textoT = dist < 0 ? `${f(Math.abs(dist))}% abaixo da média de 200 dias.`
-        : `${f(dist)}% acima da média de 200 dias.`;
+      textoT = dist < 0 ? `${f(Math.abs(dist), 1)}% abaixo da média de 200 dias.`
+        : `${f(dist, 1)}% acima da média de 200 dias.`;
       notaSubirCairT = dist < 0 ? `${f(subir, 1)}% para voltar à média.`
         : `${f(cair, 1)}% para perder a tendência.`;
     }
@@ -637,7 +655,8 @@ function montar(root, d) {
     const [forcaBola, forca7dBola] = tem(d.forca) ? afastarBolinhas(largContainerF, d.forca, tem(d.forca7d) ? d.forca7d : null) : [null, null];
     el.innerHTML = `<h2>Tendência e força</h2>
       <div class="card">
-        <div class="duas"><div class="esq"><span class="rot">Direção da tendência</span></div><div class="dir" style="color:${corT}">${tem(d.mm200) ? d.tendencia : '—'}</div></div>
+        <div class="duas"><div class="esq"><span class="rot">Direção da tendência</span></div><div class="dir" style="color:${corT}">${tituloT}</div></div>
+        ${evolucaoT}
         ${barraT}
         <div style="${divisor}">
           <strong>Força</strong><div class="nota">Últimos 14 dias</div>
