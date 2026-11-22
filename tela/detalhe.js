@@ -916,6 +916,42 @@ function montar(root, d) {
       ${tem(difLPA) ? `<p>Crescimento:</p><code>(${f(lpaAtual)} − ${f(d.lpa12Atras)}) ÷ ${f(Math.abs(d.lpa12Atras))} = ${sinal(difLPA, 0)}</code><p>Base: ${d.baseLpa}.</p>${outraBase ? `<p>${notaBase.trim()}</p>` : ''}` : `<p>${INDISP}.</p>`}${fonte}`];
   })($('fundamentos'));
 
+  /* ---------------- dados fixos (fonte oficial) - Issue #29, utils/dados_fixos.py
+     Ações, LPA, P/L, P/L médio 12m, dividendo e DY calculados SÓ com dado da fonte oficial
+     (release/ITR/DFP na CVM ou SEC EDGAR - nunca Yahoo); a cotação do dia é a única coisa que
+     muda todo dia aqui. Cada indicador mostra a conta embaixo (d.dadosFixos.contas). */
+  (function DadosFixos(el) {
+    const DF = d.dadosFixos;
+    if (!DF) { el.innerHTML = ''; return; }
+    if (DF.status !== 'ok') {
+      el.innerHTML = `<h2>Dados fixos <small>fonte oficial</small></h2>
+        <div class="card"><div class="destaque">${DF.mensagem}</div></div>`;
+      return;
+    }
+    const C = DF.contas || {};
+    const avisoHtml = DF.avisoBalancoNovo ? `<div class="aviso" style="margin-bottom:10px">${DF.avisoBalancoNovo}</div>` : '';
+    const temAdr = tem(DF.fatorAdr) && DF.fatorAdr !== 1;
+    const adrHtml = temAdr ? `<div class="lista-v num" style="margin-top:10px">
+        <div>LPA (ADR, fator ${f(DF.fatorAdr, 0)})<b>${tem(DF.lpaAdr) ? f(DF.lpaAdr, 4) : 'Sem dado'}</b></div>
+        <div>Dividendo (ADR, fator ${f(DF.fatorAdr, 0)})<b>${tem(DF.dividendoAdr) ? f(DF.dividendoAdr, 4) : 'Sem dado'}</b></div>
+      </div>` : '';
+    el.innerHTML = `<h2>Dados fixos <small>fonte oficial${DF.moedaResultado ? ` · ${DF.moedaResultado}` : ''}</small></h2>
+      ${avisoHtml}
+      <div class="card">
+        <div class="lista-v num">
+          <div>Ações<b>${tem(DF.acoesTotal) ? `${f(DF.acoesTotal / 1e9, 2)} bi` : 'Sem dado'}</b></div>
+          <div>LPA<b>${tem(DF.lpa) ? f(DF.lpa, 4) : 'Sem dado'}</b></div>
+          <div>P/L Atual<b>${tem(DF.pl) ? f(DF.pl, 2) : 'Sem dado'}</b></div>
+          <div>P/L Médio 12m<b>${tem(DF.plMedio12m) ? f(DF.plMedio12m, 2) : 'Sem dado'}</b></div>
+          <div>Dividendo Anual<b>${tem(DF.dividendo12m) ? f(DF.dividendo12m, 4) : 'Sem dado'}</b></div>
+          <div>DY<b>${tem(DF.dy) ? `${f(DF.dy * 100, 2)}%` : 'Sem dado'}</b></div>
+        </div>
+        ${adrHtml}
+        <div class="nota" style="margin-top:10px">${[C.acoes, C.lpa, C.pl, C.dividendo, C.dy].filter(Boolean).join('<br>')}</div>
+        <div class="nota" style="margin-top:6px">Fonte: ${DF.fonteOficial || '—'} · balanço de ${DF.dataUltimoBalanco || '—'}.${DF.dividendoMotivo ? ` Dividendo: ${DF.dividendoMotivo}.` : ''} Ações, LPA e dividendo só mudam com balanço novo - a cotação atualiza todo dia.</div>
+      </div>`;
+  })($('dados-fixos'));
+
   /* ---------------- preço justo */
   // aviso do Conservador: lucro de 12 meses abaixo de 60% da média de 3 anos
   const avisoGraham = !d.grahamAviso ? ''

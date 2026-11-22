@@ -15,6 +15,7 @@ import pandas as pd
 from calculos import (Resultado, crescimento_lpa, dy_atual_e_medio, lpa_contabil_ttm, media_no_periodo, pl_medio_12m, pl_medio_contabil,
                       graham_duas_versoes, pl_medio_longo, preco_justo_graham, preco_teto_bazin,
                       teto_valuation_conservador)
+from utils import dados_fixos as _df
 from utils.lynch import crescimento_anual, peg, preco_lynch, regra_prejuizo, veredito
 from utils.override import guidance as guidance_oficial
 from utils.override import guidance_inicial
@@ -457,7 +458,35 @@ def _inicial(curto: str, guia: dict | None, lpa_anos, r: Resultado, acoes) -> di
     return {k: (_n(v, 4) if isinstance(v, float) else v) for k, v in g.items()}
 
 
-def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) -> dict:
+def dados_fixos_tela(fixos: dict | None, cotacao: float | None) -> dict | None:
+    """Pacote pronto pra tela do card "Dados fixos (fonte oficial)" (Issue #29, utils/dados_fixos.py).
+
+    None quando a busca ainda não foi tentada (ex.: app sem acesso à fonte oficial configurado).
+    `fixos`: o que `utils.dados_fixos.obter(..., cotacao=None)` devolveu (fundamentos salvos, sem
+    recalcular com a cotação - isso acontece aqui, com a cotação do dia já buscada pela tela)."""
+    if not fixos:
+        return None
+    if fixos.get("status") != "ok":
+        return {"status": "nao_encontrado", "ticker": fixos.get("ticker") or "",
+                "mensagem": fixos.get("mensagem") or _df.MENSAGEM_NAO_ENCONTRADO}
+    base = {
+        "status": "ok", "ticker": fixos.get("ticker") or "",
+        "acoesTotal": _n(fixos.get("acoes_total"), 0), "tipoAcao": fixos.get("tipo_acao") or "",
+        "fatorAdr": _n(fixos.get("fator_adr"), 2), "moedaResultado": fixos.get("moeda_resultado") or "",
+        "fonteOficial": fixos.get("fonte_oficial") or "", "dataUltimoBalanco": fixos.get("data_ultimo_balanco") or "",
+        "lucro12m": _n(fixos.get("lucro_12m"), 2), "dividendo12m": _n(fixos.get("dividendo_12m"), 4),
+        "dividendoMotivo": fixos.get("dividendo_motivo") or "",
+        "avisoBalancoNovo": fixos.get("avisoBalancoNovo"),
+    }
+    if cotacao is None:
+        return base
+    ind = _df.calcular_indicadores(fixos, cotacao)
+    return {**base, "lpa": _n(ind["lpa"], 4), "pl": _n(ind["pl"], 4), "dy": _n(ind["dy"], 6),
+            "plMedio12m": _n(ind["plMedio12m"], 4), "lpaAdr": _n(ind["lpaAdr"], 4),
+            "dividendoAdr": _n(ind["dividendoAdr"], 4), "contas": ind["contas"]}
+
+
+def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str, dados_fixos: dict | None = None) -> dict:
     """Pacote completo da tela para um ticker."""
     info, hist = d["info"], d["hist"]
     cod = info.get("currency") or ("BRL" if ticker.endswith(".SA") else "USD")
@@ -588,6 +617,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str) 
                     "preco": [_n(x, 2) for x in (r.retorno_preco_1a, r.retorno_preco_3a, r.retorno_preco_5a)]},
         "preco1AnoAtras": um_ano["c"][0] if um_ano else None,
         "data1AnoAtras": f"{pd.Timestamp(um_ano['t'][0], unit='ms'):%d/%m/%Y}" if um_ano else None,
+        "dadosFixos": dados_fixos_tela(dados_fixos, r.preco_atual),
         "comparadores": comparadores, "comparadorPadrao": padrao,
         "backtest": {"5a": bt5, "max": btmax},
         "decisao": {"codigo": estado.codigo, "rotulo": estado.rotulo, "texto": estado.texto, "zona": estado.zona,

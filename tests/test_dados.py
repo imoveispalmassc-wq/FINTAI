@@ -441,3 +441,30 @@ def test_issue25_petr4_lucro_total_usa_acoes_oficiais_e_nao_as_do_yahoo():
     assert acoes_oficiais({"sharesOutstanding": 5708922664}, {"status": "ok", "acoes": 5708922664.0})[0] == 5708922664
     assert acoes_oficiais(info, None) == (5446501379, "Yahoo")
     assert acoes_oficiais(info, {"status": "pendente"}) == (5446501379, "Yahoo")
+
+
+# ------------------------------------------------------------ card "Dados fixos (fonte oficial)" (Issue #29)
+def test_dados_fixos_tela_nao_encontrado():
+    from tela.dados import dados_fixos_tela
+
+    r = dados_fixos_tela({"status": "nao_encontrado", "mensagem": "Ticker não encontrado na fonte oficial.",
+                          "ticker": "ZZZZ9"}, 10.0)
+    assert r == {"status": "nao_encontrado", "ticker": "ZZZZ9", "mensagem": "Ticker não encontrado na fonte oficial."}
+
+
+def test_dados_fixos_tela_none_sem_busca():
+    from tela.dados import dados_fixos_tela
+
+    assert dados_fixos_tela(None, 10.0) is None
+
+
+def test_dados_fixos_tela_calcula_com_a_cotacao_do_dia():
+    from tela.dados import dados_fixos_tela
+
+    fixos = {"status": "ok", "ticker": "PETR4", "acoes_total": 12.89e9, "lucro_12m": 140.4e9,
+             "dividendo_12m": None, "fator_adr": 1, "moeda_resultado": "BRL",
+             "fonte_oficial": "PDF RI (CVM/IPE)", "data_ultimo_balanco": "30/09/2026", "avisoBalancoNovo": None}
+    r = dados_fixos_tela(fixos, 42.67)
+    assert r["status"] == "ok" and round(r["lpa"], 2) == 10.89 and round(r["pl"], 2) == 3.92
+    assert r["fonteOficial"] == "PDF RI (CVM/IPE)" and r["dataUltimoBalanco"] == "30/09/2026"
+    assert "LPA:" in r["contas"]["lpa"]

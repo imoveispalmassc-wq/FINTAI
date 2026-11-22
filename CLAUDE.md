@@ -446,6 +446,64 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   RSI 31 continua em Venda; RSI 70 é Compra; RSI 71 já é Muita compra.
 - Para conferir o que o Yahoo devolve para um ticker: Actions -> "Diagnóstico Yahoo (só leitura)".
 - Backtest: 5 anos por padrão; todo o histórico só na escala "Máx.", com aviso.
+- DADOS FIXOS (BR + EUA, Issue #29, `utils/dados_fixos.py`): ações em circulação, lucro e dividendo
+  de 12 meses NUNCA vêm do Yahoo - só da fonte oficial (release/ITR/DFP na CVM pra B3, SEC EDGAR
+  pros EUA). Arquivo `utils/dados_fixos.json` (mesmo padrão de `contabil_br.json`/`contabil_sec.json`:
+  ticker -> dicionário), gravado uma única vez por ticker e NUNCA recalculado todo dia - só a cotação
+  do dia entra de novo em cada cálculo, buscada pela própria tela (Yahoo), nunca pelo módulo.
+  Lista SOB DEMANDA: não há nenhum ticker pré-cadastrado. `obter(ticker, hoje, cotacao)` é o ponto
+  de entrada único: (1) ticker já em `dados_fixos.json` -> usa o salvo e só recalcula com a
+  `cotacao` recebida; (2) ticker novo -> busca 1x na fonte oficial, grava e calcula; (3) não achou
+  na fonte oficial -> NÃO cria a entrada e devolve {"status": "nao_encontrado", "mensagem":
+  "Ticker não encontrado na fonte oficial."} (a tela mostra essa mensagem, nunca um número chutado).
+  Fontes de fato usadas (sejamos honestos sobre o mecanismo): B3 = documentos entregues à CVM (IPE,
+  `utils.fetch_guidance.documentos_cvm`) - hoje só esse passo (release/ITR/DFP é o próprio
+  documento entregue pela empresa; a B3 como 2º passo ainda não foi implementada, ver limitação no
+  PR). Ações = ON + PN + Units achados na capa do documento ("Composição do Capital Social"),
+  somados (NUNCA só ON) - `extrair_acoes_br`, regex sobre o texto do PDF (reaproveita
+  `fetch_guidance.texto_do_pdf`); sem nenhuma classe encontrada, o ticker não é criado. Lucro = soma
+  dos últimos 4 trimestres consecutivos lidos no release de resultados (reaproveita
+  `fetch_guidance.ler_lucro_trimestre`, linha "Lucro Líquido" por padrão - frase e tabela, mesma
+  lógica de divergência/unidade do contábil 12m da B3); menos de 4 trimestres consecutivos = não
+  cria. Dividendo dos últimos 12 meses: hoje não é extraído dos documentos lidos (fica
+  `dividendo_12m: null`, "Sem dado" na tela, nunca inventado) - limitação conhecida, ver PR.
+  EUA = SEC EDGAR, XBRL companyfacts (`SEC_DADOS/api/xbrl/companyfacts/CIK.../json`, os mesmos
+  fatos estruturados que vêm dos 10-Q/10-K - não precisou de Investor Relations como 2º passo
+  porque a SEC já responde pra qualquer ticker listado). Ações = `dei:EntityCommonStockSharesOutstanding`
+  (ou `us-gaap:CommonStockSharesOutstanding` se faltar), o valor mais recente. Lucro = soma dos
+  últimos 4 trimestres de `us-gaap:NetIncomeLoss` (mesma técnica de `fetch_guidance.lpa_ttm_sec`:
+  trimestre de 3 meses direto do 10-Q; 4º trimestre fiscal = ano do 10-K menos os 9 meses
+  acumulados do 10-Q). Dividendo = soma dos últimos 4 trimestres de
+  `us-gaap:CommonStockDividendsPerShareDeclared`; sem esse fato na SEC, "Sem dado" (nunca estima
+  por `PaymentsOfDividendsCommonStock` ÷ ações, que misturaria bases). Exige o mesmo
+  `SEC_CONTACT_EMAIL` do resto do projeto (`fetch_guidance.cabecalho_sec`); sem ele, ticker dos EUA
+  não encontrado.
+  Fórmulas fixas (não mude): `LPA = lucro_12m / acoes_total`; `P/L = cotacao / LPA`;
+  `DY = dividendo_12m / cotacao`; `P/L Médio 12m` = média do P/L de cada um dos últimos 4
+  trimestres (cotação de fechamento do trimestre ÷ LPA daquele trimestre) - só calculado quando a
+  tela injeta as 4 cotações trimestrais (`pl_medio_12m_fixo`); sem elas, "Sem dado" (nunca cai pra
+  um método alternativo, pra não confundir com o P/L médio do card de P/L existente, que é outro
+  cálculo). ADR: `LPA_ADR = LPA × fator_adr`, `Dividendo_ADR = Dividendo × fator_adr` - `fator_adr`
+  default 1 (não é detectado automaticamente pela SEC; pra um ADR real, ex. PBR = 2, hoje só
+  editando `fator_adr` direto em `dados_fixos.json`, à mão - limitação conhecida, ver PR). Lucro e
+  cotação nunca se misturam entre moedas (`moeda_resultado` registra em que moeda o lucro/dividendo
+  foram divulgados).
+  Balanço novo: ao buscar de novo um ticker já salvo, uma checagem LEVE (só a data do documento/
+  trimestre mais recente na fonte oficial, sem reler PDF nem recalcular XBRL) compara com
+  `data_ultimo_balanco` salvo; mais novo -> a tela mostra o aviso "Balanço novo detectado, atualizar
+  dados fixos de [TICKER]?" sem sobrescrever nada sozinho (atualização manual, fora do escopo desta
+  issue). `verificar_novo=False` pula essa checagem (ex.: testes, ou pra não bater na fonte oficial
+  a cada carregamento de página).
+  Na tela (`tela/dados.dados_fixos_tela`, plugado em `montar()` como `dadosFixos`; renderizado em
+  `tela/detalhe.js`, card "Dados fixos" logo abaixo de "Fundamentos", card próprio - não substitui
+  nem duplica o card de P/L existente, que usa o Yahoo/robô de contábil e tem sua própria lógica de
+  Início do ano/Previsão atual/Guidance): mostra sempre Ações, LPA, P/L Atual, P/L Médio 12m,
+  Dividendo Anual, DY, Fonte + Data do balanço, e a conta de cada indicador embaixo (`contas`, ex.
+  "LPA: 140,40 / 12,89"). Ticker fora da fonte oficial mostra só a mensagem "Ticker não encontrado
+  na fonte oficial." (sem o card de indicadores). `app.dados_fixos_fonte(ticker)` é cacheado 1 dia
+  (ações/lucro/dividendo só mudam com balanço novo - não precisa bater na CVM/SEC a cada refresh);
+  a cotação do dia (já buscada pela tela, Yahoo) entra separadamente em `montar()`, nunca pelo
+  módulo de dados fixos.
 
 ## Textos
 
