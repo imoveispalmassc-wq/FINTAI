@@ -219,7 +219,7 @@ def brasil_ou_parcial(dia: str) -> dict:
         return e.args[0]
 
 
-def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]:
+def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str, dict]:
     usados = {}
 
     def do_indice(simbolos):
@@ -267,16 +267,23 @@ def comparadores(ticker: str, fim: pd.Timestamp, info: dict) -> tuple[dict, str]
     # sem o S&P 500 com dividendos (^SP500TR), o ^GSPC é só preço: o nome avisa
     if usados.get("^SP500TR") == "^GSPC":
         todos["sp500"]["nome"] = "S&P 500 (sem dividendos)"
-    # Bolsa da ação decide o primeiro comparador: B3 = Ibovespa, Nasdaq = Nasdaq, demais = S&P 500
-    bolsa = f"{info.get('exchange', '')} {info.get('fullExchangeName', '')}".lower()
+    # Issue #47 (item 16): nunca misturar moeda no gráfico de retorno. Ticker da B3 só mostra
+    # comparadores em R$ (Ibovespa, IPCA, Poupança); ticker dos EUA só em US$ (S&P 500, Nasdaq).
+    # Sem conversão BCB/Fed implementada ainda, um índice em moeda diferente simplesmente não
+    # entra (nunca mistura sem converter) - ver CLAUDE.md, item 16, para a limitação conhecida.
+    # CDI/Selic (BR) saem do grupo de índices: vão em "Renda fixa", separado (item 16), já que são
+    # outro tipo de investimento, não um índice de bolsa.
     if ticker.endswith(".SA"):
-        ordem = ["ibov", "cdi", "selic", "ipca", "poupanca", "sp500", "nasdaq"]
-    elif "nasdaq" in bolsa or info.get("exchange") in ("NMS", "NGM", "NCM"):
-        ordem = ["nasdaq", "sp500", "ibov", "cdi", "selic", "ipca", "poupanca"]
+        ordem = ["ibov", "ipca", "poupanca"]
     else:
-        ordem = ["sp500", "nasdaq", "ibov", "cdi", "selic", "ipca", "poupanca"]
+        bolsa = f"{info.get('exchange', '')} {info.get('fullExchangeName', '')}".lower()
+        ordem = ["nasdaq", "sp500"] if ("nasdaq" in bolsa or info.get("exchange") in ("NMS", "NGM", "NCM")) else ["sp500", "nasdaq"]
     padrao = ordem[0]
-    return {k: todos[k] for k in ordem}, padrao
+    # Renda fixa (BR): CDI e Selic, com a etiqueta de "outro tipo de investimento" na tela. Para
+    # tickers dos EUA não há hoje fonte equivalente (Fed Funds/T-Bill) integrada - fica vazio,
+    # nunca inventado (ver limitação no CLAUDE.md).
+    renda_fixa = {k: todos[k] for k in ("cdi", "selic")} if ticker.endswith(".SA") else {}
+    return {k: todos[k] for k in ordem}, padrao, renda_fixa
 
 
 @st.cache_data(ttl=86400, show_spinner=False)   # lista de ~10 mil tickers da SEC: a mesma pra
@@ -401,9 +408,9 @@ def pacote(ticker: str, versao: str = "") -> dict:
     hist = d["hist"]
     proventos = hist["Dividends"][hist["Dividends"] > 0] if "Dividends" in hist else None
     r = calcular(hist, proventos)
-    comps, padrao = comparadores(ticker, r.data_ultimo, d["info"])
+    comps, padrao, renda_fixa = comparadores(ticker, r.data_ultimo, d["info"])
     fixos = dados_fixos_fonte(ticker)
-    dados = montar(ticker, d, r, comps, padrao, dados_fixos=fixos)
+    dados = montar(ticker, d, r, comps, padrao, dados_fixos=fixos, renda_fixa=renda_fixa)
     if not dados.get("outlookTrimestral"):
         # o robô ainda não gravou (ticker novo, ou travado no anual e ainda não reprocessado):
         # busca na hora, pra não depender do próximo ciclo do workflow noturno

@@ -167,17 +167,16 @@ def pacote() -> dict:
         "retorno": {"periodos": ["1 ano", "3 anos", "5 anos"], "total": [228.8, 951, 931],
                     "preco": [228.47, 950.7, 930.3]},
         "preco1AnoAtras": um_ano["c"][0], "data1AnoAtras": "13/11/2025",
+        # issue #47, item 16: ticker dos EUA só mostra comparadores em US$ (nunca Ibovespa/CDI/
+        # Selic/IPCA/Poupança sem conversão) - "rendaFixa" fica vazio pra MU (sem fonte Fed/T-Bill).
         "comparadores": {
             "nasdaq": comp("Nasdaq", "Nasdaq", "do índice", "US$", [None, None, None]),   # sem o valor real ainda
             "sp500": comp("S&P 500", "S&P", "do índice", "US$", [14, 78, 73]),
-            "ibov": comp("Ibovespa", "Ibovespa", "do índice", "R$", [18, 45, 62]),
-            "cdi": comp("CDI", "CDI", "do CDI", "R$", [14.5, 42, 68]),
-            "selic": comp("Selic", "Selic", "da Selic", "R$", [15, 43, 69]),
-            "ipca": comp("IPCA", "IPCA", "do IPCA", "R$", [4.5, 15, 28]),
-            "poupanca": comp("Poupança", "Poupança", "da poupança", "R$", [8.5, 24, 38]),
         },
         "comparadorPadrao": "nasdaq",
+        "rendaFixa": {},
         "backtest": {"5a": bt5, "max": btmax},
+        "seloFundamentos": None,
         "decisao": {"codigo": estado.codigo, "rotulo": estado.rotulo, "texto": estado.texto,
                     "zona": estado.zona, "validado": estado.validado, "alerta": estado.alerta},
         "zOport": round(faixa.oportunidade_ate, 4), "zCara": round(faixa.cara_acima, 4),

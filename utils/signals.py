@@ -83,8 +83,9 @@ class Estado:
     codigo: str   # COMPRAR | AGUARDAR | CARO
     rotulo: str
     texto: str
-    zona: str     # Zona de oportunidade | Zona neutra | Zona cara
-    validado: bool = False   # só faz sentido na Zona de Oportunidade
+    zona: str     # Faixa inferior | Zona neutra | Faixa superior (issue #47, item 10: nomes sem
+                  # julgamento de valor - "Oportunidade"/"Cara" tirados do texto, cores mantidas)
+    validado: bool = False   # só faz sentido na Faixa inferior
     alerta: str = ""         # aviso de fundamento quebrado; não muda o botão
 
 
@@ -109,10 +110,10 @@ def decidir_estado(percentil: float, minimo: float, maximo: float, *,
     if percentil <= P_OPORTUNIDADE:
         if not compra_validada:
             avisos.append("Comprar nessa zona não foi validado pelo histórico deste ativo.")
-        return Estado("COMPRAR", "COMPRAR - Oportunidade", texto, "Zona de oportunidade",
+        return Estado("COMPRAR", "COMPRAR - Oportunidade", texto, "Faixa inferior",
                       compra_validada, " ".join(avisos))
     if percentil > P_CARO:
-        return Estado("CARO", "CARO - Evitar", texto, "Zona cara", False, " ".join(avisos))
+        return Estado("CARO", "CARO - Evitar", texto, "Faixa superior", False, " ".join(avisos))
     return Estado("AGUARDAR", "AGUARDAR - Neutro", texto, "Zona neutra", False, " ".join(avisos))
 
 
@@ -133,9 +134,9 @@ def decidir_estado_conservador(preco: float, teto: float, caro_acima: float | No
     texto = f"Ponto de oportunidade em {simbolo} {num(alvo)}"
     avisos = [f"Atenção: {motivo_quebra}."] if quebrou and motivo_quebra else []
     if preco <= alvo:
-        return Estado("COMPRAR", "COMPRAR - Oportunidade", texto, "Zona de oportunidade", False, " ".join(avisos))
+        return Estado("COMPRAR", "COMPRAR - Oportunidade", texto, "Faixa inferior", False, " ".join(avisos))
     if preco > caro_acima:
-        return Estado("CARO", "CARO - Evitar", texto, "Zona cara", False, " ".join(avisos))
+        return Estado("CARO", "CARO - Evitar", texto, "Faixa superior", False, " ".join(avisos))
     return Estado("AGUARDAR", "AGUARDAR - Neutro", texto, "Zona neutra", False, " ".join(avisos))
 
 
@@ -210,3 +211,64 @@ def backtest_percentil(hist: pd.DataFrame, anos: float | None = 5) -> dict:
         "anos": coberto,
         "insuficiente": anos is not None and coberto < anos - 0.25,
     }
+
+
+# ------------------------------------------------------------ selo de fundamentos (issue #47, item 11)
+def avaliar_fundamentos(*, lucro_caindo: bool | None, lucro_trimestres_seguidos: int | None = None,
+                        prejuizo: bool = False, roe_caindo: bool | None, roe_abaixo_10: bool | None = None,
+                        roe_trimestres_seguidos: int | None = None, paga_dividendo: bool = True,
+                        dividendo_cortado: bool | None = None, dividendo_cortes_seguidos: int | None = None,
+                        divida_subindo: bool | None = None) -> dict | None:
+    """Selo de Fundamentos: só um FATO de fundamento, nunca uma recomendação de compra/venda.
+
+    REGRA TRAVADA: lucro é SEMPRE o LPA CONTÁBIL (nunca ajustado) - se o contábil caiu, conta
+    contra a empresa mesmo que o ajustado esteja bonito.
+
+    Os 3 fundamentos avaliados: (1) lucro contábil caindo contra o mesmo trimestre do ano
+    anterior (já no 1º trimestre em que isso acontece); (2) ROE caindo contra 12 meses atrás;
+    (3) dividendo cortado/reduzido contra 12 meses atrás (ignorado para quem não paga dividendo,
+    ex. MU - usa só lucro + ROE).
+
+    Esta função é pura: quem chama decide se há histórico trimestral suficiente para preencher
+    cada argumento. SEM histórico suficiente para lucro OU ROE (os dois fundamentos universais -
+    ver `paga_dividendo`), devolve None e o selo não aparece: nunca inventamos a comparação.
+
+    LIMITAÇÃO CONHECIDA (ver CLAUDE.md): hoje o projeto não guarda histórico trimestral de ROE
+    nem trimestres suficientes (5+) de LPA contábil para a comparação "mesmo trimestre do ano
+    anterior" em nenhuma fonte (utils/contabil_br.json e utils/contabil_sec.json guardam só os
+    últimos 4 trimestres). Por isso, hoje em dia esta função é sempre chamada com
+    lucro_caindo=None e roe_caindo=None, e o selo nunca aparece na tela - está implementada e
+    testada, pronta para ligar quando esse histórico existir.
+    """
+    if lucro_caindo is None or roe_caindo is None:
+        return None
+    ruins = [bool(lucro_caindo), bool(roe_caindo)]
+    if paga_dividendo:
+        if dividendo_cortado is None:
+            return None
+        ruins.append(bool(dividendo_cortado))
+    n_ruins = sum(ruins)
+    if n_ruins == 0:
+        return None
+
+    # Nível 3 (estrutural, 2+ trimestres seguidos): lucro caindo 3-4 trimestres seguidos OU
+    # prejuízo; e ROE caindo e abaixo de 10% por 2+ trimestres seguidos; e (se paga dividendo)
+    # dividendo cortado 2x seguidas; e dívida subindo.
+    estrutural = (
+        (prejuizo or (lucro_trimestres_seguidos is not None and lucro_trimestres_seguidos >= 3))
+        and roe_caindo and bool(roe_abaixo_10) and (roe_trimestres_seguidos is not None and roe_trimestres_seguidos >= 2)
+        and bool(divida_subindo)
+        and (not paga_dividendo or (dividendo_cortes_seguidos is not None and dividendo_cortes_seguidos >= 2))
+    )
+    if estrutural:
+        return {"nivel": 3, "titulo": "Fundamentos deteriorados",
+                "subtexto": "Lucro, ROE e dividendo piorando juntos há mais de 2 trimestres. Preço baixo aqui não é desconto, é reflexo do fundamento."}
+    if n_ruins >= 2:
+        return {"nivel": 2, "titulo": "Fundamentos em alerta",
+                "subtexto": "Preço baixo não significa barato. Verifique os fundamentos antes de decidir."}
+    nomes = {0: "Lucro", 1: "ROE"}
+    if paga_dividendo:
+        nomes[2] = "Dividendo"
+    idx_ruim = ruins.index(True)
+    return {"nivel": 1, "titulo": f"Observar: {nomes[idx_ruim]}",
+            "subtexto": "1 fundamento em alerta. Verifique antes de decidir."}

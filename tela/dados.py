@@ -20,7 +20,7 @@ from utils.lynch import crescimento_anual, peg, preco_lynch, regra_prejuizo, ver
 from utils.override import guidance as guidance_oficial
 from utils.override import guidance_inicial
 from utils.percentile import percentil_na_faixa, zonas
-from utils.signals import (backtest_percentil, decidir_estado, decidir_estado_conservador,
+from utils.signals import (avaliar_fundamentos, backtest_percentil, decidir_estado, decidir_estado_conservador,
                            fundamento_quebrou, selo_backtest)
 from utils.simons import SELO as SELO_SIMONS
 from utils.simons import JANELA, classificar, historico, leitura, melhor_linha, queda_desde_topo, timing
@@ -486,7 +486,8 @@ def dados_fixos_tela(fixos: dict | None, cotacao: float | None) -> dict | None:
             "dividendoAdr": _n(ind["dividendoAdr"], 4), "contas": ind["contas"]}
 
 
-def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str, dados_fixos: dict | None = None) -> dict:
+def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str, dados_fixos: dict | None = None,
+          renda_fixa: dict | None = None) -> dict:
     """Pacote completo da tela para um ticker."""
     info, hist = d["info"], d["hist"]
     cod = info.get("currency") or ("BRL" if ticker.endswith(".SA") else "USD")
@@ -618,7 +619,12 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str, 
         "preco1AnoAtras": um_ano["c"][0] if um_ano else None,
         "data1AnoAtras": f"{pd.Timestamp(um_ano['t'][0], unit='ms'):%d/%m/%Y}" if um_ano else None,
         "dadosFixos": dados_fixos_tela(dados_fixos, r.preco_atual),
-        "comparadores": comparadores, "comparadorPadrao": padrao,
+        "comparadores": comparadores, "comparadorPadrao": padrao, "rendaFixa": renda_fixa or {},
+        # Selo de Fundamentos (issue #47, item 11): hoje o projeto não guarda histórico trimestral
+        # de ROE nem trimestres suficientes de LPA contábil para a comparação "mesmo trimestre do
+        # ano anterior" - por isso lucro_caindo/roe_caindo entram None e o selo nunca aparece
+        # (avaliar_fundamentos devolve None nesse caso). Ver limitação no CLAUDE.md.
+        "seloFundamentos": avaliar_fundamentos(lucro_caindo=None, roe_caindo=None),
         "backtest": {"5a": bt5, "max": btmax},
         "decisao": {"codigo": estado.codigo, "rotulo": estado.rotulo, "texto": estado.texto, "zona": estado.zona,
                     "validado": estado.validado, "alerta": estado.alerta},
