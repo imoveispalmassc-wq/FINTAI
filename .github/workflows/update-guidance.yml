@@ -55,7 +55,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           python -m utils.fetch_guidance aplicar plano.json --tipo commit --aviso publicado.md
-          # contabil_sec.json / contabil_br.json (TTM) NÃO entram aqui: REGRA 6 - TTM automático vai por PR (passo final)
+          # contabil_sec.json / contabil_br.json (TTM) NÃO entram aqui: REGRA 6 - TTM automático vai por PR (passo final).
+          # Mas o script acima pode deixá-los modificados no working tree - sem guardar (stash) antes,
+          # o git rebase abaixo falha com "cannot rebase: you have unstaged changes" e trava o job inteiro,
+          # inclusive o passo final que abriria o PR do TTM.
+          git stash push --include-untracked -- utils/contabil_sec.json utils/contabil_br.json || true
           arquivos="utils/guidance_auto.json utils/guidance_inicial.json utils/guidance_log.json utils/guidance_trimestral_eua.json"
           if ! git diff --quiet -- $arquivos; then
             git config user.name "github-actions[bot]"
@@ -69,6 +73,7 @@ jobs:
           else
             echo "Nada passou nas 4 travas hoje."
           fi
+          git stash pop || true
           if [ -f publicado.md ]; then
             gh issue create --title "Guidance publicado sozinho ($(date -u +%d/%m/%Y))" --body-file publicado.md
           fi
