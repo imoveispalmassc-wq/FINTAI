@@ -911,14 +911,14 @@ function montar(root, d) {
   /* ---------------- indicadores */
   (function Indicators(el) {
     const difPL = tem(d.pl) && tem(d.plMedio12) && d.plMedio12 > 0 ? (d.pl / d.plMedio12 - 1) * 100 : null;
-    const q = qtd(d.acoes), por10k = tem(dy) ? din(10000 * d.dividendo / d.preco) : null;
+    const q = qtd(d.acoes);
     const medioSub = { trimestral: 'com o LPA de cada trimestre', contabil: 'com o lucro contábil de cada balanço', simplificado: 'preço médio do ano ÷ LPA atual' }[d.plMetodo] || '';
     const c = (rot, v, sub, dica) => [rot, v, sub, dica];
     const cartoes = [
       c('P/L atual', tem(d.pl) ? f(d.pl) : null, tem(difPL) ? `${sinal(difPL)} vs. média de 12m` : '', `Você paga ${din(d.pl)} para cada ${d.moeda} 1 de lucro. Conta: ${f(d.preco)} / ${f(d.lpa)} = ${f(d.pl)}`),
       c('P/L médio 12 meses', tem(d.plMedio12) ? f(d.plMedio12) : null, medioSub, d.plMetodo === 'simplificado' ? 'Estimativa: preço médio do ano dividido pelo LPA atual, porque o Yahoo não traz o lucro de cada trimestre.' : d.plMetodo === 'contabil' ? `Média do P/L de cada pregão desde ${d.mediaDesde}, com o lucro contábil em vigor em cada data.` : 'Média do P/L de cada pregão do último ano, com o lucro já divulgado em cada data.'),
       c('LPA básico', tem(d.lpa) ? din(d.lpa) : null, 'últimos 12 meses', `Lucro por ação. Cada ação ganhou ${din(d.lpa)} em 12 meses.${q ? ` Conta: Lucro / ${q} de ações` : ''}`),
-      c('Dividendo anual', tem(d.dividendo) ? din(d.dividendo) : null, 'pago em 12 meses', `O que pingou na sua conta por ação em 12 meses.${por10k ? ` Se investir ${d.moeda} 10.000, recebe ${por10k} / ano.` : ''}`),
+      c('Dividendo anual', tem(d.dividendo) ? din(d.dividendo) : null, 'pago em 12 meses', `O que pingou na sua conta por ação em 12 meses.`),
       c('Dividend yield', tem(dy) ? `${f(dy)}%` : null, tem(dy) ? `${f(d.dividendo)} / ${f(d.preco)}` : '', `Quanto o dividendo representa sobre o preço. ${f(d.dividendo)} / ${f(d.preco)} = ${f(dy)}%.${naoPagadora ? ` É baixo porque a ${d.ticker} reinveste o lucro, não porque está com problema.` : ''}`),
       c('Ações em circulação', q, 'quantos pedaços a empresa foi dividida', `A ${d.ticker} foi fatiada em ${q} de ações.`),
     ];
