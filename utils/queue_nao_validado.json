@@ -3,6 +3,10 @@
     "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior",
     "data": "20/11/2026"
   },
+  "ARM": {
+    "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior",
+    "data": "26/11/2026"
+  },
   "ASML": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior",
     "data": "21/11/2026"
@@ -19,6 +23,18 @@
     "motivo": "TRAVADO - Número em 2 lugares: a faixa aparece 1 vez(es) no documento; precisa de 2 (texto + tabela); Variação até 20%: sem guidance anterior no app para comparar",
     "data": "21/11/2026"
   },
+  "BPAC3": {
+    "motivo": "CNPJ não encontrado no cadastro da CVM",
+    "data": "26/11/2026"
+  },
+  "BTG": {
+    "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior",
+    "data": "26/11/2026"
+  },
+  "CBRS": {
+    "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior",
+    "data": "26/11/2026"
+  },
   "CSMG3": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
     "data": "21/11/2026"
@@ -27,6 +43,10 @@
     "motivo": "TRAVADO - Número em 2 lugares: a faixa aparece 1 vez(es) no documento; precisa de 2 (texto + tabela); Variação até 20%: sem guidance anterior no app para comparar",
     "data": "21/11/2026"
   },
+  "FIQE3": {
+    "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
+    "data": "26/11/2026"
+  },
   "GAP": {
     "motivo": "TRAVADO - Número em 2 lugares: a faixa aparece 1 vez(es) no documento; precisa de 2 (texto + tabela); Variação até 20%: sem guidance anterior no app para comparar; API do Claude",
     "data": "21/11/2026"
@@ -34,6 +54,10 @@
   "ITUB": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior",
     "data": "21/11/2026"
+  },
+  "KLBN4": {
+    "motivo": "CNPJ não encontrado no cadastro da CVM",
+    "data": "26/11/2026"
   },
   "MU": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes)",
@@ -46,6 +70,14 @@
   "NVO": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior",
     "data": "21/11/2026"
+  },
+  "PSSA3": {
+    "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
+    "data": "26/11/2026"
+  },
+  "SUZB3": {
+    "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
+    "data": "26/11/2026"
   },
   "TAEE11": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
