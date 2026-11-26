@@ -1,0 +1,81 @@
+name: Revisar divergência automática
+
+# Issue #48, item 9: quando um robô (TTM diário em utils/ttm_auto.py, ou a biblioteca própria em
+# utils/biblioteca.py) acha um número diferente do que já estava salvo, ele mesmo abre uma Issue
+# (label "divergencia", utils.divergencia.abrir_issue_divergencia). Este workflow dispara nessa
+# Issue e chama a API do Claude para revisar com as MESMAS 4 travas do AUTOMÁTICO COM PROTEÇÃO
+# (utils.fetch_guidance.avaliar_travas, reaproveitada por utils.divergencia - a lógica das travas
+# não é duplicada).
+#
+# Passou nas 4 travas -> abre um pull request com a correção sugerida (NUNCA comita direto na
+# main - mesma regra travada de REGRA 6 do TTM automático). Merge publica, fechar descarta.
+# Travou em alguma -> comenta qual trava falhou e deixa a Issue aberta esperando a decisão
+# humana (não fecha, não publica nada).
+#
+# LIMITAÇÃO CONHECIDA (ver utils/divergencia.py): a Issue não carrega o texto completo do
+# documento oficial, então a trava "Número em 2 lugares" quase sempre falha aqui - a maioria das
+# divergências revisadas por este workflow fica travada esperando decisão humana, o que é
+# intencional e do lado seguro.
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  revisar:
+    # só roda pra Issues com a label "divergencia" (ver utils/divergencia.py, LABEL = "divergencia")
+    if: contains(github.event.issue.labels.*.name, 'divergencia')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências do robô
+        run: pip install -r requirements-guidance.txt
+
+      - name: Salvar o corpo da Issue
+        env:
+          CORPO: ${{ github.event.issue.body }}
+        run: printf '%s' "$CORPO" > /tmp/issue_corpo.md
+
+      - name: Revisar com as 4 travas (mesma lógica do guidance automático)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m utils.divergencia revisar --corpo /tmp/issue_corpo.md --saida /tmp/revisao.json
+
+      - name: Abrir PR (passou nas 4 travas) ou comentar (travou)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PUBLICA=$(python -c "import json; print('1' if json.load(open('/tmp/revisao.json'))['decisao']['publica'] else '0')")
+          MOTIVO=$(python -c "import json; print(json.load(open('/tmp/revisao.json'))['decisao']['motivo'])")
+          TICKER=$(python -c "import json; print(json.load(open('/tmp/revisao.json'))['campos'].get('ticker',''))")
+          CAMPO=$(python -c "import json; print(json.load(open('/tmp/revisao.json'))['campos'].get('campo',''))")
+          NOVO=$(python -c "import json; print(json.load(open('/tmp/revisao.json'))['campos'].get('novo',''))")
+          echo "$MOTIVO"
+          if [ "$PUBLICA" = "1" ] && [ -n "$TICKER" ] && [ -n "$CAMPO" ]; then
+            ramo="divergencia/revisar-${{ github.event.issue.number }}"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git checkout -b "$ramo"
+            python -m utils.divergencia aplicar --ticker "$TICKER" --campo "$CAMPO" --valor "$NOVO" \
+              --caminho utils/biblioteca.json
+            git add utils/biblioteca.json
+            git commit -m "Divergência revisada e confirmada: $TICKER.$CAMPO = $NOVO (Issue #${{ github.event.issue.number }})"
+            git push --force origin "$ramo"
+            gh pr create --base main --head "$ramo" \
+              --title "Divergência confirmada: $TICKER - revisar (Issue #${{ github.event.issue.number }})" \
+              --body "Passou nas 4 travas do AUTOMÁTICO COM PROTEÇÃO: $MOTIVO. Closes #${{ github.event.issue.number }}" \
+              || gh pr edit "$ramo" --body "Revisão automática atualizada: $MOTIVO"
+          else
+            gh issue comment ${{ github.event.issue.number }} --body "🔒 Revisão automática (API do Claude, mesmas 4 travas do AUTOMÁTICO COM PROTEÇÃO): $MOTIVO. Esta Issue continua aberta esperando a sua decisão (merge do PR publica, fechar a Issue descarta)."
+          fi

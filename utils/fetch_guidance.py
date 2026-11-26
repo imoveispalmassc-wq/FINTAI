@@ -2063,6 +2063,7 @@ def _ler_json(caminho: Path, padrao):
 
 # ------------------------------------------------------------ fila pública de tickers novos (Issues do GitHub)
 def processar_fila(hoje: dt.date | None = None, *, token: str | None = None, max_por_run: int = FILA_MAX_POR_RUN,
+                   numero: int | None = None,
                    listar=None, fechar=None, planejar_br=planejar_ticker, planejar_us=planejar_ticker_eua) -> list[dict]:
     """Processa a fila pública (Issues "fila-ticker", ver utils/fila_github.py): tenta validar o
     guidance de cada ticker novo com as MESMAS travas de "Fonte oficial" e "Número em 2 lugares"
@@ -2072,7 +2073,10 @@ def processar_fila(hoje: dt.date | None = None, *, token: str | None = None, max
     para de mostrar "ainda não verificado" para ele. Nunca inventa número: na dúvida, não cadastra.
 
     Processa no máximo `max_por_run` por execução (a mais pedida primeiro); o resto fica na fila
-    para a próxima execução do workflow."""
+    para a próxima execução do workflow. `numero` (Issue #48, item 7): quando informado, processa
+    SÓ a Issue com esse número (o gatilho `issues: opened` do workflow passa o número da Issue que
+    acabou de abrir, pra validar aquele ticker 1 única vez em até ~2 minutos, sem reprocessar o
+    lote inteiro de `max_por_run` tickers do schedule)."""
     hoje = hoje or dt.date.today()
     token = token or os.environ.get("GITHUB_QUEUE_TOKEN")
     if not token:
@@ -2090,6 +2094,11 @@ def processar_fila(hoje: dt.date | None = None, *, token: str | None = None, max
         log.warning("fila: não consegui ler a fila (%s: %s)", e.__class__.__name__, e)
         return []
     candidatos = [f for f in fila if f["ticker"].upper() not in registrados and f["ticker"].upper() not in nao_validados]
+    if numero is not None:
+        candidatos = [f for f in candidatos if f["numero"] == numero]
+        if not candidatos:
+            log.info("fila: issue #%s não está na fila (já processada, formato inválido ou fechada)", numero)
+            return []
     resultados = []
     for item in candidatos[:max_por_run]:
         ticker = item["ticker"].strip().upper()
@@ -2337,6 +2346,8 @@ def main(argv: list[str] | None = None) -> int:
     pr.add_argument("--saida", default="resumo.md")
     pf = sub.add_parser("fila", help="processa a fila pública de tickers novos (Issues do GitHub)")
     pf.add_argument("--max", type=int, default=FILA_MAX_POR_RUN)
+    pf.add_argument("--issue", type=int, default=None,
+                    help="processa só esta Issue (nº), disparado pelo gatilho issues:opened - Issue #48 item 7")
     sub.add_parser("outlook-trimestral", help="guidance trimestral (EUA), só informativo")
     args = p.parse_args(argv)
     if args.cmd == "outlook-trimestral":
@@ -2347,7 +2358,7 @@ def main(argv: list[str] | None = None) -> int:
         Path(args.saida).write_text(resumo_semana(_ler_json(ARQ_LOG, []), dt.date.today(), args.dias), encoding="utf-8")
         return 0
     if args.cmd == "fila":
-        resultados = processar_fila(max_por_run=args.max)
+        resultados = processar_fila(max_por_run=args.max, numero=args.issue)
         validados = sum(r["validado"] for r in resultados)
         log.info("fila: %d ticker(s) processado(s), %d validado(s), %d travado(s)",
                  len(resultados), validados, len(resultados) - validados)

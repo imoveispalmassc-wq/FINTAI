@@ -3,13 +3,20 @@ name: Processar fila pública de tickers novos
 # Usuários do app pedem tickers que ainda não estão em utils/guidance_tickers.json; o app registra
 # o pedido como uma Issue "Fila: TICKER" (label fila-ticker), porque o app não tem permissão de
 # gravar no repositório. Este workflow lê essas Issues, valida o guidance com as mesmas travas do
-# AUTOMÁTICO COM PROTEÇÃO e fecha cada Issue com o resultado. Roda 4x por dia para esvaziar a fila
-# aos poucos mesmo em dias de pico, sem precisar de cadastro manual.
+# AUTOMÁTICO COM PROTEÇÃO e fecha cada Issue com o resultado.
+#
+# Issue #48, item 7: dispara em até ~2 minutos quando uma Issue nova de fila abre (gatilho
+# `issues: opened`), processando SÓ aquele ticker (--issue NÚMERO, não o lote de 15 do schedule).
+# O schedule de 6h continua como fallback/backup, para o caso de o evento de issue falhar ou não
+# disparar (ex.: webhook perdido, token sem permissão naquele momento) - processa o resto da fila
+# em lote, do mais pedido para o menos pedido, como antes.
 
 on:
   schedule:
-    - cron: "0 */6 * * *"   # a cada 6 horas (4x por dia)
+    - cron: "0 */6 * * *"   # a cada 6 horas - fallback/backup, não só pra esvaziar a fila aos poucos
   workflow_dispatch: {}     # botão "Run workflow" para rodar na hora
+  issues:
+    types: [opened]         # dispara na hora quando uma Issue "Fila: TICKER" abre
 
 permissions:
   contents: write
@@ -21,6 +28,9 @@ concurrency:
 
 jobs:
   fila:
+    # só roda pro gatilho de Issue quando a label for fila-ticker (ver utils/fila_github.py,
+    # LABEL = "fila-ticker") - outras Issues abertas no repositório não disparam este workflow.
+    if: github.event_name != 'issues' || contains(github.event.issue.labels.*.name, 'fila-ticker')
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -33,7 +43,16 @@ jobs:
       - name: Instalar dependências do robô
         run: pip install -r requirements-guidance.txt
 
-      - name: Processar a fila (valida ou trava, sem inventar número)
+      - name: Processar só o ticker desta Issue (dispara em até ~2 min, 1 única vez)
+        if: github.event_name == 'issues'
+        env:
+          GITHUB_QUEUE_TOKEN: ${{ secrets.QUEUE_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SEC_CONTACT_EMAIL: ${{ secrets.SEC_CONTACT_EMAIL }}
+        run: python -m utils.fetch_guidance fila --issue ${{ github.event.issue.number }}
+
+      - name: Processar a fila em lote (schedule/manual - fallback/backup)
+        if: github.event_name != 'issues'
         env:
           GITHUB_QUEUE_TOKEN: ${{ secrets.QUEUE_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -50,6 +69,10 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add utils/guidance_tickers.json utils/queue_nao_validado.json
             git commit -m "Fila de tickers: validados e travados ($(date -u +'%d/%m/%Y %H:%M') UTC)"
+            # o job por Issue pode disparar várias vezes em paralelo (issues abertas quase juntas);
+            # busca o que entrou no main nesse tempo antes de empurrar, como o update-guidance.yml já faz.
+            git fetch origin main
+            git rebase origin/main
             git push origin HEAD:main
           else
             echo "Fila vazia ou nada resolvido nesta execução."

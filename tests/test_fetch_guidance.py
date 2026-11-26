@@ -877,6 +877,48 @@ def test_fila_pula_erro_de_configuracao_sem_bloquear_o_ticker(tmp_path, monkeypa
     assert not fechadas and not (tmp_path / "nv.json").exists()
 
 
+# ------------------------------------------------------------ fila por Issue (Issue #48, item 7)
+def test_fila_por_issue_processa_so_o_numero_pedido(tmp_path, monkeypatch):
+    """Gatilho `issues: opened` do workflow: processa só a Issue que acabou de abrir, mesmo
+    havendo outros tickers na fila (que ficam para o schedule de 6h, sem reprocessar o lote)."""
+    monkeypatch.setattr(fg, "ARQ_TICKERS", tmp_path / "tickers.json")
+    monkeypatch.setattr(fg, "ARQ_NAO_VALIDADO", tmp_path / "nv.json")
+    fila = [{"ticker": "VALE3", "numero": 10, "pedidos": 7},
+           {"ticker": "WEGE3", "numero": 11, "pedidos": 1}]
+    chamados = []
+    validado = {"acao": "pr", "novo": {"lucro_min": 1, "lucro_max": 2}, "motivo": "passou nas 4 travas",
+               "travas": [{"nome": "Fonte oficial", "ok": True}, {"nome": "Número em 2 lugares", "ok": True},
+                         {"nome": "Variação até 20%", "ok": False}, {"nome": "P/L plausível", "ok": True}]}
+    resultados = fg.processar_fila(
+        HOJE, token="tok", numero=11, listar=lambda tok: fila, fechar=lambda n, tok, c: None,
+        planejar_br=lambda t, h, a, v: chamados.append(t) or validado)
+    assert chamados == ["WEGE3"]                       # só a issue #11 (VALE3 fica para o schedule)
+    assert [r["ticker"] for r in resultados] == ["WEGE3"]
+
+
+def test_fila_por_issue_numero_nao_encontrado_nao_processa_nada(tmp_path, monkeypatch):
+    monkeypatch.setattr(fg, "ARQ_TICKERS", tmp_path / "tickers.json")
+    monkeypatch.setattr(fg, "ARQ_NAO_VALIDADO", tmp_path / "nv.json")
+    chamados = []
+    resultados = fg.processar_fila(
+        HOJE, token="tok", numero=999, listar=lambda tok: [{"ticker": "VALE3", "numero": 10, "pedidos": 1}],
+        fechar=lambda n, tok, c: None, planejar_br=lambda t, h, a, v: chamados.append(t))
+    assert resultados == [] and not chamados
+
+
+def test_fila_por_issue_ignora_ticker_ja_registrado(tmp_path, monkeypatch):
+    """Mesma regra de dedup do lote: se o ticker da Issue já foi validado/travado antes, não
+    processa de novo mesmo quando o número da Issue bate (ex.: Issue reaberta por engano)."""
+    monkeypatch.setattr(fg, "ARQ_TICKERS", tmp_path / "tickers.json")
+    monkeypatch.setattr(fg, "ARQ_NAO_VALIDADO", tmp_path / "nv.json")
+    (tmp_path / "tickers.json").write_text('["VALE3"]', encoding="utf-8")
+    chamados = []
+    resultados = fg.processar_fila(
+        HOJE, token="tok", numero=10, listar=lambda tok: [{"ticker": "VALE3", "numero": 10, "pedidos": 1}],
+        fechar=lambda n, tok, c: None, planejar_br=lambda t, h, a, v: chamados.append(t))
+    assert resultados == [] and not chamados
+
+
 # ------------------------------------------------------------ histórico (janela deslizante) da API do Claude
 def test_api_br_historico_consistente_e_propagado():
     texto = "Guidance 2026: lucro líquido ajustado entre R$ 9 bilhões e R$ 11 bilhões, payout de 25%."

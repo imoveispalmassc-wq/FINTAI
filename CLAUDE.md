@@ -64,17 +64,102 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   `fila-ticker`) pelo `utils/fila_github.py`, usando o Secret `GITHUB_QUEUE_TOKEN` (permissão só de Issues, nunca de
   conteúdo do repositório - o app nunca grava arquivo). Pedidos repetidos do mesmo ticker só comentam na issue já
   aberta (dedup; "pedidos" = 1 + comentários), e o aviso só aparece 1x por ticker por sessão do navegador.
-  `.github/workflows/fila-tickers.yml` roda a cada 6 horas (ou pelo Run workflow) e processa até
-  `FILA_MAX_POR_RUN` (15) tickers por execução, do mais pedido para o menos pedido (`processar_fila` em
-  `utils/fetch_guidance.py`): tenta achar o guidance com as mesmas travas de "Fonte oficial" e "Número em 2
-  lugares" do AUTOMÁTICO COM PROTEÇÃO. Validado: entra em `guidance_tickers.json` (o robô diário passa a
-  acompanhar; o guidance em si só aparece depois que o dono aprovar o primeiro PR, igual qualquer ticker novo -
-  a fila nunca pula essa aprovação). Não validado: grava para sempre em `utils/queue_nao_validado.json` com o
-  motivo, fecha a issue explicando, e o app para de mostrar o aviso "ainda não verificado" para esse ticker (ele
-  passa a mostrar só TTM/P/L do Yahoo, igual qualquer ticker sem guidance - nunca número inventado). Erro de
-  configuração (ex.: falta `SEC_CONTACT_EMAIL`) não trava o ticker: ele continua na fila para a próxima execução.
+  `.github/workflows/fila-tickers.yml` dispara de 2 jeitos (Issue #48, item 7): (1) `issues: opened`
+  filtrado pela label `fila-ticker` - processa só o ticker daquela Issue (`--issue NÚMERO`) em até ~2 minutos,
+  1 única vez, sem reprocessar o lote; (2) `schedule` a cada 6 horas (ou "Run workflow") como FALLBACK/BACKUP,
+  caso o evento de Issue falhe ou não dispare - processa até `FILA_MAX_POR_RUN` (15) tickers por execução, do
+  mais pedido para o menos pedido. Os dois caminhos chamam a mesma `processar_fila` (`utils/fetch_guidance.py`,
+  parâmetro `numero` filtra pra 1 Issue só) e a mesma lógica: tenta achar o guidance com as mesmas travas de
+  "Fonte oficial" e "Número em 2 lugares" do AUTOMÁTICO COM PROTEÇÃO. Validado: entra em `guidance_tickers.json`
+  (o robô diário passa a acompanhar; o guidance em si só aparece depois que o dono aprovar o primeiro PR, igual
+  qualquer ticker novo - a fila nunca pula essa aprovação). Não validado: grava para sempre em
+  `utils/queue_nao_validado.json` com o motivo, fecha a issue explicando, e o app para de mostrar o aviso "ainda
+  não verificado" para esse ticker (ele passa a mostrar só TTM/P/L do Yahoo, igual qualquer ticker sem guidance -
+  nunca número inventado). Erro de configuração (ex.: falta `SEC_CONTACT_EMAIL`) não trava o ticker: ele continua
+  na fila para a próxima execução. A atualização de cotação (a cada 2 minutos, pelo app) é outro mecanismo
+  completamente separado - não é tocada por nada disso.
 - A página de exemplo (`docs/index.html`, gerada por `tools/gerar_demo.py`) não busca dados.
   Qualquer valor nela sem fonte real fica vazio ou marcado como EXEMPLO.
+
+## Biblioteca própria (Perplexity) e divergência automática - Issue #48, itens 8 e 9
+
+- `utils/biblioteca.py` é um cache novo e genérico para qualquer dado fundamentalista pesquisado
+  (LPA, lucro, dividendo, ROE etc.) - `utils/biblioteca.json`, no MESMO padrão dos outros caches
+  do projeto (`contabil_br.json`/`contabil_sec.json`: ticker -> campo -> registro com valor, fonte
+  e data/hora). Ponto de entrada único: `obter(ticker, campo, periodo, hoje)`.
+  1. Biblioteca primeiro (`buscar_na_biblioteca`): se já tem o dado e não está desatualizado (mais
+     de `DIAS_DESATUALIZADO` = 120 dias desde a pesquisa - a MESMA régua de ~1 trimestre já usada
+     em `IDADE_MAXIMA_DIAS`, utils/fetch_guidance.py, em vez de inventar um limite novo), usa.
+  2. Sem dado, desatualizado, OU se a busca externa (`buscar_externo`, ex.: as mesmas funções de
+     SEC/CVM/RI que o resto do projeto já usa, na mesma ordem já definida) falhar - inclusive "o
+     Yahoo quebrou" (erro de rede/parsing) - cai para a Perplexity (`pesquisar_via_perplexity`),
+     com o PROMPT PADRÃO EXATO da Issue #48 (`montar_prompt_perplexity`/`PROMPT_PADRAO` - não
+     mudar o texto do prompt: pede Contábil e Ajustado em colunas separadas, núcleo sempre +
+     bloco de banco ou de não-banco).
+  3. A Perplexity só traz o dado com a fonte citada; a API do Claude (`confirmar_com_claude`,
+     mesma regra de confiança baixa do guidance automático em `ler_com_claude`) só CONFIRMA ou
+     CORRIGE o número que a Perplexity já trouxe - nunca inventa um número por conta própria. O
+     trecho que a API devolve tem de existir na resposta da Perplexity (mesma ideia de `_confere`
+     do guidance automático), senão a leitura é descartada.
+  4. Achado um dado novo (de onde vier), `salvar_na_biblioteca` grava na hora, com fonte e
+     data/hora, antes de devolver pra quem chamou.
+  REGRA TRAVADA - CONTÁBIL É SEMPRE O PRINCIPAL (REGRA 1 do TTM): o registro guarda `valor`
+  (contábil, sempre o principal) e `valor_ajustado` (opcional) em campos separados - nunca
+  misturados no mesmo cálculo; quem lê a biblioteca só mostra o ajustado com a etiqueta
+  "[Ajustado]". `.github/workflows/biblioteca-perplexity.yml` roda todo dia (depois do guidance
+  automático) ou pelo "Run workflow", chama `python -m utils.biblioteca atualizar --tickers
+  utils/guidance_tickers.json` e manda `utils/biblioteca.json` para um PR (sempre o mesmo ramo,
+  `biblioteca/revisar` - NUNCA direto na main, mesma cautela da REGRA 6 do TTM automático, já que
+  a biblioteca pode guardar qualquer dado fundamentalista, não só o contábil TTM). Hoje o campo
+  processado pelo workflow é só um exemplo (`lpa_atual`) - a função `obter`/`atualizar_tickers` é
+  genérica para qualquer campo; cada indicador novo que passar a usar este módulo (app ou outro
+  robô) só precisa chamar `obter(ticker, campo, periodo, hoje)` com o seu próprio `buscar_externo`.
+
+  LIMITAÇÃO CONHECIDA (ambiente de desenvolvimento desta issue): não foi possível testar a chamada
+  real à `api.perplexity.ai` neste ambiente - o proxy de rede do agente não libera esse host (só
+  os hosts explicitamente permitidos). A chave (`PERPLEXITY_API_KEY`, já salva nos Secrets do
+  GitHub) nunca aparece no código, só em `os.environ.get("PERPLEXITY_API_KEY")`; o endpoint
+  (`POST https://api.perplexity.ai/chat/completions`, corpo OpenAI-compatível com `model` +
+  `messages`, modelo `sonar-pro`) segue a documentação pública da Perplexity, mas a validação de
+  ponta a ponta (chave real, resposta real) só é possível em produção/Actions, com o Secret
+  configurado. Por isso os testes (`tests/test_biblioteca.py`) usam um `chamar`/`chamar_perplexity`/
+  `chamar_claude` injetável com respostas SIMULADAS, claramente marcadas como mock no próprio
+  teste (ex.: comentário "MOCK CLARAMENTE DOCUMENTADO", texto com "(SIMULADO)") - nenhuma chamada
+  de rede de verdade é feita nos testes, e nenhum dado simulado é tratado como se fosse real.
+
+- `utils/divergencia.py` (Issue #48, item 9): quando um robô acha um número diferente do que já
+  está salvo, ele mesmo abre uma Issue sozinho (`abrir_issue_divergencia`, API REST do GitHub com
+  o `GITHUB_TOKEN` padrão do Actions - só precisa de "Issues: write" no mesmo repositório, nunca
+  de um token especial). Título `Divergência: TICKER - Salvo: X / Novo: Y`, label `divergencia`,
+  corpo com Ticker/Campo/Base (contábil ou `[Ajustado]`)/Salvo/Novo/Fonte/Link/Data-hora. Hoje é
+  acionado automaticamente em 2 pontos: `utils.ttm_auto._avisar_divergencia_ttm` (TTM diário
+  recalculado por um documento novo, diferente do LPA TTM que já estava em `ttm_diario.json`) e
+  `utils.biblioteca.salvar_na_biblioteca` (qualquer campo da biblioteca própria gravado com um
+  valor contábil diferente do anterior). Os dois são best-effort: se a Issue não puder ser aberta
+  (sem `GITHUB_TOKEN`, API fora do ar), o dado novo é gravado do mesmo jeito - só o aviso
+  automático é que fica faltando, e isso nunca derruba o catch-up do TTM nem a gravação na
+  biblioteca.
+  O guidance automático (`utils/fetch_guidance.py`) já tem o seu PRÓPRIO mecanismo equivalente
+  (AUTOMÁTICO COM PROTEÇÃO: `avaliar_travas` + PR "Guidance travado"/issue "Guidance publicado") -
+  de propósito, ele NÃO também abre uma Issue `divergencia` genérica por cima disso: seria o
+  mesmo aviso duplicado. O mesmo vale para o contábil B3/SEC dentro de `fetch_guidance.py`
+  (`aplicar_contabil`/`aplicar_contabil_br`): já vai para o PR `ttm/contabil-revisar` existente
+  (REGRA 6), sem precisar de uma segunda Issue.
+  `.github/workflows/divergencia-revisar.yml` dispara em `issues: opened` filtrado pela label
+  `divergencia` e chama `python -m utils.divergencia revisar` - que reaproveita a MESMA
+  `utils.fetch_guidance.avaliar_travas` do AUTOMÁTICO COM PROTEÇÃO (`revisar_divergencia`; a
+  lógica das 4 travas nunca é duplicada) para decidir: passou nas 4 -> `gh pr create` com a
+  correção sugerida, sempre num ramo próprio (`divergencia/revisar-NÚMERO`), NUNCA direto na main
+  (merge publica, fechar descarta); travou em alguma -> comenta na própria Issue qual trava falhou
+  e deixa ela aberta esperando a decisão humana (não fecha, não publica nada).
+  LIMITAÇÃO CONHECIDA: a Issue de divergência guarda só um resumo (ticker, campo, salvo, novo,
+  fonte, link, data/hora) - não o texto completo do documento oficial. Por isso, quando
+  `revisar_issue_divergencia` reavalia a trava "Número em 2 lugares" (que conta quantas vezes a
+  faixa aparece no TEXTO do documento), ela sempre falha nesse fluxo específico (não há texto
+  pra contar) - a divergência fica travada esperando decisão humana, em vez de virar PR
+  automático. Isso é intencional e do lado seguro (nunca publica sem confirmação completa), mas
+  significa que, no estado atual, a maioria das divergências revisadas por este caminho só vira
+  PR automático depois de uma melhoria futura que inclua o texto do documento no corpo da Issue.
 
 ## TTM automático: PROMPT TRAVADO (22/11/2026, vale para todos os robôs e para o ttm_auto.py)
 
