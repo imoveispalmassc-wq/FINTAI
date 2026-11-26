@@ -1424,15 +1424,21 @@ def q4_release_cfg(ticker: str | None) -> dict:
         return {}
 
 
-def _ttm_tag_sec(fatos: dict, hoje: dt.date, tag: str, q4_rel: dict) -> dict:
+def _ttm_tag_sec(fatos: dict, hoje: dt.date, tag: str, q4_rel: dict, extra: dict | None = None) -> dict:
     """Soma dos 4 últimos trimestres de um conceito de LPA diluído (GAAP) da SEC.
 
     REGRA 3 (travada): 4º tri = ano (10-K) - 9 meses (10-Q); se o release divulgou o 4º tri explicitamente
     (utils/q4_release.json), vale o do release, e a divergência fica em q4_calculado / q4_release / q4_usado.
     Quando os 4 trimestres formam exatamente um ano fiscal com o LPA anual do 10-K, o TTM é o próprio LPA anual
-    oficial (LPA não é aditivo: a soma dos trimestres pode diferir alguns centavos do anual)."""
+    oficial (LPA não é aditivo: a soma dos trimestres pode diferir alguns centavos do anual).
+
+    `extra` (issue #54): um trimestre a mais, achado fora do XBRL - hoje só o LPA GAAP de um press
+    release/8-K/6-K quando o trimestre mais recente ainda não tem 10-Q/10-K formal na SEC
+    ({"fim": date, "val": float, "filed": "DD/MM/AAAA", "fonte": str, "url": str}). Só entra se o
+    `fim` ainda não estiver no XBRL (senão o oficial sempre ganha) e só é usado se continuar
+    consecutivo na janela (mesma checagem de 80-100 dias de qualquer outro trimestre)."""
     eps = (((fatos.get("facts") or {}).get("us-gaap") or {}).get(tag) or {}).get("units", {}).get("USD/shares", [])
-    if not eps:
+    if not eps and not extra:
         return {"status": "incompleto", "motivo": f"SEC sem {tag}"}
     por_periodo = {}
     for e in eps:
@@ -1445,7 +1451,7 @@ def _ttm_tag_sec(fatos: dict, hoje: dt.date, tag: str, q4_rel: dict) -> dict:
         # a versão mais recente do mesmo período ganha (reapresentações)
         if chave not in por_periodo or e.get("filed", "") > por_periodo[chave].get("filed", ""):
             por_periodo[chave] = e
-    tri, longos, inicio, q4 = {}, [], {}, {}
+    tri, longos, inicio, q4, fonte_extra = {}, [], {}, {}, {}
     for (ini, fim), e in por_periodo.items():
         dias = (fim - ini).days
         if 80 <= dias <= 100:
@@ -1467,6 +1473,10 @@ def _ttm_tag_sec(fatos: dict, hoje: dt.date, tag: str, q4_rel: dict) -> dict:
             inicio[fim] = nove[1] + dt.timedelta(days=1)
             q4[fim] = {"q4_calculado": calc, "q4_release": usado if rel else None, "q4_usado": usado,
                        "q4_fonte": (rel or {}).get("fonte"), "q4_url": (rel or {}).get("url")}
+    if extra and extra.get("fim") not in tri:
+        fim = extra["fim"]
+        tri[fim] = (float(extra["val"]), extra.get("filed", ""), "PRESS_RELEASE")
+        fonte_extra[fim] = {"fonte": extra.get("fonte"), "url": extra.get("url")}
     fins = sorted(tri)
     if len(fins) < 4:
         return {"status": "incompleto", "motivo": f"só {len(fins)} trimestre(s) na SEC"}
@@ -1476,12 +1486,17 @@ def _ttm_tag_sec(fatos: dict, hoje: dt.date, tag: str, q4_rel: dict) -> dict:
     if (hoje - ultimos[-1]).days > CONTABIL_IDADE_MAX:
         return {"status": "incompleto", "motivo": f"último trimestre na SEC termina em {ultimos[-1]:%d/%m/%Y}"}
     soma = round(sum(tri[f][0] for f in ultimos), 4)
-    res = {"status": "ok", "lpa_12m": soma,
-           "trimestres": [{"fim": f"{f:%d/%m/%Y}", "lpa": round(tri[f][0], 4), "form": tri[f][2]} for f in ultimos],
+    trimestres = []
+    for f in ultimos:
+        item = {"fim": f"{f:%d/%m/%Y}", "lpa": round(tri[f][0], 4), "form": tri[f][2]}
+        if f in fonte_extra:
+            item.update(fonte=fonte_extra[f].get("fonte"), url=fonte_extra[f].get("url"))
+        trimestres.append(item)
+    res = {"status": "ok", "lpa_12m": soma, "trimestres": trimestres,
            "fonte": "SEC 10-Q/10-K, lucro por ação diluído (GAAP)",
            "data": _data_br(max(tri[f][1] for f in ultimos)), "atualizado": f"{hoje:%d/%m/%Y}"}
     anual = anuais.get((inicio.get(ultimos[0]), ultimos[-1]))
-    if anual is not None:
+    if anual is not None and ultimos[-1] not in fonte_extra:
         res["lpa_12m"] = round(anual, 4)
         res["soma_trimestres"] = soma
         res["ttm_regra"] = "ano fiscal completo: LPA anual oficial do 10-K"
@@ -1491,15 +1506,17 @@ def _ttm_tag_sec(fatos: dict, hoje: dt.date, tag: str, q4_rel: dict) -> dict:
     return res
 
 
-def lpa_ttm_sec(fatos: dict, hoje: dt.date, ticker: str | None = None) -> dict:
+def lpa_ttm_sec(fatos: dict, hoje: dt.date, ticker: str | None = None, extra_total: dict | None = None) -> dict:
     """LPA diluído (GAAP) dos últimos 12 meses = soma dos últimos 4 trimestres dos 10-Q/10-K.
 
     REGRA 1 (travada): sempre GAAP. REGRA 2 (travada): se a empresa tem operações descontinuadas (o LPA de
     operações contínuas existe e difere do total), usa o de operações CONTÍNUAS, marca tem_descontinuadas e
     guarda o total em lpa_12m_total; sem descontinuadas, o total. REGRA 3: ver _ttm_tag_sec.
+    `extra_total` (issue #54): trimestre extra achado fora do XBRL (ver _ttm_tag_sec), só aplicado ao
+    LPA total (o press release não separa operações contínuas/descontinuadas da mesma forma que o XBRL).
     Devolve {"status": "ok", "lpa_12m", "trimestres", ...} ou {"status": "incompleto", "motivo"}."""
     q4_rel = q4_release_cfg(ticker)
-    total = _ttm_tag_sec(fatos, hoje, TAG_LPA_TOTAL, q4_rel)
+    total = _ttm_tag_sec(fatos, hoje, TAG_LPA_TOTAL, q4_rel, extra=extra_total)
     cont = _ttm_tag_sec(fatos, hoje, TAG_LPA_CONTINUAS, q4_rel)
     if cont.get("status") == "ok" and total.get("status") == "ok" \
             and [t["fim"] for t in cont["trimestres"]] == [t["fim"] for t in total["trimestres"]]:
@@ -1532,6 +1549,127 @@ def extrair_eps_ajustado_trimestre(texto: str) -> float | None:
     return None
 
 
+# ------------------------------------------------------------ LPA GAAP do trimestre pendente (issue #54)
+# Quando o 10-Q/10-K formal do trimestre mais recente ainda não foi protocolado na SEC, o LPA GAAP (não
+# ajustado) desse trimestre é buscado no press release/8-K-6-K mais novo - mesma hierarquia de fonte já
+# usada no projeto (release no RI > 8-K/6-K na SEC > CVM/ITR). Dois formatos aceitos:
+# (1) frase única, muito comum: "GAAP and non-GAAP earnings per diluted share were $2.70 and $2.68,
+#     respectively." (ex.: NVIDIA, 3T FY2027)
+# (2) tabela "GAAP (...) ... Diluted earnings per share $X.XX ... Non-GAAP (...) ... $Y.YY": usa o
+#     primeiro valor antes do cabeçalho "Non-GAAP".
+RE_EPS_GAAP_FRASE = re.compile(
+    r"GAAP\s+and\s+non-GAAP\s+(?:diluted\s+)?earnings per (?:diluted )?share\s+(?:were|was)\s+"
+    r"\$\s?(-?\d{1,3}\.\d{2})\s+and\s+\$\s?(-?\d{1,3}\.\d{2})", re.I)
+RE_EPS_GAAP_TABELA = re.compile(r"\bdiluted (?:net )?earnings per (?:diluted )?share\s*\$?\s*(-?\d{1,3}\.\d{2})\b", re.I)
+RE_FIM_TRIMESTRE = re.compile(r"(?:quarter|period)\s+ended\s+([A-Za-z]+\.?\s+\d{1,2},?\s+20\d{2})", re.I)
+MESES_EN = {"jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+            "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12}
+
+
+def extrair_eps_gaap_trimestre(texto: str) -> float | None:
+    """Primeiro LPA GAAP (diluído, não ajustado) do trimestre no press release/8-K/6-K - nunca o do
+    ano, do acumulado nem da projeção (mesma lista RE_NAO_TRIMESTRE do LPA ajustado)."""
+    m = RE_EPS_GAAP_FRASE.search(texto)
+    if m:
+        antes = texto[max(0, m.start() - 90): m.start()]
+        if not RE_NAO_TRIMESTRE.search(antes):
+            return float(m.group(1))
+    pos_non_gaap = texto.lower().find("non-gaap")
+    janela = texto[:pos_non_gaap] if pos_non_gaap > 0 else texto
+    for m in RE_EPS_GAAP_TABELA.finditer(janela):
+        antes = janela[max(0, m.start() - 90): m.start()] + m.group(0)
+        if RE_NAO_TRIMESTRE.search(antes):
+            continue
+        return float(m.group(1))
+    return None
+
+
+def extrair_fim_trimestre(texto: str) -> dt.date | None:
+    """'the third quarter ended October 25, 2026' -> date(2026, 10, 25). Sem a data por extenso no
+    comunicado, devolve None (nunca estima o fim do trimestre)."""
+    m = RE_FIM_TRIMESTRE.search(texto)
+    if not m:
+        return None
+    m2 = re.match(r"([A-Za-z]+)\.?\s+(\d{1,2}),?\s+(20\d{2})", m.group(1))
+    if not m2:
+        return None
+    mes = MESES_EN.get(m2.group(1)[:3].lower())
+    if not mes:
+        return None
+    try:
+        return dt.date(int(m2.group(3)), mes, int(m2.group(2)))
+    except ValueError:
+        return None
+
+
+def _trimestre_pendente_gaap(cik: str, cab: dict, apos: dt.date, *, nome: str | None = None,
+                             buscar_docs=None, ler=None) -> dict | None:
+    """REGRA TRAVADA (issue #54): quando a janela de 4 trimestres do XBRL retrocederia para antes do
+    trimestre mais recente já salvo, procura esse trimestre no press release/8-K/6-K mais novo (nunca
+    um 10-Q/10-K: esses já teriam entrado pelo XBRL). `apos` = fim do último trimestre já confirmado
+    (XBRL ou o próprio já salvo). Só aceita um documento cujo "quarter ended" seja de 80 a 100 dias
+    depois de `apos` (mesma janela trimestral usada no resto do robô) e que tenha LPA GAAP do
+    trimestre no texto - nunca inventa a data nem o valor. Do mais novo para o mais antigo."""
+    buscar_docs = buscar_docs or documentos_sec_periodo
+    ler = ler or anexo_sec
+    docs = buscar_docs(cik, cab, apos + dt.timedelta(days=55), apos + dt.timedelta(days=150))
+    for doc in sorted(docs, key=lambda d: d["data"], reverse=True):
+        if doc["form"] not in ("8-K", "6-K"):
+            continue
+        try:
+            lido = ler(doc, cab)
+        except Exception:  # noqa: BLE001
+            continue
+        if not lido:
+            continue
+        link, texto = lido
+        fim = extrair_fim_trimestre(texto)
+        if not fim or not 80 <= (fim - apos).days <= 100:
+            continue
+        lpa = extrair_eps_gaap_trimestre(texto)
+        if lpa is None:
+            continue
+        return {"fim": fim, "val": lpa, "filed": doc["data"],
+                "fonte": f"{nome or 'Empresa'} press release de resultados (GAAP), "
+                         f"Form {doc['form']} Exhibit 99.1 de {_data_br(doc['data'])}",
+                "url": link}
+    return None
+
+
+def _ultimo_fim_ttm(reg: dict | None) -> dt.date | None:
+    """Fim do trimestre mais recente de um registro de contábil 12m (salvo ou recém-calculado)."""
+    tri = (reg or {}).get("trimestres") or []
+    fins = [d for d in (_data(t.get("fim")) for t in tri) if d]
+    return max(fins) if fins else None
+
+
+def _sem_retrocesso_de_janela(gaap: dict, anterior: dict | None, fatos: dict, hoje: dt.date, ticker: str,
+                              cik: str, nome: str, cab: dict, *, buscar_pendente=None) -> dict:
+    """REGRA TRAVADA (issue #54): a janela de 4 trimestres NUNCA pode retroceder para um trimestre mais
+    antigo que o já salvo anteriormente em contabil_sec.json - mesmo princípio já aplicado ao guidance e
+    ao resto do TTM ("nunca usa documento mais antigo que o mais novo ... nem mais antigo que o já
+    salvo"). Se o XBRL (10-Q/10-K) ainda não tem o trimestre mais recente já conhecido, tenta achar esse
+    trimestre no press release/8-K/6-K (mesma hierarquia de fonte já usada no projeto). Sem isso,
+    MANTÉM o valor anterior (MANTIDO_TTM_ANTERIOR, já documentado no CLAUDE.md) em vez de aceitar uma
+    janela mais antiga."""
+    fim_anterior = _ultimo_fim_ttm(anterior)
+    if not fim_anterior:
+        return gaap
+    fim_novo = _ultimo_fim_ttm(gaap) if gaap.get("status") == "ok" else None
+    if fim_novo and fim_novo >= fim_anterior:
+        return gaap
+    buscar_pendente = buscar_pendente or _trimestre_pendente_gaap
+    pendente = buscar_pendente(cik, cab, fim_novo or (fim_anterior - dt.timedelta(days=91)), nome=nome)
+    if pendente:
+        novo = lpa_ttm_sec(fatos, hoje, ticker, extra_total=pendente)
+        if novo.get("status") == "ok" and (_ultimo_fim_ttm(novo) or dt.date.min) >= fim_anterior:
+            return novo
+    return {"status": "mantido_ttm_anterior",
+            "motivo": (f"SEC (10-Q/10-K) ainda não tem o trimestre mais recente já salvo "
+                       f"({fim_anterior:%d/%m/%Y}), e nenhum press release/8-K com esse trimestre foi "
+                       "confirmado - mantido o valor anterior em vez de retroceder a janela.")}
+
+
 def contabil_ajustado(gaap: dict, ajustados: dict) -> dict:
     """REGRA 1 (travada): a tela usa SEMPRE o LPA GAAP de 12 meses (lpa_12m). O LPA AJUSTADO do press release
     (8-K Exhibit 99.1) NUNCA vai para o campo principal: só aparece como lpa_ajustado (soma dos 4 trimestres,
@@ -1544,8 +1682,11 @@ def contabil_ajustado(gaap: dict, ajustados: dict) -> dict:
     tri = []
     for t in gaap["trimestres"]:
         a = ajustados.get(t["fim"])
-        tri.append({"fim": t["fim"], "lpa": t["lpa"], "tipo": "GAAP", "fonte": f"SEC {t.get('form') or '10-Q/10-K'} (GAAP)",
-                    "data": gaap.get("data", ""), "url": "",
+        # issue #54: trimestre achado fora do XBRL (press release/8-K, 10-Q/10-K formal ainda não protocolado)
+        # carrega sua própria fonte/url - nunca "SEC 10-Q/10-K", que seria uma fonte que esse trimestre não tem.
+        fonte_tri = t.get("fonte") or f"SEC {t.get('form') or '10-Q/10-K'} (GAAP)"
+        tri.append({"fim": t["fim"], "lpa": t["lpa"], "tipo": "GAAP", "fonte": fonte_tri,
+                    "data": gaap.get("data", ""), "url": t.get("url", ""),
                     **({"lpa_ajustado": round(float(a["lpa"]), 4), "fonte_ajustado": a.get("fonte", "SEC 8-K Exhibit 99.1"),
                         "url_ajustado": a.get("url", "")} if a and a.get("lpa") is not None else {})})
     extras = {k: gaap[k] for k in ("tem_descontinuadas", "lpa_12m_total", "nota", "soma_trimestres", "ttm_regra",
@@ -1584,18 +1725,24 @@ def ajustados_sec(cik: str, cab: dict, fins: list[str], *, buscar_docs=None, ler
     return saida
 
 
-def contabil_eua(ticker: str, hoje: dt.date, *, cabecalho=cabecalho_sec, buscar_cik=cik_do_ticker) -> dict:
+def contabil_eua(ticker: str, hoje: dt.date, *, cabecalho=cabecalho_sec, buscar_cik=cik_do_ticker,
+                 anterior: dict | None = None, buscar_pendente=None) -> dict:
+    """`anterior` (issue #54): o registro já salvo para o ticker em contabil_sec.json, só para a trava
+    de não-retrocesso (_sem_retrocesso_de_janela) - nunca usado para outra coisa."""
     cab = cabecalho()
     if not cab:
         return {"status": "incompleto", "motivo": "sem SEC_CONTACT_EMAIL"}
     empresa = buscar_cik(ticker, cab)
     if not empresa:
         return {"status": "incompleto", "motivo": "ticker não encontrado na SEC"}
-    fatos = _get_sec(f"{SEC_DADOS}/api/xbrl/companyfacts/CIK{empresa[0]}.json", cab).json()
+    cik, nome = empresa
+    fatos = _get_sec(f"{SEC_DADOS}/api/xbrl/companyfacts/CIK{cik}.json", cab).json()
     gaap = lpa_ttm_sec(fatos, hoje, ticker)
+    gaap = _sem_retrocesso_de_janela(gaap, anterior, fatos, hoje, ticker, cik, nome, cab,
+                                     buscar_pendente=buscar_pendente)
     if gaap.get("status") != "ok":
         return gaap
-    return contabil_ajustado(gaap, ajustados_sec(empresa[0], cab, [t["fim"] for t in gaap["trimestres"]]))
+    return contabil_ajustado(gaap, ajustados_sec(cik, cab, [t["fim"] for t in gaap["trimestres"]]))
 
 
 BRASILIA = dt.timezone(dt.timedelta(hours=-3))       # Brasília não tem horário de verão
@@ -2146,6 +2293,7 @@ def planejar(hoje: dt.date | None = None) -> list[dict]:
     vistos_por_ticker = _ler_json(ARQ_VISTOS, {})
     iniciais = _ler_json(ARQ_INICIAL, {})
     registro = _ler_json(ARQ_LOG, [])
+    contabil_atual = _ler_json(ARQ_CONTABIL, {})   # issue #54: trava de não-retrocesso da janela de 4 trimestres
     try:
         from utils.override import OVERRIDE as manuais
     except Exception:  # noqa: BLE001
@@ -2172,7 +2320,7 @@ def planejar(hoje: dt.date | None = None) -> list[dict]:
             log.info("  contábil B3: %s", item["contabil_br"].get("lpa_12m") or item["contabil_br"].get("motivo"))
         if not re.fullmatch(r"(?=.*[A-Z])[A-Z0-9]{4}\d{1,2}", t):
             try:
-                item["contabil"] = contabil_eua(t, hoje)
+                item["contabil"] = contabil_eua(t, hoje, anterior=contabil_atual.get(t))
             except Exception as e:  # noqa: BLE001
                 item["contabil"] = {"status": "incompleto", "motivo": f"{e.__class__.__name__}: {e}"}
             log.info("  contábil SEC: %s", item["contabil"].get("lpa_12m") or item["contabil"].get("motivo"))

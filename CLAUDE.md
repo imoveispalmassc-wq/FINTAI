@@ -222,6 +222,28 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   sequência ou último com mais de 200 dias): Yahoo, "fonte: Yahoo - SEC incompleto". No fim de cada ticker o robô grava
   atualizado_em, trimestre_ref e trimestre_data, igual à B3 (ver abaixo) - calculando o trimestre a partir do
   mês de fim de cada trimestre, já que a SEC não dá "3T26" pronto.
+- JANELA DE 4 TRIMESTRES NUNCA RETROCEDE (REGRA TRAVADA, issue #54, corrigida em 26/11/2026): bug real
+  encontrado na revisão do PR #53 - o robô trocou o LPA TTM da NVDA de 9,31 para 7,91, descartando o
+  trimestre mais recente (fim 25/10/2026, LPA 2,70) e voltando 1 ANO para o trimestre de 26/10/2025. Causa
+  raiz: `contabil_eua`/`_ttm_tag_sec` (utils/fetch_guidance.py) só olhava o XBRL (10-Q/10-K) da SEC; quando o
+  10-Q formal do trimestre mais recente ainda não tinha sido protocolado, a janela dos "últimos 4 trimestres"
+  simplesmente pegava os 4 últimos QUE EXISTEM no XBRL - que podem ser mais antigos que o trimestre já salvo
+  em contabil_sec.json - sem erro nem aviso (o status voltava "ok", só com a janela errada). O estado anterior
+  (9,31, com a fonte "NVIDIA press release 3T FY2027 (GAAP)") nunca foi produzido por esse código: foi editado
+  à mão num ciclo anterior (commits "Atualização automática TTM" / "Trava regras do TTM automático"), sem a
+  lógica real ter esse fallback - por isso o robô "esqueceu como" reproduzir esse valor na execução seguinte.
+  Corrigido: `contabil_eua` agora recebe o registro já salvo do ticker (`anterior`) e, se o fim do trimestre
+  mais recente que o XBRL devolveria for mais antigo que o já salvo, tenta achar esse trimestre no press
+  release/8-K/6-K mais novo (`_trimestre_pendente_gaap`, `extrair_eps_gaap_trimestre`, `extrair_fim_trimestre`
+  - mesma hierarquia de fonte já usada no projeto: release no RI > 8-K/6-K na SEC > CVM/ITR), extrai o LPA GAAP
+  (não ajustado) do trimestre e o fim do trimestre ("the third quarter ended October 25, 2026"), e só aceita
+  se continuar consecutivo (80-100 dias) ao resto da janela - `lpa_ttm_sec`/`_ttm_tag_sec` ganham um parâmetro
+  `extra_total` para essa única fonte. Achando, grava com a fonte do press release citada no próprio
+  trimestre (nunca "SEC 10-Q/10-K", que esse trimestre não tem). SEM achar nada, MANTÉM o valor anterior
+  (status "mantido_ttm_anterior", mesmo padrão MANTIDO_TTM_ANTERIOR já documentado acima para o TTM diário)
+  em vez de aceitar uma janela mais antiga - nunca retrocede. `tests/test_fetch_guidance.py` tem o cenário
+  exato da NVDA (fixture com os dados reais do press release e do XBRL) provando que, sem a trava, o XBRL
+  sozinho reproduz os 7,91 do bug, e que a lógica corrigida chega em 9,31 com a fonte certa.
 - LPA anual histórico (EUA, cartão "Lucro por ação", Graham, médias de 5/10 anos e Faixa do Conservador): o app
   (não o robô) busca `app.lpa_anual_eua(ticker)` na hora, direto da SEC (10-K, EarningsPerShareDiluted), para
   qualquer ticker dos EUA, sem precisar estar em guidance_tickers.json. Motivo: o `income_stmt` do Yahoo
