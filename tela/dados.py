@@ -476,6 +476,9 @@ def dados_fixos_tela(fixos: dict | None, cotacao: float | None) -> dict | None:
         "fonteOficial": fixos.get("fonte_oficial") or "", "dataUltimoBalanco": fixos.get("data_ultimo_balanco") or "",
         "lucro12m": _n(fixos.get("lucro_12m"), 2), "dividendo12m": _n(fixos.get("dividendo_12m"), 4),
         "dividendoMotivo": fixos.get("dividendo_motivo") or "",
+        # Issue #35: patrimônio líquido (valor do balanço, nunca somado) - base de P/VP e ROE
+        "patrimonioLiquido": _n(fixos.get("patrimonio_liquido"), 2),
+        "patrimonioMotivo": fixos.get("patrimonio_motivo") or "",
         "avisoBalancoNovo": fixos.get("avisoBalancoNovo"),
     }
     if cotacao is None:
@@ -483,7 +486,10 @@ def dados_fixos_tela(fixos: dict | None, cotacao: float | None) -> dict | None:
     ind = _df.calcular_indicadores(fixos, cotacao)
     return {**base, "lpa": _n(ind["lpa"], 4), "pl": _n(ind["pl"], 4), "dy": _n(ind["dy"], 6),
             "plMedio12m": _n(ind["plMedio12m"], 4), "lpaAdr": _n(ind["lpaAdr"], 4),
-            "dividendoAdr": _n(ind["dividendoAdr"], 4), "contas": ind["contas"]}
+            "dividendoAdr": _n(ind["dividendoAdr"], 4),
+            "vpa": _n(ind["vpa"], 4), "pvp": _n(ind["pvp"], 4),
+            "payout": _n(ind["payout"], 6), "roe": _n(ind["roe"], 6),
+            "contas": ind["contas"]}
 
 
 def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str, dados_fixos: dict | None = None,

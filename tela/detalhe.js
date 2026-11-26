@@ -893,10 +893,13 @@ function montar(root, d) {
           <div>P/L Médio 12m<b>${tem(DF.plMedio12m) ? f(DF.plMedio12m, 2) : 'Sem dado'}</b></div>
           <div>Dividendo Anual<b>${tem(DF.dividendo12m) ? f(DF.dividendo12m, 4) : 'Sem dado'}</b></div>
           <div>DY<b>${tem(DF.dy) ? `${f(DF.dy * 100, 2)}%` : 'Sem dado'}</b></div>
+          <div>P/VP<b>${tem(DF.pvp) ? f(DF.pvp, 2) : 'Sem dado'}</b></div>
+          <div>Payout<b>${tem(DF.payout) ? `${f(DF.payout * 100, 1)}%` : 'Sem dado'}</b></div>
+          <div>ROE<b>${tem(DF.roe) ? `${f(DF.roe * 100, 1)}%` : 'Sem dado'}</b></div>
         </div>
         ${adrHtml}
-        <div class="nota" style="margin-top:10px">${[C.acoes, C.lpa, C.pl, C.dividendo, C.dy].filter(Boolean).join('<br>')}</div>
-        <div class="nota" style="margin-top:6px">Fonte: ${DF.fonteOficial || '—'} · balanço de ${DF.dataUltimoBalanco || '—'}.${DF.dividendoMotivo ? ` Dividendo: ${DF.dividendoMotivo}.` : ''} Ações, LPA e dividendo só mudam com balanço novo - a cotação atualiza todo dia.</div>
+        <div class="nota" style="margin-top:10px">${[C.acoes, C.lpa, C.pl, C.dividendo, C.dy, C.pvp, C.payout, C.roe].filter(Boolean).join('<br>')}</div>
+        <div class="nota" style="margin-top:6px">Fonte: ${DF.fonteOficial || '—'} · balanço de ${DF.dataUltimoBalanco || '—'}.${DF.dividendoMotivo ? ` Dividendo: ${DF.dividendoMotivo}.` : ''}${DF.patrimonioMotivo ? ` Patrimônio líquido: ${DF.patrimonioMotivo}.` : ''} Ações, LPA, dividendo e patrimônio líquido só mudam com balanço novo - a cotação atualiza todo dia. P/VP, Payout e ROE não têm selo de favorável/desfavorável: não existe, hoje, uma média de 12 meses desses 3 indicadores no projeto (precisaria de histórico trimestral de patrimônio líquido, fora do escopo desta issue) - mostramos só o número.</div>
       </div>`;
   })($('dados-fixos'));
 
