@@ -19,14 +19,17 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--azul); ou
 
 .proto { margin: 10px 0 0; padding: 6px 10px; border-radius: 8px; background: #f2b84b1f; color: var(--ambar); font-size: 11.5px; text-align: center; }
 
-/* topo */
-.topo { display: flex; align-items: center; gap: 10px; padding: 12px 0 8px; }
+/* topo: fixo (sticky) no alto da viewport ao rolar, pra nunca perder de vista qual ativo está
+   sendo olhado - nome + preço (o badge/decisão continua só na posição normal, mais abaixo) */
+.topo { display: flex; align-items: center; gap: 10px; padding: 12px 0 8px;
+  position: sticky; top: 0; z-index: 20; background: var(--bg); }
 .topo .icone { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; flex: none; }
 .topo .icone:active { background: var(--card); }
 .topo .meio { flex: 1; min-width: 0; }
 .topo .nome { font-family: var(--display); font-size: 19px; font-weight: 700; line-height: 1.15; }
 .topo .bolsa { display: inline-flex; align-items: center; gap: 6px; color: var(--suave); font-size: 12.5px; margin-top: 2px; }
 .topo .bolsa svg { flex: none; }
+.topo .preco-topo { font-family: var(--display); font-size: 17px; font-weight: 700; flex: none; }
 svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* cartão de decisão */
@@ -187,7 +190,8 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 /* ---- ajustes para rodar dentro do Streamlit ---- */
 [hidden] { display: none !important; }
 .app { max-width: 520px; padding-left: 0; padding-right: 0; padding-bottom: 8px; }
-.topo { padding: 4px 0 10px; }
+.topo { padding: 4px 0 10px; border-bottom: 1px solid transparent; }
+.topo.rolou { border-bottom-color: var(--borda); box-shadow: 0 4px 10px #05080f40; }
 .fundo { z-index: 1000001; }
 .escalas .e:disabled { opacity: .35; cursor: default; }
 .barras .col { display: block; }

@@ -21,7 +21,12 @@ from tela.dados import faixas_por_periodo, modo_simons, series_do_grafico  # noq
 from calculos import graham_duas_versoes  # noqa: E402
 from utils.lynch import crescimento_anual, peg, regra_prejuizo, veredito  # noqa: E402
 from utils.percentile import percentil_na_faixa, zonas  # noqa: E402
+from utils.seo import tags_og  # noqa: E402
 from utils.signals import decidir_estado  # noqa: E402
+
+# página publicada de verdade no GitHub Pages (padrão de URL de Pages a partir de /docs em main) -
+# usada no og:url; a imagem (og:image) é o logo real do projeto, ver utils/seo.py
+URL_PAGINA = "https://imoveispalmassc-wq.github.io/FINTAI/"
 
 FIM = pd.Timestamp("2026-11-13")
 PRECO, FECH_ANTERIOR = 778.31, 798.43            # -2,52% no dia
@@ -202,6 +207,9 @@ def pagina(dados: dict) -> str:
 <title>Fintai · Micron (exemplo)</title>
 <meta name="description" content="Tela de detalhes da ação no Fintai, com dados de exemplo da Micron (MU).">
 <meta name="theme-color" content="#0e1420">
+{tags_og("Fintai · Micron (exemplo)",
+         "Tela de detalhes da ação no Fintai, com dados de exemplo da Micron (MU).",
+         url=URL_PAGINA)}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap">
