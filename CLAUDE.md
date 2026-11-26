@@ -522,6 +522,81 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   a cotação do dia (já buscada pela tela, Yahoo) entra separadamente em `montar()`, nunca pelo
   módulo de dados fixos.
 
+## UI (Issue #46)
+
+- **Preview do WhatsApp**: o Streamlit é um app de página única - `st.set_page_config(page_title=...)`
+  só muda o `<title>` depois que o JavaScript termina de montar a página, e o WhatsApp nunca
+  executa JavaScript pra gerar o preview de um link (lê só o HTML que o servidor devolve de cara).
+  Esse HTML inicial é sempre o mesmo `streamlit/static/index.html` de dentro do pacote instalado,
+  com `<title>Streamlit</title>` e nenhuma meta tag - por isso o preview saía errado. `utils/seo.py`
+  (`aplicar_meta_og()`, chamado em `app.py` logo depois do `set_page_config`) reescreve esse arquivo
+  estático uma única vez por subida do app (idempotente, por um marcador de comentário), trocando o
+  `<title>` e inserindo `og:title`/`og:description`/`og:image` (+ `twitter:card`) antes de
+  `</head>`. A imagem é o logo real do projeto, publicado no GitHub
+  (`https://raw.githubusercontent.com/imoveispalmassc-wq/FINTAI/main/assets/logo.png`) - nunca uma
+  URL inventada; sem um print de tela próprio do app publicado, é a única imagem real disponível.
+  LIMITAÇÃO HONESTA: isto não é uma configuração oficial do Streamlit (não existe hoje nenhum
+  parâmetro do `set_page_config` nem `config.toml` pra meta tags Open Graph) - é um ajuste no
+  arquivo estático do pacote `streamlit` já instalado no mesmo container do app, que só funciona se
+  o processo tiver permissão de escrita ali (o Streamlit Cloud tem; falha em silêncio, nunca
+  derruba o app, em qualquer hospedagem que não tenha). E não foi possível confirmar visualmente o
+  preview real do WhatsApp a partir do ambiente onde isso foi implementado: o WhatsApp precisa
+  buscar uma URL pública publicada de verdade (às vezes também cacheia um preview antigo por um
+  tempo mesmo depois de corrigido) - só dá pra confirmar depois do deploy, mandando o link do app
+  publicado numa conversa de verdade. A página de exemplo (`docs/index.html`, GitHub Pages) já tem
+  as mesmas tags (via `utils.seo.tags_og`, reaproveitado em `tools/gerar_demo.py`) e essa, sim, foi
+  conferida: usa `og:image` do mesmo logo real e `og:url` apontando pra
+  `https://imoveispalmassc-wq.github.io/FINTAI/` (URL padrão de GitHub Pages publicando a partir de
+  `/docs` em `main` - não foi possível confirmar com uma requisição de verdade que a página está no
+  ar, por restrição de rede do ambiente onde isso foi implementado, mas é a URL real e não inventada
+  que corresponde à configuração do repositório).
+- **MU - "faixa de preço errada" (item 2)**: investigado com dados reais do Yahoo Finance em
+  26/11/2026 - NÃO é bug. A MU disparou de ~US$ 220 pra mais de US$ 1.200 no último ano (supercycle
+  de IA em memória) e caiu pra ~US$ 601 em seguida: média de fechamento semanal de 1 ano = US$
+  681,96 (âncora/teto), de 3 anos = US$ 301,73, de 5 anos = US$ 207,07 (bem mais baixa, porque pesa
+  anos de preço pré-supercycle). A Faixa do Conservador usa exatamente essas médias (ver
+  `teto_valuation_conservador` acima) e os números batem matematicamente - é o cenário que a seção
+  "Regras de cálculo" já citava como limitação conhecida da Faixa do Conservador ("pode ficar presa
+  a um regime de mercado antigo da empresa, ex. MU antes do supercycle de IA"). Valores conferidos e
+  travados como teste de regressão em `tests/test_calculos.py`
+  (`test_teto_valuation_conservador_mu_dados_reais_26_11_2026`) - não no código do app, só no teste,
+  como documentação do que foi checado.
+  "SEGUNDA CONTA" (ambíguo, não foi possível esclarecer com quem reportou o item): o único outro
+  lugar do código que calcula uma faixa de preço "de outro jeito" pro mesmo ativo é a faixa clássica
+  de 52 semanas (`utils/percentile.zonas`, mínima + 30%/70% da amplitude) - ela aparece no modo
+  SIMONS e como `fx`/`d.faixas` (alternativa visual quando falta o teto do Conservador). Pra MU, com
+  mínima/máxima de 52 semanas de ~US$ 221/US$ 1.255, essa conta dá um ponto de oportunidade bem
+  diferente (~US$ 531) do ponto de oportunidade do Conservador (~US$ 477, 70% da âncora de 1 ano) -
+  são DUAS contas diferentes de propósito (uma é só a faixa histórica observada; a outra é
+  valuation, ponderada pelo preço médio pago no período), e comparar os dois números lado a lado,
+  sem saber que são métodos diferentes, pode parecer que um dos dois "está errado". Documentado aqui
+  pra esclarecer: nenhum dos dois é bug, são métricas diferentes mostradas em modos diferentes da
+  tela (Conservador usa valuation; SIMONS usa a faixa histórica de 52 semanas).
+- **Ticker fixo no topo (item 3)**: `.topo` (nome + bolsa + preço, em `tela/detalhe.html`/`.css`/
+  `.js`) agora é `position: sticky; top: 0` com fundo sólido e sombra/borda ao rolar (classe
+  `.rolou`, alternada por um listener de `scroll` da própria janela) - o nome do ativo e o preço do
+  dia (igual ao do cartão de decisão, só repetido no cabeçalho) ficam sempre visíveis, mesmo rolando
+  a tela pra baixo. Testado visualmente com Playwright (`chromium`, sem precisar `playwright
+  install`): renderizando `docs/index.html` e rolando a página, o `.topo` continua com
+  `getBoundingClientRect().top === 0`, mostrando nome, bolsa e preço.
+- **CBRS sem Oportunidade 2/3 (item 6)**: investigado com dados reais do Yahoo Finance em
+  26/11/2026 - NÃO é bug. CBRS tem só ~6 meses e meio de histórico de preço (IPO recente), então
+  `media_fech_3a`/`media_fech_5a` ficam `None` (sem 3/5 anos de histórico - ver
+  `_media_fechamento_semanal`), `limite3a`/`limite5a` ficam `None`, e a Faixa do Conservador mostra
+  só 1 zona de oportunidade (a âncora de 1 ano, que CBRS já tem) - exatamente o comportamento
+  documentado acima ("Sem 1 ano de histórico... sem teto"; aqui já dá pro ano 1, só não pros limites
+  de 3/5). Valores conferidos e travados como teste de regressão
+  (`test_teto_valuation_conservador_cbrs_dados_reais_26_11_2026_sem_3a_5a`).
+  BUG VISUAL ENCONTRADO E CORRIGIDO (ajuste pedido no item, não o bug em si): com uma zona de
+  oportunidade estreita (ex. CBRS: só ~16% da régua), o rótulo "Oportunidade" quebrava no meio da
+  palavra ("Oportunida"/"de" em 2 linhas) em vez de simplesmente sumir, porque o limiar que decide
+  "a coluna é estreita demais, esconde o rótulo" era um número fixo (11%) igual pros 3 rótulos -
+  "Cara"/"Neutra" (curtos) cabem em 11%, mas "Oportunidade" (bem mais longo) não. O limiar agora usa
+  a largura real estimada de cada rótulo (mesma técnica de `largadorPx`/`pxParaPct` já usada pros
+  números da régua logo abaixo), não um valor igual pra todos - confirmado visualmente com
+  Playwright (CBRS real: "Oportunidade" some corretamente, sem quebrar palavra; PETR4, com zona bem
+  mais larga, continua mostrando os 3 rótulos normalmente).
+
 ## Textos
 
 - Nunca mostrar "percentil" nem a sigla IFR como título. Título do card "Força - RSI" (em inglês, não "IFR"),

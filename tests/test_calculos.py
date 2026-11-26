@@ -49,6 +49,39 @@ def test_teto_valuation_conservador_sem_media_1a_e_sem_dado():
     assert teto_valuation_conservador(-1, 80.0, 60.0)["teto"] is None
 
 
+def test_teto_valuation_conservador_mu_dados_reais_26_11_2026():
+    """Issue #46 (item 2): MU reportado como 'faixa de preço errada'. Dados reais do Yahoo Finance
+    em 26/11/2026 (não travados no código do app - só documentados aqui como regressão): média de
+    fechamento semanal de 1 ano = US$ 681,96 (ação disparou de ~US$ 220 pra mais de US$ 1.200 no
+    ano, por causa do supercycle de IA em memória - ver CLAUDE.md); de 3 anos = US$ 301,73; de 5
+    anos = US$ 207,07 (bem menor, porque pesa mais anos de preço baixo, pré-supercycle). A conta
+    bate exatamente com o que a tela mostra: não é bug, é o preço de verdade da MU neste período
+    (ver limitação documentada em CLAUDE.md sobre a Faixa do Conservador ficar presa a um regime de
+    mercado antigo quando o histórico é longo - exatamente o caso citado lá, MU antes do supercycle)."""
+    from calculos import teto_valuation_conservador
+    r = teto_valuation_conservador(681.9604034423828, 301.73310929802574, 207.0709985631113)
+    assert r["teto"] == pytest.approx(681.9604034423828)
+    assert r["limite3a"] == pytest.approx(181.03986557881544)   # 0,60 × 301,73
+    assert r["limite5a"] == pytest.approx(103.53549928155565)   # 0,50 × 207,07
+    # ordem sempre decrescente (ponto de entrada > limite 3a > limite 5a) - "mais fundo, mais raro"
+    oportunidade_ate = r["teto"] * 0.70
+    assert oportunidade_ate > r["limite3a"] > r["limite5a"]
+
+
+def test_teto_valuation_conservador_cbrs_dados_reais_26_11_2026_sem_3a_5a():
+    """Issue #46 (item 6): CBRS mostrando só 1 zona de oportunidade (sem Oportunidade 2/3). Dados
+    reais do Yahoo Finance em 26/11/2026: CBRS só tem ~6 meses e meio de histórico de preço (IPO
+    recente) - não tem nem 1 ano completo de 3 ou 5 anos de histórico, então media_fech_3a e
+    media_fech_5a ficam None (ver _media_fechamento_semanal em calculos.py). COMPORTAMENTO
+    CORRETO, documentado em CLAUDE.md ("sem 1 ano de histórico... sem teto" - aqui já dá pra
+    calcular a âncora de 1 ano, mas não os limites de 3/5 anos): não é bug, é falta real de
+    histórico. A tela não pode mostrar uma 'Oportunidade 2/3' que não existe para esse ativo."""
+    from calculos import teto_valuation_conservador
+    r = teto_valuation_conservador(181.79344782336005, None, None)
+    assert r["teto"] == pytest.approx(181.79344782336005)
+    assert r["limite3a"] is None and r["limite5a"] is None
+
+
 def _hist_longa():
     # quase 8 anos de pregões (cobre a janela de 5 anos usada em media_fech_5a)
     idx = pd.bdate_range("2019-01-01", "2026-11-13", tz="America/New_York")

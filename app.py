@@ -27,6 +27,7 @@ import utils.formato
 import utils.lynch
 import utils.override
 import utils.percentile
+import utils.seo
 import utils.signals
 import utils.simons
 
@@ -47,6 +48,12 @@ from utils.percentile import zonas
 
 LOGO = Path(__file__).parent / "assets" / "logo.png"
 st.set_page_config(page_title="FINTAI", page_icon=str(LOGO), layout="wide")
+# Preview do link no WhatsApp/Telegram/Twitter: o st.set_page_config acima só muda o <title> depois
+# que o JavaScript do Streamlit termina de carregar - o WhatsApp nunca executa JavaScript, então lê
+# sempre o HTML estático original (<title>Streamlit</title>, sem nenhuma meta tag). Ver utils/seo.py
+# para a explicação completa e a limitação (ajuste no arquivo estático do pacote streamlit, não uma
+# configuração oficial do Streamlit; não foi possível confirmar o preview real do WhatsApp daqui).
+utils.seo.aplicar_meta_og()
 
 MAX_TICKERS = 20          # limite de ações no comparativo, para manter a busca rápida
 COTACOES_TTL = 60         # segundos de cache da cotação em lote (session_state)

@@ -6,6 +6,16 @@
 <title>Fintai · Micron (exemplo)</title>
 <meta name="description" content="Tela de detalhes da ação no Fintai, com dados de exemplo da Micron (MU).">
 <meta name="theme-color" content="#0e1420">
+<!-- FINTAI-OG -->
+    <meta property="og:url" content="https://imoveispalmassc-wq.github.io/FINTAI/">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Fintai · Micron (exemplo)">
+    <meta property="og:description" content="Tela de detalhes da ação no Fintai, com dados de exemplo da Micron (MU).">
+    <meta property="og:image" content="https://raw.githubusercontent.com/imoveispalmassc-wq/FINTAI/main/assets/logo.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Fintai · Micron (exemplo)">
+    <meta name="twitter:description" content="Tela de detalhes da ação no Fintai, com dados de exemplo da Micron (MU).">
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/imoveispalmassc-wq/FINTAI/main/assets/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap">
@@ -31,14 +41,17 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--azul); ou
 
 .proto { margin: 10px 0 0; padding: 6px 10px; border-radius: 8px; background: #f2b84b1f; color: var(--ambar); font-size: 11.5px; text-align: center; }
 
-/* topo */
-.topo { display: flex; align-items: center; gap: 10px; padding: 12px 0 8px; }
+/* topo: fixo (sticky) no alto da viewport ao rolar, pra nunca perder de vista qual ativo está
+   sendo olhado - nome + preço (o badge/decisão continua só na posição normal, mais abaixo) */
+.topo { display: flex; align-items: center; gap: 10px; padding: 12px 0 8px;
+  position: sticky; top: 0; z-index: 20; background: var(--bg); }
 .topo .icone { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; flex: none; }
 .topo .icone:active { background: var(--card); }
 .topo .meio { flex: 1; min-width: 0; }
 .topo .nome { font-family: var(--display); font-size: 19px; font-weight: 700; line-height: 1.15; }
 .topo .bolsa { display: inline-flex; align-items: center; gap: 6px; color: var(--suave); font-size: 12.5px; margin-top: 2px; }
 .topo .bolsa svg { flex: none; }
+.topo .preco-topo { font-family: var(--display); font-size: 17px; font-weight: 700; flex: none; }
 svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* cartão de decisão */
@@ -199,7 +212,8 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 /* ---- ajustes para rodar dentro do Streamlit ---- */
 [hidden] { display: none !important; }
 .app { max-width: 520px; padding-left: 0; padding-right: 0; padding-bottom: 8px; }
-.topo { padding: 4px 0 10px; }
+.topo { padding: 4px 0 10px; border-bottom: 1px solid transparent; }
+.topo.rolou { border-bottom-color: var(--borda); box-shadow: 0 4px 10px #05080f40; }
 .fundo { z-index: 1000001; }
 .escalas .e:disabled { opacity: .35; cursor: default; }
 .barras .col { display: block; }
@@ -345,6 +359,7 @@ body { margin: 0; background: var(--bg); font-family: var(--corpo); }
       <div class="nome" id="t-nome"></div>
       <div class="bolsa" id="t-bolsa"></div>
     </div>
+    <div class="preco-topo num" id="t-preco"></div>
   </header>
   <div class="modo-linha">
     <h2 class="visao-t">Visão geral</h2>
@@ -488,6 +503,17 @@ function montar(root, d) {
   /* ---------------- topo e decisão */
   $('t-nome').textContent = d.nome;
   $('t-bolsa').textContent = d.bolsa ? `${d.bolsa} (${d.ticker})` : d.ticker;
+  // cabeçalho fixo (sticky, CSS) ao rolar: nome + preço sempre visíveis, pra nunca perder de vista
+  // qual ativo está sendo olhado. O preço aqui é o mesmo d.preco do cartão de decisão, só repetido.
+  $('t-preco').textContent = f(d.preco);
+  $('t-preco').style.color = tem(d.varDia) ? cor(d.varDia) : '';
+  const topoEl = document.querySelector('.topo');
+  if (topoEl) {
+    const sombra = () => topoEl.classList.toggle('rolou', window.scrollY > 4);
+    sombra();
+    window.addEventListener('scroll', sombra, { passive: true });
+    limpar.push(() => window.removeEventListener('scroll', sombra));
+  }
   let modo = 'graham';
   try { modo = sessionStorage.getItem('fintai-modo') || 'graham'; } catch (e) { /* sem armazenamento */ }
   if (!['graham', 'lynch', 'simons'].includes(modo)) modo = 'graham';
@@ -919,11 +945,21 @@ function montar(root, d) {
         <div class="zona" style="--c:var(--ardosia)"><span class="rot">Zona neutra</span><b class="num">${f(zO)} a ${f(zC)}</b></div>
         <div class="zona" style="--c:var(--ambar)"><span class="rot">Zona cara</span><b class="num">acima de ${din(zC)}</b></div>
         <div class="card">
-          <div class="zonas-rot" style="grid-template-columns:${a}fr ${b - a}fr ${100 - b}fr">
-            <span style="color:var(--verde)"><b>${a < 11 ? '' : 'Oportunidade'}</b></span>
-            <span style="color:#aab4c6"><b>${b - a < 11 ? '' : 'Neutra'}</b></span>
-            <span style="color:var(--ambar)"><b>${100 - b < 11 ? '' : 'Cara'}</b></span>
-          </div>
+          ${(() => {
+            // o nome da zona some quando a própria coluna é estreita demais pra caber o texto sem
+            // quebrar palavra no meio (ex.: "Oportunidade" virando "Oportunida"/"de" em 2 linhas,
+            // num ativo com zona de oportunidade estreita, como CBRS) - um limiar fixo (11%) servia
+            // pra "Cara"/"Neutra" (curtos) mas não pra "Oportunidade", bem mais longo: o limiar
+            // agora usa a largura real estimada de cada rótulo (mesma técnica de largadorPx/
+            // pxParaPct já usada acima pros números da régua), não um número igual pra todos
+            const precisaRot = texto => pxParaPct(largadorPx(texto));
+            const rot = (col, texto) => col < precisaRot(texto) ? '' : texto;
+            return `<div class="zonas-rot" style="grid-template-columns:${a}fr ${b - a}fr ${100 - b}fr">
+            <span style="color:var(--verde)"><b>${rot(a, 'Oportunidade')}</b></span>
+            <span style="color:#aab4c6"><b>${rot(b - a, 'Neutra')}</b></span>
+            <span style="color:var(--ambar)"><b>${rot(100 - b, 'Cara')}</b></span>
+          </div>`;
+          })()}
           <div class="marca-cima limites num">
             <span class="esq">${textoEsq}</span>
             ${(() => {
