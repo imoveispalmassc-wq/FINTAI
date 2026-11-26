@@ -233,15 +233,13 @@ def test_contabil_volta_para_o_yahoo_se_a_sec_estiver_incompleta():
 
 
 def test_card_pl_na_ordem_inicio_contabil_previsao():
+    # issue #47 (item 12): bloco único "Lucro e Preço vs Lucro" - a "Visão do ano" mantém a ordem
+    # cronológica Início do ano -> Contábil 12 meses (TTM) -> Previsão atual.
     import pathlib
     js = pathlib.Path(__file__).resolve().parent.parent.joinpath("tela", "detalhe.js").read_text(encoding="utf-8")
-    tab = js[js.index('<div class="tab-pl num">'):]
-    cab = tab[:tab.index('<span class="rot">P/L</span>')]
-    assert cab.index("Início do ano") < cab.index("Contábil") < cab.index("Previsão atual")
-    linha_pl = tab[tab.index('<span class="rot">P/L</span>'):tab.index("\n", tab.index('<span class="rot">P/L</span>'))]
-    assert linha_pl.index("plIni") < linha_pl.index("d.pl)") < linha_pl.index("plPrev")
-    textos = js[js.index("const linhasPL"):js.index("const frasePL")]
-    assert textos.index("Início do ano") < textos.index("Contábil 12 meses") < textos.index("Previsão atual") < textos.index("Média 12m")
+    bloco = js[js.index("const linhasVisao"):js.index("const linhasMedias")]
+    assert bloco.index("Início do ano") < bloco.index("Contábil 12 meses") < bloco.index("Previsão atual")
+    assert "Lucro e Preço vs Lucro" in js
 
 
 

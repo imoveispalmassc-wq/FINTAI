@@ -74,6 +74,17 @@ function montar(root, d) {
   const ex = chave => (d.exemplos && d.exemplos[chave] ? ' <span class="tag-proto">EXEMPLO</span>' : '');
   const FOLHAS = {};
   const fonte = `<p><b>Fonte:</b> ${d.fonte} · atualizado em ${d.atualizado}.</p>`;
+  // Selo de Fundamentos (issue #47, item 11): fato de fundamento, nunca recomendação - fica
+  // abaixo da "Faixa inferior". Só aparece quando o robô teve histórico trimestral suficiente
+  // para calcular com segurança (lucro contábil, ROE e dividendo vs 12 meses atrás); sem isso,
+  // d.seloFundamentos vem null e o selo simplesmente não aparece (nunca inventa comparação -
+  // ver limitação documentada no CLAUDE.md).
+  const seloFundamentosHtml = () => {
+    const S = d.seloFundamentos;
+    if (!S || !S.nivel) return '';
+    const CLASSE = { 1: 'selo-fund-1', 2: 'selo-fund-2', 3: 'selo-fund-3' }[S.nivel] || 'selo-fund-1';
+    return `<div class="selo-fund ${CLASSE}"><b>${S.titulo}</b><span>${S.subtexto}</span></div>`;
+  };
   // faixa de preço do período escolhido no gráfico: 52 semanas (padrão), 5 anos ou todo o histórico
   const FAIXA_PADRAO = { min: d.min52, max: d.max52, zOport: d.zOport, zCara: d.zCara, decisao: d.decisao,
     rotulo: 'Últimas 52 semanas', curto: '52 semanas', testada: true };
@@ -90,8 +101,6 @@ function montar(root, d) {
     : p > 92 ? 'left:auto;right:0;transform:none;text-align:right' : `left:${p}%`;
   const dy = tem(d.dividendo) && d.preco ? d.dividendo / d.preco * 100 : null;
   const naoPagadora = tem(dy) && dy < 0.5;
-  const metodosJusto = [['Conservador', d.graham], ['P/L histórico', d.justoPL]]
-    .concat(naoPagadora ? [] : [['Bazin', d.bazin]]).filter(m => tem(m[1]) && m[1] > 0).sort((a, b) => a[1] - b[1]);
 
   /* ---------------- folha "Ver como calculamos" */
   function abrirFolha(titulo, html) {
@@ -144,7 +153,7 @@ function montar(root, d) {
       // Lynch só pela MM200 (ignora a faixa 30/70): oportunidade de -10% a +5%, neutro até +15%, caro acima
       const LP = d.lynch.preco, e = LP || fx.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
       classe = e.codigo === 'COMPRAR' ? (LP || e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
-      const zona = LP && LP.zona === 'Bem abaixo da MM200' ? 'faixa Bem abaixo da MM200' : { COMPRAR: 'Zona de Oportunidade', AGUARDAR: 'Zona Neutra', CARO: 'Zona Cara' }[e.codigo];
+      const zona = LP && LP.zona === 'Bem abaixo da MM200' ? 'faixa Bem abaixo da MM200' : { COMPRAR: 'Faixa inferior', AGUARDAR: 'Zona Neutra', CARO: 'Faixa superior' }[e.codigo];
       const conclusao = v.cor === 'verde'
         ? (e.codigo === 'COMPRAR' ? 'Crescimento aprovado e o preço está na Zona de Oportunidade.'
           : `Crescimento aprovado, mas o preço está na ${zona}. Por isso: AGUARDAR.`)
@@ -181,7 +190,6 @@ function montar(root, d) {
   }
 
   /* ---------------- gráfico */
-  let backtest;
   (function StockChart(el) {
     const ESCALAS = [['10d', '10D'], ['hoje', 'Hoje'], ['1s', '1S'], ['1m', '1M'], ['1a', '1A'], ['5a', '5A'], ['max', 'Máx.']];
     const series = d.series;
@@ -257,13 +265,13 @@ function montar(root, d) {
       // quando os valores são próximos (ex. Oportunidade 1 e 2) ou iguais (Neutro e Caro, que
       // descrevem o mesmo valor de dois lados)
       const linhas = [
-        { y: Y(zCara), t: 'Neutro até', v: f(zCara), c: '#aab4c6' },
-        { y: Y(zCara), t: 'Caro acima de', v: f(zCara), c: '#f06a6a' },
+        { y: Y(zCara), t: 'Faixa neutra até', v: f(zCara), c: '#aab4c6' },
+        { y: Y(zCara), t: 'Faixa superior acima de', v: f(zCara), c: '#f06a6a' },
         ...(LPg ? [{ y: Y(LPg.bemAbaixoAte), t: 'Bem abaixo de', v: f(LPg.bemAbaixoAte), c: '#7aa2f7' }] : []),
         ...(tem(mm200Ref) ? [{ y: Y(mm200Ref), t: 'Média 200d', v: f(mm200Ref), c: '#f2994a' }] : []),
-        { y: Y(zOport), t: 'Oportunidade 1', v: f(zOport), c: '#2fbf8a' },
-        ...(lim3aRef ? [{ y: Y(lim3aRef), t: 'Oportunidade 2', v: f(lim3aRef), c: '#8fe3c4' }] : []),
-        ...(lim5aRef ? [{ y: Y(lim5aRef), t: 'Oportunidade 3', v: f(lim5aRef), c: '#1f9d72' }] : []),
+        { y: Y(zOport), t: 'Faixa inferior 1', v: f(zOport), c: '#2fbf8a' },
+        ...(lim3aRef ? [{ y: Y(lim3aRef), t: 'Faixa inferior 2', v: f(lim3aRef), c: '#8fe3c4' }] : []),
+        ...(lim5aRef ? [{ y: Y(lim5aRef), t: 'Faixa inferior 3', v: f(lim5aRef), c: '#1f9d72' }] : []),
       ];
       linhas.sort((a, b) => a.y - b.y);
       linhas.forEach((r, k) => { if (k && r.y - linhas[k - 1].y < 12) r.y = linhas[k - 1].y + 12; });
@@ -340,10 +348,10 @@ function montar(root, d) {
       if (elLeg) {
         const temMMLeg = (modo === 'lynch' && d.lynch && d.lynch.preco && tem(d.lynch.preco.mm200))
           || (modo === 'graham' && d.conservadorFaixa && tem(d.conservadorFaixa.mm200));
-        const legL = modo === 'simons' ? [] : [['Oportunidade', '#2fbf8a'],
+        const legL = modo === 'simons' ? [] : [['Inferior', '#2fbf8a'],
           ...(modo === 'lynch' && d.lynch && d.lynch.preco ? [['Bem abaixo', '#7aa2f7']] : []),
           ...(temMMLeg ? [['Média 200d', '#f2994a']] : []),
-          ['Neutro', '#8c99b0'], ['Caro', '#f06a6a']];
+          ['Neutra', '#8c99b0'], ['Superior', '#f06a6a']];
         elLeg.innerHTML = legL.map(([t, c]) => `<span><i style="background:${c}"></i>${t}</span>`).join('');
       }
 
@@ -422,7 +430,7 @@ function montar(root, d) {
     function trocar(k) {
       escala = k; toque = null;
       el.querySelectorAll('.e').forEach(b => b.setAttribute('aria-pressed', b.dataset.e === k));
-      trocarFaixa(k); legenda(); animar(); backtest && backtest(k === 'max');
+      trocarFaixa(k); legenda(); animar();
     }
     el.querySelectorAll('.e').forEach(b => { b.onclick = () => trocar(b.dataset.e); });
     $('gvela').onclick = e => { velas = !velas; e.currentTarget.setAttribute('aria-pressed', velas); animar(); };
@@ -548,9 +556,9 @@ function montar(root, d) {
     const titulo = C ? 'Valuation (preço médio de 1 ano)' : fx.rotulo;
     el.innerHTML = `<h2>Faixa de preço <small>${titulo}</small></h2>
       <div class="pilha">
-        <div class="zona" style="--c:var(--verde)"><span class="rot">Zona de oportunidade</span><b class="num">até ${din(zO)}</b></div>
+        <div class="zona" style="--c:var(--verde)"><span class="rot">Faixa inferior</span><b class="num">até ${din(zO)}</b>${seloFundamentosHtml()}</div>
         <div class="zona" style="--c:var(--ardosia)"><span class="rot">Zona neutra</span><b class="num">${f(zO)} a ${f(zC)}</b></div>
-        <div class="zona" style="--c:var(--ambar)"><span class="rot">Zona cara</span><b class="num">acima de ${din(zC)}</b></div>
+        <div class="zona" style="--c:var(--ambar)"><span class="rot">Faixa superior</span><b class="num">acima de ${din(zC)}</b></div>
         <div class="card">
           ${(() => {
             // o nome da zona some quando a própria coluna é estreita demais pra caber o texto sem
@@ -562,9 +570,9 @@ function montar(root, d) {
             const precisaRot = texto => pxParaPct(largadorPx(texto));
             const rot = (col, texto) => col < precisaRot(texto) ? '' : texto;
             return `<div class="zonas-rot" style="grid-template-columns:${a}fr ${b - a}fr ${100 - b}fr">
-            <span style="color:var(--verde)"><b>${rot(a, 'Oportunidade')}</b></span>
+            <span style="color:var(--verde)"><b>${rot(a, 'Inferior')}</b></span>
             <span style="color:#aab4c6"><b>${rot(b - a, 'Neutra')}</b></span>
-            <span style="color:var(--ambar)"><b>${rot(100 - b, 'Cara')}</b></span>
+            <span style="color:var(--ambar)"><b>${rot(100 - b, 'Superior')}</b></span>
           </div>`;
           })()}
           <div class="marca-cima limites num">
@@ -783,158 +791,77 @@ function montar(root, d) {
       <div class="pilha">${bloco('mm12', 'Últimos 12 meses', d.min52, d.max52, '12 meses')}${bloco('mm30', 'Últimos 30 dias', d.min30, d.max30, '30 dias')}</div>`;
   })($('minmax'));
 
-  /* ---------------- fundamentos */
+  /* ---------------- fundamentos (issue #47, itens 12 e 14: bloco único "Lucro e Preço vs Lucro",
+     sem selo "Favorável"/"Desfavorável" (isso é só o Selo de Fundamentos do item 11, lá na Faixa
+     de preço) e sem "Ver como calculamos"/texto gigante. REGRA TRAVADA: 1 LPA só no app = LPA
+     CONTÁBIL TTM; ajustado só como [Ajustado] extra, nunca no cálculo principal. Linha sem dado
+     nunca aparece como "Sem dado" - some. */
   (function Fundamentals(el) {
-    const selo = (dif, menorMelhor) => Math.abs(dif) < 5 ? ['neutro', '⚠️ Neutro'] : ((dif < 0) === menorMelhor ? ['bom', '✅ Favorável'] : ['ruim', '❌ Desfavorável']);
-    const semDado = ['neutro', INDISP];
-
-    // 1. P/L
-    const difPL = tem(d.pl) && tem(d.plMedio12) && d.plMedio12 > 0 ? (d.pl / d.plMedio12 - 1) * 100 : null;
-    // preço que a ação teria hoje se o mercado pagasse o P/L médio dos últimos 12 meses pelo lucro atual
-    const precoPLMedio = tem(d.plMedio12) && tem(d.lpa) && d.lpa > 0 ? d.plMedio12 * d.lpa : null;
     const prejuizo = tem(d.lpa) && d.lpa <= 0;
-    // P/L pelo lucro ajustado: só quando a soma dos 4 trimestres do Yahoo difere 10%+ do LPA contábil
+    // LPA ajustado: só informativo, nunca no cálculo (REGRA TRAVADA)
     const lpaAjustado = d.baseLpa === 'últimos 4 trimestres' && tem(d.lpa) && d.lpa > 0 && tem(d.lpaAgora) && d.lpaAgora > 0
       && Math.abs(d.lpaAgora / d.lpa - 1) > 0.10 ? d.lpaAgora : null;
     const plAjustado = tem(lpaAjustado) ? d.preco / lpaAjustado : null;
-    const [cPL, tPL] = prejuizo ? ['neutro', 'Sem lucro em 12 meses'] : tem(difPL) ? selo(difPL, true) : semDado;
-    // três colunas: contábil (real, muda a cada balanço) | início do ano (1º guidance, congelado) | previsão atual
+    // Visão do ano: início do ano (guidance congelado) | contábil 12 meses | previsão atual (guidance ou consenso)
     const Fp = d.consensoAno || {}, G0 = d.guidance, GI = d.guidanceInicial || {};
     const anoPrev = (G0 && G0.periodo) || (d.lpaAnos && d.lpaAnos.length ? d.lpaAnos[d.lpaAnos.length - 1].ano + 1 : null);
     const lpaCons = tem(Fp.lpa) && Fp.lpa > 0 ? Fp.lpa : null;
     const lpaGuia = G0 && tem(G0.lpa) && G0.lpa > 0 ? G0.lpa : null;
-    const lpaPrev = lpaGuia || lpaCons;                      // previsão atual: guidance da empresa ou consenso
+    const lpaPrev = lpaGuia || lpaCons;
     const plPrev = tem(lpaPrev) ? d.preco / lpaPrev : null;
     const lpaIni = tem(GI.lpa) && GI.lpa > 0 ? GI.lpa : null;
     const plIni = tem(lpaIni) ? d.preco / lpaIni : null;
-    const fontePrev = lpaGuia ? `GUIDANCE OFICIAL · ${G0.data}` : tem(lpaCons) ? `Consenso Yahoo${tem(Fp.analistas) ? ` · ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' · pouco confiável' : ''}` : '';
-    const lpaMedioImpl = tem(d.precoMedio12) && tem(d.plMedio12) && d.plMedio12 > 0 ? d.precoMedio12 / d.plMedio12 : null;
-    const B = d.balanco;
-    const rotBal = B && B.data ? `último balanço divulgado em ${B.data}` : 'último balanço divulgado';
-    const faixaG = g => g.porLpa === false ? `lucro de ${din(g.lucroMin / 1e9, 0)} a ${din(g.lucroMax / 1e9, 0)} bi (LPA ${din(g.lpa)})` : `${g.lucroTipo || g.tipo || 'LPA'} de ${din(g.lpaMin)} a ${din(g.lpaMax)}, médio ${din(g.lpa)}`;
-    const linhasDetalhe = prejuizo ? ['A empresa teve prejuízo nos últimos 12 meses, então a relação preço/lucro não se aplica.']
-      : !tem(d.pl) ? ['O Yahoo Finance não traz o lucro por ação deste ativo.']
-      : [
-        lpaIni ? `<b>Início do ano ${GI.ano}</b> (congelado): primeiro guidance da empresa para o ano, ${faixaG(GI)}. Fonte: ${GI.fonte}, ${GI.data}. Não muda.`
-          : `<b>Início do ano ${GI.ano || anoPrev || ''}</b>: ${GI.status || 'sem projeção inicial encontrada'}.`,
-        (() => { const S = d.lpaSec && d.lpaSec.status === 'ok' ? d.lpaSec : null, aj = S && S.base === 'ajustado', ng = S ? S.trimestres_gaap || 0 : 0;
-          const nome = aj ? `Contábil Ajustado 12 meses${ng ? ` (${ng} trimestre${ng > 1 ? 's' : ''} GAAP por falta de Ajustado)` : ''}` : 'Contábil 12 meses';
-          const conta = !S || !S.trimestres ? '' : tem(S.lucro_12m)
-            ? ` Conta: ${S.trimestres.map(t => `${t.tri} ${f(t.lucro / 1e9, 2)}`).join(' + ')} = ${f(S.lucro_12m / 1e9, 2)} bi ÷ ${f(S.acoes / 1e9, 2)} bi de ações = LPA ${f(d.lpa)}.`
-            : ` Conta: ${S.trimestres.map(t => `${t.fim.slice(3)} ${f(t.lpa)}${t.tipo === 'GAAP' && aj ? ' (GAAP)' : ''}`).join(' + ')} = ${f(d.lpa)}.`;
-          // Regras travadas: GAAP na tela; ajustado, total (com descontinuadas) e 4º tri divergente só como nota
-          const notas = !S ? '' : [
-            S.tem_descontinuadas && tem(S.lpa_12m_total) ? ` Usamos operações contínuas; LPA total (com descontinuadas): ${f(S.lpa_12m_total)}.` : '',
-            tem(S.lpa_ajustado) ? ` LPA ajustado da empresa (só nota): ${f(S.lpa_ajustado)}.` : '',
-            tem(S.q4_release) && tem(S.q4_calculado) && S.q4_release !== S.q4_calculado ? ` 4º tri: release ${f(S.q4_release)} (usado), cálculo ano − 9 meses daria ${f(S.q4_calculado)}.` : '',
-            S.ttm_regra && tem(S.soma_trimestres) ? ` 12 meses = ano fiscal completo: LPA anual oficial (soma dos trimestres ${f(S.soma_trimestres)}).` : ''].join('');
-          return `<b>${nome}</b> (${rotBal}): cotação de hoje ÷ lucro por ação dos últimos 12 meses (soma dos 4 últimos trimestres). Muda a cada balanço. Fonte: ${d.lpaFonte || 'Yahoo Finance'}.${conta}${notas}${tem(d.acoes) && d.acoes > 0 ? ` Lucro = lucro por ação × ${f(d.acoes / 1e9, 2)} bi de ações (${d.acoesFonte || 'Yahoo'}).` : ''}`; })(),
-        lpaGuia ? `<b>Previsão atual ${anoPrev || ''}</b>: GUIDANCE OFICIAL · ${G0.data}: ${faixaG(G0)}. Fonte: ${G0.fonte}.${G0.bases && G0.bases.length ? ` Base ${G0.bases[0].ano} recalculada pela empresa: ${din(G0.bases[0].valor)}${tem(G0.bases[0].antes) ? ` (antes ${din(G0.bases[0].antes)})` : ''}, ${sinal((lpaGuia / G0.bases[0].valor - 1) * 100, 1)} no guidance.` : ''}${lpaIni ? ` Desde o início do ano: ${sinal((lpaGuia / lpaIni - 1) * 100, 1)}.` : ''}${tem(lpaCons) ? ` Consenso Yahoo: ${din(lpaCons)}.` : ''}`
-          : tem(lpaCons) ? `<b>Previsão atual ${anoPrev || ''}</b>: consenso${tem(Fp.analistas) ? ` de ${f(Fp.analistas, 0)} ${Fp.analistas === 1 ? 'analista' : 'analistas'}` : ' dos analistas'} no Yahoo Finance${tem(Fp.baixa) && tem(Fp.alta) ? `, de ${din(Fp.baixa)} a ${din(Fp.alta)}` : ''}${tem(Fp.analistas) && Fp.analistas < 3 ? ' (poucos analistas: pouco confiável)' : ''}. Pode mudar.`
-          : `<b>Previsão atual</b>: sem estimativa no Yahoo nem guidance cadastrado.`,
-        !tem(difPL) ? '<b>Média 12m</b>: sem histórico para comparar.'
-          : `<b>Média 12m</b>: P/L ${f(d.plMedio12)}${tem(lpaMedioImpl) ? ` (lucro/ação ${f(lpaMedioImpl)}, cotação média ${f(d.precoMedio12)})` : ''}, ${d.plMetodo === 'contabil' ? `com o lucro contábil de cada balanço desde ${d.mediaDesde}` : d.plMetodo === 'simplificado' ? 'preço médio do ano ÷ o mesmo lucro contábil' : 'com o lucro de cada balanço'}. O P/L contábil está ${sinal(difPL, 1)} contra a média: ${difPL < -5 ? 'mais barata que no último ano' : difPL > 5 ? 'mais cara que no último ano' : 'perto da média'}.`];
-    // card: só o resumo; a conta dos trimestres, as fontes completas e as faixas ficam em "Ver como calculamos"
-    const bi = v => `${d.moeda} ${f(v / 1e9, 1)} bi`;
-    const resumoG = g => g.porLpa === false && tem(g.lucroMin) ? (g.lucroMin === g.lucroMax ? bi(g.lucroMin) : `${d.moeda} ${f(g.lucroMin / 1e9, 0)} a ${f(g.lucroMax / 1e9, 0)} bi`)
-      : `LPA ${f(g.lpaMin)} a ${f(g.lpaMax)}`;
-    const varAno = lpaGuia && lpaIni ? ` (${sinal((lpaGuia / lpaIni - 1) * 100, 1)})` : '';
-    const fonteCurta = (d.lpaFonte || '').startsWith('Yahoo -') ? ` <span class="nota">(${d.lpaFonte.replace(/\s*\(.*\)$/, '')})</span>` : '';
-    const linhasPL = prejuizo || !tem(d.pl) ? linhasDetalhe : [
-      `<b>Início do ano ${GI.ano || anoPrev || ''}:</b> ${lpaIni ? (tem(GI.lucroMin) ? `guidance ${bi((GI.lucroMin + GI.lucroMax) / 2)}` : `guidance LPA ${f(lpaIni)}`) : 'sem projeção inicial encontrada'}`,
-      `<b>Contábil 12 meses:</b> ${f(d.preco)} ÷ ${f(d.lpa)} = P/L ${f(d.pl)}${fonteCurta}`,
-      lpaGuia ? `<b>Previsão atual ${anoPrev || ''}:</b> guidance ${resumoG(G0)}${varAno}`
-        : tem(lpaCons) ? `<b>Previsão atual ${anoPrev || ''}:</b> consenso LPA ${f(lpaCons)}${tem(Fp.analistas) ? ` (${f(Fp.analistas, 0)} analistas${Fp.analistas < 3 ? ', pouco confiável' : ''})` : ''}`
-        : '<b>Previsão atual:</b> sem estimativa',
-      tem(difPL) ? `<b>Média 12m:</b> P/L ${f(d.plMedio12)}. Contábil ${sinal(difPL, 1)} vs média.` : '<b>Média 12m:</b> sem histórico'];
-    const frasePL = linhasPL.join('<br>');
-    const notaAjustado = tem(plAjustado) ? `Lucro ajustado (Yahoo): LPA ${din(lpaAjustado)}, P/L ${f(plAjustado)}. É a base de alguns sites.` : '';
+    const fonteLinha = (() => { const S = d.lpaSec && d.lpaSec.status === 'ok' ? d.lpaSec : null;
+      if (S && S.trimestres && S.trimestres.length) return `Fonte: ${d.lpaFonte || 'Yahoo Finance'} · release XTXX · ${d.balanco && d.balanco.data ? d.balanco.data : ''}`;
+      return d.lpaFonte ? `Fonte: ${d.lpaFonte}` : ''; })();
 
-    // 2. Dividendos
-    const dyDif = tem(dy) && tem(d.dyMedio12) && d.dyMedio12 > 0 ? (dy / d.dyMedio12 - 1) * 100 : null;
+    // Lucro no ano: lucro contábil até o momento (TTM) e lucro do ano anterior, para a Visão do ano
+    const linhasVisao = [
+      lpaIni ? ['Início do ano', `${din(lpaIni)}${GI.ano ? ` (${GI.ano})` : ''}`] : null,
+      !prejuizo && tem(d.lpa) ? ['Contábil 12 meses (TTM)', din(d.lpa)] : null,
+      tem(lpaPrev) ? ['Previsão atual' + (anoPrev ? ` (${anoPrev})` : ''), `${din(lpaPrev)}${lpaGuia ? ' · GUIDANCE OFICIAL' : tem(Fp.analistas) && Fp.analistas < 3 ? ' · consenso, pouco confiável' : lpaCons ? ' · consenso' : ''}`] : null,
+    ].filter(Boolean);
+    const linhasMedias = [
+      tem(d.lpaMedio3a) ? `3 anos ${din(d.lpaMedio3a)}` : null,
+      tem(d.lpaMedia5a) ? `5 anos ${din(d.lpaMedia5a)}` : null,
+      tem(d.lpaMedia10a) ? `10 anos ${din(d.lpaMedia10a)}` : null,
+    ].filter(Boolean);
+
+    // Dividendos (item 14): só fato, sem selo "Favorável"/"Desfavorável" - DY que sobe porque o
+    // preço caiu não é favorável. "Dividendo reduzido" entra como frase de fato (conta para o
+    // Selo de Fundamentos do item 11, não aqui).
     const cortou = tem(d.dividendo12Atras) && d.dividendo12Atras > 0 && d.dividendo < d.dividendo12Atras * 0.95;
-    let cD, tD, fraseD;
-    if (!tem(dy)) { [cD, tD] = semDado; fraseD = 'Sem dados de proventos para este ativo.'; }
-    else if (naoPagadora) {
-      [cD, tD] = ['neutro', d.dividendo > 0 ? 'Pagadora baixa' : 'Não paga dividendos'];
-      fraseD = d.dividendo > 0
-        ? `A ${d.ticker} quase não paga dividendo. Ela reinveste quase todo o lucro na própria empresa. Não é um problema, é o perfil da empresa. Ela é para quem busca crescimento, não renda.`
-        : `A ${d.ticker} não pagou dividendo nos últimos 12 meses. Não é necessariamente um problema: é o perfil de quem reinveste o lucro. Ela é para quem busca crescimento, não renda.`;
-    } else if (!tem(dyDif)) { [cD, tD] = semDado; fraseD = 'Sem histórico suficiente para comparar com a média do último ano.'; }
-    else if (dyDif >= 5) { [cD, tD] = ['bom', '✅ Favorável']; fraseD = 'Os dividendos rendem mais sobre o preço de hoje do que na média do último ano.'; }
-    else if (dyDif > -5) { [cD, tD] = ['neutro', '⚠️ Neutro']; fraseD = 'O rendimento dos dividendos está perto da média do último ano.'; }
-    else if (cortou) { [cD, tD] = ['ruim', '❌ Desfavorável']; fraseD = `A empresa pagou menos dividendo: de ${din(d.dividendo12Atras)} para ${din(d.dividendo)} por ação em 12 meses.`; }
-    else { [cD, tD] = ['neutro', '⚠️ Neutro']; fraseD = 'O rendimento caiu porque o preço da ação subiu, não porque o dividendo foi cortado.'; }
+    const linhasDiv = [
+      tem(d.dividendo) ? ['Dividendo por ação / ano', din(d.dividendo)] : null,
+      tem(dy) ? ['DY atual', `${f(dy)}%`] : null,
+      tem(d.dyMedio12) ? ['DY média 12m', `${f(d.dyMedio12)}%`] : null,
+      d.guidance && tem(d.guidance.dividendo) ? ['Projetado [Projeção]', `${din(d.guidance.dividendo)} · ${f(d.guidance.dividendo / d.preco * 100, 1)}%`] : null,
+    ].filter(Boolean);
+    const fraseDiv = !tem(dy) ? ''
+      : naoPagadora ? (d.dividendo > 0 ? `A ${d.ticker} quase não paga dividendo; reinveste quase todo o lucro na própria empresa. É o perfil da empresa, para quem busca crescimento, não renda.`
+          : `A ${d.ticker} não pagou dividendo nos últimos 12 meses. É o perfil de quem reinveste o lucro, não necessariamente um problema.`)
+      : cortou ? `Dividendo reduzido vs 12 meses atrás: de ${din(d.dividendo12Atras)} para ${din(d.dividendo)} por ação.` : '';
 
-    // 3. Lucro
-    const trimestral = d.baseLpa === 'últimos 4 trimestres';
-    const proximo = trimestral && tem(d.lpa) && tem(d.lpaAgora) && Math.abs(d.lpaAgora / d.lpa - 1) <= 0.03;
-    const lpaAtual = proximo ? d.lpa : d.lpaAgora;   // mesmo LPA das outras seções sempre que possível
-    const difLPA = tem(lpaAtual) && tem(d.lpa12Atras) && d.lpa12Atras !== 0 ? (lpaAtual - d.lpa12Atras) / Math.abs(d.lpa12Atras) * 100 : null;
-    const [cL, tL] = tem(difLPA) ? selo(difLPA, false) : semDado;
-    // série trimestral em outra base (ex.: lucro ajustado x contábil): mesma tolerância de 10% do P/L médio
-    const outraBase = trimestral && tem(d.lpa) && d.lpa > 0 && tem(d.lpaAgora) && Math.abs(d.lpaAgora / d.lpa - 1) > 0.10;
-    const rotL = trimestral ? [outraBase ? 'Atual (ajustado)' : 'Atual', '12m atrás'] : ['Ano fiscal', 'Ano anterior'];
-    const notaBase = outraBase ? ` Os dois valores são do lucro por ação trimestral do Yahoo (lucro ajustado), na mesma base, então a comparação vale. O LPA usado no P/L e no Conservador é o contábil, ${din(d.lpa)}.` : '';
-    const fraseL = !tem(difLPA) ? 'O Yahoo Finance não traz o histórico de lucros deste ativo.'
-      : `O lucro por ação ${difLPA >= 0 ? 'cresceu' : 'caiu'} de ${din(d.lpa12Atras)} para ${din(lpaAtual)} ${trimestral ? 'em relação a 12 meses atrás' : 'de um ano fiscal para o outro'}. Base: ${d.baseLpa}.${notaBase}`;
-
-    const exemplo = tem(dy) ? `<div class="exemplo num">Se você investir ${d.moeda} 10.000 hoje, recebe ${din(10000 * d.dividendo / d.preco)} por ano de dividendo.</div>` : '';
-    el.innerHTML = `<h2>Fundamentos</h2>
-      <details class="acord" open><summary>Fundamentos: os 3 critérios, um a um</summary><div class="dentro">
-        <div class="card crit">
-          <div class="topo-c"><span class="nome">Preço vs Lucro (P/L)</span><span class="st ${cPL}">${tPL}</span></div>
+    el.innerHTML = `<h2>Lucro e Preço vs Lucro</h2>
+      <div class="pilha">
+        <div class="card">
           ${bolaAtualizacao(d.atualizacao)}
-          <div class="tab-pl num">
-            <span></span><div class="cab"><div>Início do ano</div><div class="i">${GI.ano || anoPrev || ''} · congelado</div></div><div class="cab"><div>Contábil</div><div class="i">12 meses · ${d.lpaSec && d.lpaSec.status === 'ok' && d.lpaSec.base === 'ajustado' ? 'ajustado' : 'real'}</div></div><div class="cab"><div>Previsão atual</div><div class="i">${lpaGuia ? 'guidance' : tem(lpaCons) ? 'analistas' : ''}</div></div>
-            <span class="rot">P/L</span><b class="gr">${tem(plIni) ? f(plIni) : '—'}</b><b class="gr">${f(d.pl)}</b><b class="gr">${tem(plPrev) ? f(plPrev) : '—'}</b>
-            ${tem(d.acoes) && d.acoes > 0 ? (() => { const tot = l => tem(l) ? l * d.acoes : null; const vals = [tot(lpaIni), tot(d.lpa), tot(lpaPrev)]; const ref = Math.max(...vals.filter(tem).map(Math.abs), 0); const [div, un] = ref >= 1e12 ? [1e12, 'tri'] : ref >= 1e9 ? [1e9, 'bi'] : [1e6, 'mi'];
-              return `<span class="rot">Lucro<br>${d.moeda} <span class="un">${un}</span></span>${vals.map(v => `<b>${tem(v) ? f(v / div, 1) : '—'}</b>`).join('')}`; })() : ''}
-            <span class="rot">Lucro/ação<br>${d.moeda}</span><b>${tem(lpaIni) ? f(lpaIni) : 'Sem dado'}</b><b>${f(d.lpa)}</b><b>${tem(lpaPrev) ? f(lpaPrev) : 'Sem dado'}</b>
-            <span class="rot">Cotação<br>${d.moeda}</span><b>${tem(plIni) ? f(d.preco) : '—'}</b><b>${f(d.preco)}</b><b>${tem(plPrev) ? f(d.preco) : '—'}</b>
-          </div>
-          <p class="linhas-pl">${frasePL}</p>
-          <button class="link" data-folha="f-pl">Ver como calculamos</button>
+          ${prejuizo ? `<div class="destaque" style="color:var(--vermelho)">A empresa teve prejuízo nos últimos 12 meses: a relação preço/lucro não se aplica.</div>` : !tem(d.pl) ? `<div class="nota">${INDISP}</div>` : `
+          <div class="duas"><span class="rot">Cotação ÷ LPA contábil TTM = P/L</span></div>
+          <div class="nota num" style="margin-top:2px">${f(d.preco)} ÷ ${f(d.lpa)} = <b style="color:var(--texto)">P/L ${f(d.pl)}</b></div>
+          ${tem(lpaAjustado) ? `<div class="nota num" style="margin-top:2px;color:var(--suave)">LPA [Ajustado]: ${f(lpaAjustado)}${tem(plAjustado) ? ` · P/L ajustado ${f(plAjustado)}` : ''}</div>` : ''}
+          ${linhasVisao.length ? `<div class="lista-v num" style="margin-top:10px">${linhasVisao.map(([r, v]) => `<div>${r}<b>${v}</b></div>`).join('')}</div>` : ''}
+          ${linhasMedias.length ? `<div class="nota num" style="margin-top:8px">Média: ${linhasMedias.join(' • ')}</div>` : ''}
+          ${tem(d.plMedio12) ? `<div class="nota num" style="margin-top:4px">P/L médio 12m: ${f(d.plMedio12)}</div>` : ''}
+          `}
+          ${fonteLinha ? `<div class="nota" style="margin-top:10px">${fonteLinha}</div>` : ''}
         </div>
-        <div class="card crit">
-          <div class="topo-c"><span class="nome">Dividendos</span><span class="st ${cD}">${tD}</span></div>
-          <div class="lista-v num">
-            <div>Dividendo por ação / ano<b>${din(d.dividendo)}</b></div>
-            <div>DY atual<b>${tem(dy) ? f(dy) + '%' : '—'}</b></div>
-            <div>DY média 12m<b>${tem(d.dyMedio12) ? f(d.dyMedio12) + '%' : '—'}</b></div>
-            ${d.guidance && tem(d.guidance.dividendo) ? `<div>Projetado (guidance${d.guidance.dividendoFonte === 'empresa' ? ', anual da empresa' : `, payout ${f(d.guidance.payout * 100, 0)}%`})<b>${din(d.guidance.dividendo)} · ${f(d.guidance.dividendo / d.preco * 100, 1)}%</b></div>` : ''}
-            <div>Diferença<b>${sinal(dyDif, 0)}</b></div>
-          </div>
-          ${exemplo}
-          <p>${fraseD}</p>
-          <button class="link" data-folha="f-dy">Ver como calculamos</button>
+        <div class="card">
+          <strong>Dividendos</strong>
+          ${linhasDiv.length ? `<div class="lista-v num" style="margin-top:8px">${linhasDiv.map(([r, v]) => `<div>${r}<b>${v}</b></div>`).join('')}</div>` : `<div class="nota" style="margin-top:8px">${INDISP}</div>`}
+          ${fraseDiv ? `<p class="nota" style="margin-top:8px">${fraseDiv}</p>` : ''}
         </div>
-        <div class="card crit">
-          <div class="topo-c"><span class="nome">Crescimento de Lucro (LPA)</span><span class="st ${cL}">${tL}</span></div>
-          <div class="vals num"><div><span>${rotL[0]}</span><b>${din(lpaAtual)}</b></div><div><span>${rotL[1]}</span><b>${din(d.lpa12Atras)}</b></div><div><span>Diferença</span><b style="color:${tem(difLPA) ? cor(difLPA) : 'inherit'}">${sinal(difLPA, 0)}</b></div></div>
-          <p>${fraseL}</p>
-          <button class="link" data-folha="f-lpa">Ver como calculamos</button>
-        </div>
-      </div></details>`;
-    FOLHAS['f-pl'] = () => ['Preço vs Lucro (P/L)', `<p>P/L = cotação ÷ lucro por ação de 12 meses: quantos anos de lucro a ação custa.</p>
-      ${linhasDetalhe.map(l => `<p>${l}</p>`).join('')}
-      ${GI && tem(GI.lpaMin) ? `<p><b>Faixa do início do ano:</b> LPA ${f(GI.lpaMin)} a ${f(GI.lpaMax)}.</p>` : ''}
-      ${notaAjustado ? `<p>${notaAjustado}</p>` : ''}
-      <p>Outros sites podem mostrar outro P/L: alguns usam o lucro ajustado da empresa, outros um período de 12 meses que ainda não inclui o último balanço.</p>
-      ${tem(d.pl) ? `<code>${f(d.preco)} ÷ ${f(d.lpa)} = ${f(d.pl)}</code>` : `<p>${INDISP}.</p>`}
-      ${tem(plPrev) ? `<p><b>Previsão ${anoPrev || ''}</b> (${fontePrev}):</p><code>${f(d.preco)} ÷ ${f(lpaPrev)} = ${f(plPrev)}</code>` : ''}
-      ${tem(lpaMedioImpl) ? `<p><b>Média 12m:</b> preço médio de fechamento do último ano e o lucro por ação que dá o P/L médio.</p><code>${f(d.precoMedio12)} ÷ ${f(d.plMedio12)} = ${f(lpaMedioImpl)}</code>` : ''}
-      ${tem(plAjustado) ? `<p>P/L pelo lucro ajustado (soma dos 4 últimos trimestres do Yahoo):</p><code>${f(d.preco)} ÷ ${f(lpaAjustado)} = ${f(plAjustado)}</code><p>Fica só como referência: o selo e a diferença usam o contábil, na mesma base da média de 12 meses.</p>` : ''}
-      ${tem(difPL) ? `<p>Diferença para a média de 12 meses:</p><code>(${f(d.pl)} − ${f(d.plMedio12)}) ÷ ${f(d.plMedio12)} = ${sinal(difPL)}</code>` : ''}
-      ${tem(precoPLMedio) ? `<p>Preço que a ação teria hoje se valesse o P/L médio de 12 meses, com o lucro atual:</p><code>P/L médio ${f(d.plMedio12)} × LPA ${f(d.lpa)} = ${din(precoPLMedio)}</code><p>Os dois preços mudam todo dia: o de hoje com a cotação, o do P/L médio com o lucro e a média.</p>` : ''}
-      <p>${d.plMetodo === 'contabil' ? `A média de 12 meses usa o lucro contábil de 12 meses em vigor em cada pregão, montado com os balanços trimestrais e anuais do Yahoo (lucro líquido ÷ ações; o trimestre mais recente sai do LPA de 12 meses). Período coberto: desde ${d.mediaDesde}.` : d.plMetodo === 'simplificado' ? 'Sem o lucro de cada trimestre na mesma base do LPA atual (o Yahoo pode trazer o trimestral ajustado e o anual contábil), a média de 12 meses é estimada: preço médio do ano ÷ LPA atual. Assim os dois P/L usam o mesmo lucro.' : 'A média de 12 meses usa o P/L de cada pregão, com o lucro já divulgado em cada data.'}</p>${fonte}`];
-    FOLHAS['f-dy'] = () => ['Dividendos (DY)', `<p>DY = Dividendo anual por ação ÷ Preço atual.</p>
-      ${tem(dy) ? `<code>${f(d.dividendo)} ÷ ${f(d.preco)} = ${f(dy)}%</code>
-      <p>Em ${d.moeda} 10.000 investidos:</p><code>10.000 × ${f(d.dividendo)} ÷ ${f(d.preco)} = ${din(10000 * d.dividendo / d.preco)} por ano</code>` : `<p>${INDISP}.</p>`}
-      <p>O dividendo anual é a soma dos proventos pagos nos últimos 12 meses. Com DY abaixo de 0,5% a empresa é tratada como não pagadora de dividendos, e o critério não conta contra ela.</p>
-      <p>Só marcamos como desfavorável quando a empresa de fato pagou menos dividendo do que nos 12 meses anteriores.</p>${fonte}`];
-    FOLHAS['f-lpa'] = () => ['Crescimento de Lucro (LPA)', `<p>LPA = Lucro líquido ÷ Número de ações.</p>
-      ${tem(difLPA) ? `<p>Crescimento:</p><code>(${f(lpaAtual)} − ${f(d.lpa12Atras)}) ÷ ${f(Math.abs(d.lpa12Atras))} = ${sinal(difLPA, 0)}</code><p>Base: ${d.baseLpa}.</p>${outraBase ? `<p>${notaBase.trim()}</p>` : ''}` : `<p>${INDISP}.</p>`}${fonte}`];
+      </div>`;
   })($('fundamentos'));
 
   /* ---------------- dados fixos (fonte oficial) - Issue #29, utils/dados_fixos.py
@@ -973,78 +900,10 @@ function montar(root, d) {
       </div>`;
   })($('dados-fixos'));
 
-  /* ---------------- preço justo */
-  // aviso do Conservador: lucro de 12 meses abaixo de 60% da média de 3 anos
-  const avisoGraham = !d.grahamAviso ? ''
-    : d.grahamBase === 'atual'
-      ? 'Lucro atual 40%+ abaixo da média de 3 anos. Estamos usando o cálculo mais conservador (lucro atual). Se usasse a média, o valor seria otimista.'
-      : 'Lucro dos últimos 12 meses negativo: o cálculo do lucro atual não se aplica e só resta a média de 3 anos, que pode estar otimista.';
-  (function FairPrice(el) {
-    const m = metodosJusto, t0 = v => f(Math.round(v), 0);
-    const linhaGraham = !tem(d.graham) ? '' : `<div class="nota num" style="margin:-4px 0 10px">Conservador usa o menor de dois valores: ${tem(d.grahamAtual) ? `lucro de 12 meses ${din(d.grahamAtual)}` : 'lucro de 12 meses não se aplica'} · ${tem(d.grahamMedia) ? `média de 3 anos ${din(d.grahamMedia)}` : 'média de 3 anos não se aplica'}.</div>
-          ${avisoGraham ? `<div class="aviso" style="margin:0 0 10px">${avisoGraham}</div>` : ''}`;
-    const formulas = () => `
-      <p><b>Conservador</b>: calculado com dois lucros por ação; vale o <b>menor</b> valor.</p>
-      ${tem(d.grahamAtual) ? `<code>Atual: √(22,5 × LPA 12 meses ${f(d.lpa)} × VPA ${f(d.vpa)}) = ${f(d.grahamAtual)}</code>` : `<p>Atual: não se aplica (${tem(d.lpa) && d.lpa <= 0 ? 'lucro dos últimos 12 meses negativo' : 'sem lucro ou patrimônio no Yahoo'}).</p>`}
-      ${tem(d.grahamMedia) ? `<code>Média 3 anos: √(22,5 × LPA médio ${f(d.lpaMedio3a)} × VPA ${f(d.vpa)}) = ${f(d.grahamMedia)}</code>` : `<p>Média 3 anos: não se aplica (${d.regra && d.regra.status === 'recorrente' ? 'prejuízo em 2 ou mais dos últimos 3 anos' : 'sem lucro anual no Yahoo'}).</p>`}
-      ${tem(d.graham) ? `<p>Usado: <b>${din(d.graham)}</b> (${d.grahamBase === 'media' ? 'média de 3 anos' : 'lucro dos últimos 12 meses'}).</p>` : '<p>Conservador não se aplica a este ativo.</p>'}
-      ${avisoGraham ? `<p>${avisoGraham}</p>` : ''}
-      ${tem(d.justoPL) ? `<p><b>P/L histórico</b></p><code>P/L médio de ${f(d.plHistAnos, 1)} anos ${f(d.plHistorico)} × LPA ${f(d.lpa)} = ${f(d.justoPL)}</code>` : '<p><b>P/L histórico:</b> sem histórico de lucros suficiente no Yahoo Finance.</p>'}
-      ${tem(d.bazin) ? `<p><b>Preço-teto Bazin</b></p><code>Dividendo médio 5 anos ${f(d.divMedio5)} / 6% = ${f(d.bazin)}</code>
-        <p>O ${din(d.divMedio5)} é a média de até 5 anos, não o dividendo anual (${din(d.dividendo)}).</p>` : ''}
-      <p>Quando um método dá mais que o dobro do outro, mostramos a faixa e não um número único.</p>${fonte}`;
-    FOLHAS.justo = () => ['Preço justo', formulas()];
-    const bazinOculto = naoPagadora && tem(d.bazin) ? `<details class="acord"><summary>Ver todos os métodos</summary><div class="dentro">
-        <div class="card"><span class="rot">Preço-Teto Bazin · Não se aplica</span>
-          <p class="nota" style="margin:8px 0 10px">A ${d.ticker} quase não paga dividendo, então o preço-teto Bazin de ${din(d.bazin)} não é uma referência válida. Ignoramos esse método para essa ação.</p>
-          <div class="nota num" style="margin:0 0 10px">Dividendo médio 5 anos ${f(d.divMedio5)} / 6% = ${f(d.bazin)}</div>
-          <button class="link" data-folha="justo">Ver como calculamos</button></div>
-      </div></details>` : '';
-    if (!m.length) {
-      el.innerHTML = `<h2>Preço justo <small>referência</small></h2><div class="pilha">
-        <div class="card"><span class="st neutro">Sem preço justo confiável</span>
-          <p class="nota" style="margin:10px 0 10px">${INDISP}: nenhum método de preço justo pôde ser calculado com os dados do Yahoo Finance para este ativo.</p>
-          <button class="link" data-folha="justo">Ver como calculamos</button></div>${bazinOculto}</div>`;
-      return;
-    }
-    if (m.length === 1) {
-      el.innerHTML = `<h2>Preço justo <small>referência</small></h2><div class="pilha">
-        <div class="card"><span class="st neutro">Sem preço justo confiável</span>
-          <p class="nota" style="margin:10px 0 10px">Só um método pôde ser calculado: ${m[0][0]}, com ${d.moeda} ${t0(m[0][1])}. Um método sozinho não é referência suficiente, então o Fintai não usa preço justo como decisão.</p>
-          <button class="link" data-folha="justo">Ver como calculamos</button></div>${bazinOculto}</div>`;
-      return;
-    }
-    const piso = m[0][1], teto = m[m.length - 1][1], divergem = teto / piso > 2;
-    const a = piso * 0.6, b = Math.max(teto, d.preco) * 1.12, pos = v => Math.max(0, Math.min(100, (v - a) / (b - a) * 100));
-    const dentro = d.preco >= piso && d.preco <= teto;
-    const onde = dentro ? `está dentro dessa faixa, mas mais perto do ${d.preco - piso < teto - d.preco ? 'piso' : 'teto'}` : d.preco < piso ? 'está abaixo dessa faixa' : 'está acima dessa faixa';
-    el.innerHTML = `<h2>Preço justo <small>referência</small></h2>
-      <div class="pilha">
-        <div class="card">
-          <span class="rot">Faixa justa estimada</span>
-          <div class="num" style="font-size:22px;font-weight:700;margin-top:4px">${d.moeda} ${t0(piso)} a ${d.moeda} ${t0(teto)}</div>
-          <div class="marca-cima num" style="margin-top:16px">
-            <span style="${ancora(pos(piso))};color:var(--suave)">${m[0][0]}<b>${t0(piso)}</b></span>
-            <span style="${ancora(pos(teto))};color:var(--suave)">${m[m.length - 1][0]}<b>${t0(teto)}</b></span>
-          </div>
-          <div class="regua" style="background:var(--ardosia);margin-top:6px">
-            ${m.map(x => `<span class="traco" style="left:${pos(x[1])}%"></span>`).join('')}<span class="bola" style="left:${pos(d.preco)}%"></span>
-          </div>
-          <div class="marca-baixo num"><span style="${ancora(pos(d.preco))}">Hoje<b>${f(d.preco)}</b></span></div>
-          ${m.length > 2 ? `<div class="nota">Traços do meio: ${m.slice(1, -1).map(x => `${x[0]} ${t0(x[1])}`).join(', ')}.</div>` : ''}
-          <p class="nota" style="margin:12px 0 10px">${m.map(x => `Pelo ${x[0]}, o justo seria ${d.moeda} ${t0(x[1])}.`).join(' ')} O preço atual de ${d.moeda} ${t0(d.preco)} ${onde}.</p>
-          ${linhaGraham}
-          <button class="link" data-folha="justo">Ver como calculamos</button>
-        </div>
-        <div class="card">
-          <span class="st neutro">${divergem ? 'Sem preço justo confiável' : 'Faixa justa consistente'}</span>
-          <p class="nota" style="margin:10px 0 0">${divergem
-            ? `Os métodos divergem demais (de ${d.moeda} ${t0(piso)} a ${d.moeda} ${t0(teto)}). Por isso, o Fintai não usa preço justo como decisão. Usamos faixa de preço, tendência e fundamentos.`
-            : 'Os métodos apontam para valores próximos, então a faixa serve como referência. Ainda assim, a decisão do Fintai usa faixa de preço, tendência e fundamentos.'}</p>
-        </div>
-        ${bazinOculto}
-      </div>`;
-  })($('justo'));
+  /* ---------------- preço justo: SEÇÃO REMOVIDA (issue #47, item 15). "Preço justo" era um
+     preço-alvo (Bazin/Conservador/P/L histórico) e virava responsabilidade do app, como o
+     backtest do item 13. O Fintai mostra só posição de preço (item 10) + fundamentos (item 11).
+     O espaço fica vazio de propósito - sem substituir por outra versão. */
 
   /* ---------------- indicadores */
   (function Indicators(el) {
@@ -1077,7 +936,10 @@ function montar(root, d) {
       <p>Toque em um cartão para ver a explicação dele.</p>${fonte}`];
   })($('indicadores'));
 
-  /* ---------------- retorno acumulado */
+  /* ---------------- retorno acumulado (issue #47, item 16): nunca mistura moeda - d.comparadores
+     já vem filtrado (BR só R$: Ibovespa/IPCA/Poupança; EUA só US$: S&P 500/Nasdaq - ver
+     app.comparadores). CDI/Selic (BR) saem para o card "Renda fixa", separado, com a etiqueta
+     [Outro tipo de investimento]. Sem simulação de R$/US$ 10.000: só % e diferença em pontos. */
   (function TotalReturn(el) {
     const idx = d.retorno.periodos.map((_, i) => i).filter(i => tem(d.retorno.total[i]));
     if (!idx.length) { el.innerHTML = `<h2>Retorno acumulado</h2><div class="card nota">Histórico curto demais para calcular retornos.</div>`; return; }
@@ -1085,10 +947,8 @@ function montar(root, d) {
     // abre no comparador da bolsa da ação; se ele não tiver dado, no primeiro que tiver
     let reinveste = true, dicaAberta = false, per = idx[0],
       comp = comDado(d.comparadorPadrao) ? d.comparadorPadrao : (Object.keys(d.comparadores).find(comDado) || Object.keys(d.comparadores)[0]);
-    const virou = (moeda, v) => `${moeda} ${f(Math.round(10000 * (1 + v / 100) / 10) * 10, 0)}`;
-    const ult = idx[idx.length - 1], pUlt = d.retorno.periodos[ult];
     function render() {
-      const c = d.comparadores[comp], padrao = d.comparadores[d.comparadorPadrao] || c;
+      const c = d.comparadores[comp];
       const vals = reinveste ? d.retorno.total : d.retorno.preco;
       const pSel = d.retorno.periodos[per];
       const difP = tem(d.retorno.preco[per]) && tem(d.retorno.total[per]) ? d.retorno.total[per] - d.retorno.preco[per] : null;
@@ -1099,14 +959,10 @@ function montar(root, d) {
         : `${difP >= 10 ? 'Grande diferença' : 'Faz diferença'}. Em ${pSel}, reinvestir os dividendos faz seu retorno ir de ${ret(d.retorno.preco[per])} para ${ret(d.retorno.total[per])}, porque você compra mais ações com o dividendo.`;
       else texto = (tem(recebido) && recebido > 0 ? `Você recebeu ${din(recebido)} por ação em dividendos em ${pSel}, em dinheiro, e não recomprou.` : `Você recebeu os dividendos de ${pSel} em dinheiro e não recomprou.`)
         + (tem(difP) && difP >= 10 ? ` Deixou de ganhar ${f(difP, 1)} pontos do efeito bola de neve.` : '');
-      const outraMoeda = c.moeda !== d.moeda;
-      // mesma conta das linhas do resumo: US$ 10.000 investidos, arredondado à dezena
-      const em10k = v => Math.round(10000 * (1 + v / 100) / 10) * 10;
-      const difDinheiro = tem(d.retorno.total[0]) && tem(d.retorno.preco[0]) ? em10k(d.retorno.total[0]) - em10k(d.retorno.preco[0]) : 0;
 
-      // a ação primeiro; depois os indicadores do menor para o maior retorno
+      // a ação primeiro; depois os comparadores (mesma moeda) do menor para o maior retorno
       const linhasG = [{ nome: d.ticker, v: vals[per], acao: true },
-        ...Object.values(d.comparadores).map(o => ({ nome: o.nome, v: o.v[per], fora: o.moeda !== d.moeda, moeda: o.moeda }))
+        ...Object.values(d.comparadores).map(o => ({ nome: o.nome, v: o.v[per] }))
           .sort((x, y) => (tem(x.v) ? x.v : Infinity) - (tem(y.v) ? y.v : Infinity))];
       const comV = linhasG.map(l => l.v).filter(tem);
       let vhi = Math.max(0, ...comV), vlo = Math.min(0, ...comV);
@@ -1118,10 +974,9 @@ function montar(root, d) {
         <div class="vcols">${linhasG.map(l => `<div class="vc${l.acao ? ' acao' : ''}">${tem(l.v)
           ? `<div class="vb${l.v < 0 ? ' neg' : ''}" style="bottom:${vpos(Math.min(0, l.v))}%;height:${Math.max(Math.abs(l.v) / vamp * 100, 0.8)}%"><i class="num">${ret(l.v)}</i></div>`
           : `<div class="vb vazio" style="bottom:${vpos(0)}%" title="Sem dado"><i>—</i></div>`}
-          <em>${({ 'S&P 500': 'S&P', 'S&P 500 (sem dividendos)': 'S&P s/div', 'Ibovespa': 'Ibov', 'Poupança': 'Poup.' })[l.nome] || l.nome}${l.fora ? `<small>${l.moeda}</small>` : ''}</em></div>`).join('')}</div>`;
-      const temFora = linhasG.some(l => l.fora && tem(l.v));
+          <em>${({ 'S&P 500': 'S&P', 'S&P 500 (sem dividendos)': 'S&P s/div', 'Ibovespa': 'Ibov', 'Poupança': 'Poup.' })[l.nome] || l.nome}</em></div>`).join('')}</div>`;
 
-      // resumo do período contra o comparador da bolsa
+      // resumo do período contra o comparador da bolsa: só % e diferença em pontos (sem simulação de dinheiro)
       const p = d.retorno.periodos[per];
       let resumo;
       if (!tem(vals[per])) resumo = `<div><b>Retorno acumulado: ${INDISP} em ${p}</b></div>`;
@@ -1132,101 +987,43 @@ function montar(root, d) {
           const dif = vals[per] - c.v[per], casas = Math.abs(dif) >= 100 ? 0 : 1;
           resumo = `<div>${cab}<br>
           ${c.nome}: ${ret(c.v[per])} | Diferença: <span class="dif ${dif < 0 ? 'neg' : ''}">${dif >= 0 ? '+' : '-'}${f(Math.abs(dif), casas)} pontos ${dif >= 0 ? 'acima' : 'abaixo'} ${c.artigo}</span><button class="q" id="qpp" aria-label="O que são pontos percentuais?">?</button>
-          ${dicaAberta ? `<span class="dica-q">p.p. = pontos percentuais. É só a conta: ${f(vals[per], 1)}% - ${f(c.v[per], 1)}% = ${f(Math.abs(dif), casas)} pontos. Não é ${f(Math.abs(dif), casas)}%.</span>` : ''}<br>
-          Se você tivesse investido ${c.moeda} 10.000: ${d.ticker}${outraMoeda ? ` (em ${d.moeda})` : ''} virou ${virou(d.moeda, vals[per])} | ${c.curto} virou ${virou(c.moeda, c.v[per])}</div>`;
+          ${dicaAberta ? `<span class="dica-q">p.p. = pontos percentuais. É só a conta: ${f(vals[per], 1)}% - ${f(c.v[per], 1)}% = ${f(Math.abs(dif), casas)} pontos. Não é ${f(Math.abs(dif), casas)}%.</span>` : ''}</div>`;
         }
       }
 
       const t3 = d.retorno.total[1], t5 = d.retorno.total[2];
       const porque = per === 2 && tem(t3) && tem(t5) && t3 > t5
         ? `Por que 3 anos (${ret(t3)}) rendeu mais que 5 anos (${ret(t5)})? Porque entre 5 e 3 anos atrás a ação caiu ${f(Math.abs(((1 + t5 / 100) / (1 + t3 / 100) - 1) * 100), 0)}%. O ganho veio todo nos últimos 3 anos. ` : '';
-      el.innerHTML = `<h2>Retorno acumulado</h2><div class="sub">com dividendos, comparado aos indicadores</div>
+      // Renda fixa (BR): CDI/Selic, separado do gráfico de índices - é outro tipo de investimento
+      const rendaFixaHtml = (() => {
+        const tx = Object.values(d.rendaFixa || {}).filter(o => tem(o.taxaAno) || (o.v && o.v.some(tem)));
+        if (!tx.length) return '';
+        return `<div class="card" style="margin-top:10px"><strong>Renda fixa <small>[Outro tipo de investimento]</small></strong>
+          <div class="lista-v num" style="margin-top:8px">${tx.map(o => `<div>${o.nome}${tem(o.taxaAno) ? ` (${f(o.taxaAno)}% a.a. hoje)` : ''}<b>${tem(o.v[per]) ? ret(o.v[per]) : INDISP} em ${d.retorno.periodos[per]}</b></div>`).join('')}</div>
+          <p class="nota" style="margin-top:6px">CDI e Selic são renda fixa, não um índice de bolsa - ficam fora do gráfico de retorno acima de propósito.</p></div>`;
+      })();
+      el.innerHTML = `<h2>Retorno acumulado</h2><div class="sub">com dividendos, comparado aos indicadores (${d.moeda})</div>
         <div class="toggle" role="group" aria-label="Reinvestimento de dividendos">
           <button data-r="1" aria-pressed="${reinveste}">Reinvestindo dividendos</button><button data-r="0" aria-pressed="${!reinveste}">Sem reinvestir</button>
         </div>
         <div class="chips periodos" role="group" aria-label="Período">${idx.map(i => `<button data-p="${i}" aria-pressed="${i === per}">${d.retorno.periodos[i]}</button>`).join('')}</div>
         <p class="nota" style="margin:4px 2px 0">${texto}</p>
         <div class="vbarras">${grafico}</div>
-        ${(() => { const tx = ['selic', 'cdi'].map(k => d.comparadores[k]).filter(o => o && tem(o.taxaAno)); return tx.length ? `<p class="nota num" style="margin:4px 2px 6px">Taxa de hoje: ${tx.map(o => `${o.nome} ${f(o.taxaAno)}% a.a.`).join(' · ')}. As barras mostram quanto rendeu em ${d.retorno.periodos[per]}.</p>` : ''; })()}
-        ${temFora ? `<p class="nota" style="margin:4px 2px 10px">Indicadores marcados em ${Object.values(d.comparadores).find(o => o.moeda !== d.moeda).moeda} estão em outra moeda, sem conversão.</p>` : ''}
         <div class="card resumo num">${resumo}</div>
-        ${per === 0 && tem(d.retorno.total[0]) && tem(d.retorno.preco[0]) ? `<p class="nota num" style="margin:12px 2px 0">Em 1 ano: <b>${sinal(d.retorno.preco[0], 2)}</b> só preço e <b>${sinal(d.retorno.total[0], 2)}</b> com dividendos reinvestidos.${difDinheiro > 0 && d.dividendo > 0 ? ` Diferença de ${d.moeda} ${f(difDinheiro, 0)} é o dividendo de ${din(d.dividendo)} recomprado em ações nas datas de pagamento (preço ajustado Yahoo).` : ''}</p>` : ''}
-        <p class="nota" style="margin:12px 2px 0">${porque}Retorno passado não garante retorno futuro.</p>
-        <p class="nota" style="margin:8px 2px 0">Dados até ${d.data} · <button class="link" data-folha="retorno">Ver como calculamos</button></p>`;
+        ${rendaFixaHtml}
+        <p class="nota" style="margin:12px 2px 0">${porque}<b>Retorno passado não garante retorno futuro.</b></p>
+        <p class="nota" style="margin:8px 2px 0">Fonte: Yahoo Finance - Dados até ${d.data}.</p>`;
       el.querySelectorAll('[data-r]').forEach(b => { b.onclick = () => { reinveste = b.dataset.r === '1'; render(); }; });
       el.querySelectorAll('[data-p]').forEach(b => { b.onclick = () => { per = +b.dataset.p; render(); }; });
       const q = $('qpp'); if (q) q.onclick = () => { dicaAberta = !dicaAberta; render(); };
     }
-    FOLHAS.retorno = () => ['Retorno acumulado', `
-      <p><b>Reinvestindo dividendos (Total Return)</b></p><code>(Preço final + Dividendos reinvestidos) ÷ Preço inicial − 1</code>
-      <p><b>Sem reinvestir (Price Return)</b></p><code>Preço final ÷ Preço inicial − 1</code>
-      ${tem(d.retorno.total[0]) && tem(d.retorno.preco[0]) ? `<p><b>1 ano:</b> ${ret(d.retorno.total[0])} com dividendos e ${ret(d.retorno.preco[0])} só preço. A diferença de ${f(d.retorno.total[0] - d.retorno.preco[0], 2)} ponto vem dos dividendos do período.</p>` : ''}
-      <p><b>Diferença em pontos:</b> retorno da ação menos retorno do comparador.</p>
-      <p><b>Conta de cada indicador em ${d.retorno.periodos[per]}</b> (para conferir com outros sites, use as mesmas datas):</p>
-      <ul class="contas">${Object.values(d.comparadores).map(o => `<li><b>${o.nome}</b>: ${tem(o.v[per]) ? ret(o.v[per]) : INDISP}${o.conta && o.conta[per] ? ` · ${o.conta[per]}` : ''}</li>`).join('')}</ul>
-      <p>Nasdaq (Composite, sem dividendos), S&P 500 (com dividendos) e Ibovespa vêm do Yahoo Finance; CDI, Selic, IPCA e Poupança vêm do Banco Central. Cada comparador fica na própria moeda, sem conversão. O IPCA conta os 12, 36 ou 60 meses até o último mês divulgado pelo IBGE (sai com cerca de um mês de atraso).</p>${fonte}`];
     render();
   })($('retorno'));
 
-  /* ---------------- backtest */
-  backtest = (function Backtest(el) {
-    function render(expandido) {
-      const b = d.backtest[expandido ? 'max' : '5a'];
-      const sub = expandido ? 'teste com todo o histórico' : 'teste com até 5 anos de histórico';
-      if (!b) { el.innerHTML = `<h2>Os sinais funcionaram no passado? <small>${sub}</small></h2><div class="card nota">Histórico curto demais para testar os sinais.</div>`; return; }
-      const ref = b.referencia, o = b.oportunidade, c = b.cara;
-      const virou = v => `${d.moeda} ${f(10000 * (1 + v / 100), 0)}`;
-      const selo = (s, ok) => !s.vezes ? '<span class="selo sem">SEM CASOS</span>' : `<span class="selo ${ok ? 'ok' : 'nao'}">${ok ? 'SINAL VALIDADO ✅' : 'SINAL INVALIDADO ❌'}</span>`;
-      const cols = (s, rot) => `<div class="vals num"><div><span>Vezes</span><b>${s.vezes}</b></div><div><span>Retorno 12m</span><b>${sinal(s.retorno, 0)}</b></div><div><span>${rot}</span><b>${tem(s.acerto) ? f(s.acerto, 0) + '%' : '—'}</b></div></div>`;
-      const compra = !o.vezes
-        ? ['O preço não esteve na Zona de Oportunidade nesse período, então não há casos para validar.', '']
-        : [b.compraValidada
-            ? (ref.retorno > 0 ? `Comprar na Zona de Oportunidade deu ${f(o.retorno / ref.retorno, 1)}x mais retorno que comprar em uma semana qualquer.`
-                               : 'Comprar na Zona de Oportunidade rendeu mais do que comprar em uma semana qualquer.')
-            : `Comprar na Zona de Oportunidade não se validou no histórico. NÃO use esse sinal para comprar ${d.ticker}.`,
-           `${d.moeda} 10.000 virava ${virou(o.retorno)} em média em 12 meses, quando comprava na Zona de Oportunidade.`];
-      const venda = !c.vezes
-        ? ['O preço não esteve na Zona Cara nesse período, então não há casos para validar.', '']
-        : b.vendaValidada
-          ? [`Depois de entrar na Zona Cara, a ação caiu em ${f(c.acerto, 0)}% das vezes. Vender aqui evitou perdas.`,
-             `${d.moeda} 10.000 virava ${virou(c.retorno)} em média em 12 meses para quem ficou.`]
-          : c.retorno > 0
-            ? [`Quem vendeu porque estava na Zona Cara, perdeu alta. NÃO use esse sinal para vender ${d.ticker}.`,
-               `Quem comprou mesmo na Zona Cara, ainda ganhou em média ${sinal(c.retorno, 0)} em 12 meses. Vender aqui não evitou queda.`]
-            : [`Vender na Zona Cara não se validou no histórico. NÃO use esse sinal para vender ${d.ticker}.`,
-               `Depois de entrar na Zona Cara, a ação rendeu em média ${sinal(c.retorno, 0)} em 12 meses.`];
-      const periodo = expandido ? 'em todo o histórico' : `nos últimos ${f(Math.min(b.anos, 5), b.insuficiente ? 1 : 0)} anos`;
-      const Periodo = periodo.charAt(0).toUpperCase() + periodo.slice(1);
-      let resumoBt = '';
-      if (o.vezes && c.vezes) {
-        if (b.compraValidada && b.vendaValidada) resumoBt = `${Periodo} as duas zonas ajudaram: comprar barato rendeu mais que a média e o preço caiu depois da Zona Cara.`;
-        else if (b.compraValidada) resumoBt = `${Periodo} só a Zona de Oportunidade ajudou. Não use a Zona Cara como sinal de venda para ${d.ticker}.`;
-        else if (b.vendaValidada) resumoBt = `${Periodo} só a Zona Cara ajudou. Não use a Zona de Oportunidade como sinal de compra para ${d.ticker}.`;
-        else if (o.retorno < ref.retorno && c.retorno > ref.retorno) resumoBt = `${Periodo} as zonas não ajudaram: comprar barato rendeu menos que a média e comprar caro rendeu mais. Não use esses sinais para ${d.ticker}.`;
-        else resumoBt = `${Periodo} as zonas não se validaram. Não use esses sinais para ${d.ticker}.`;
-      }
-      el.innerHTML = `<h2>Os sinais funcionaram no passado? <small>${sub}</small></h2>
-        ${resumoBt ? `<p class="nota" style="margin:-4px 2px 12px;color:var(--texto)">${resumoBt}</p>` : ''}
-        ${expandido ? '<div class="aviso" style="margin-bottom:10px">Backtest expandido para todo o histórico</div>' : ''}
-        ${!expandido && b.insuficiente ? `<div class="aviso" style="margin-bottom:10px">Histórico insuficiente para backtest de 5 anos. Mostrando ${f(b.anos, 1)} anos disponíveis.</div>` : ''}
-        <div class="pilha">
-          <div class="card bt"><div class="cab"><strong>Comprar na Zona de Oportunidade</strong>${selo(o, b.compraValidada)}</div>
-            ${cols(o, 'Subiu em')}<p>${compra[0]}</p><p>${compra[1]}</p></div>
-          <div class="card bt"><div class="cab"><strong>Preço na Zona Cara</strong>${selo(c, b.vendaValidada)}</div>
-            ${cols(c, 'Caiu em')}<p>${venda[0]}</p><p>${venda[1]}</p></div>
-        </div>
-        <p class="nota" style="margin:12px 2px"><b>Referência:</b> comprar em uma semana qualquer rendeu em média ${sinal(ref.retorno, 0)} em 12 meses (subiu em ${f(ref.subiu, 0)}% das vezes) ${periodo}. Teste com ${f(b.anos, 1)} anos de histórico, semana a semana, usando só os dados disponíveis em cada data. Retornos com dividendos. Resultado passado não garante resultado futuro.${expandido ? ex('backtestMax') : ''}</p>
-        <details class="acord"><summary>Como os números são calculados</summary><div class="dentro"><div class="nota">
-          <p style="margin:0 0 8px"><b>Janela:</b> ${expandido ? 'todo o histórico disponível' : 'últimos 5 anos'}, semana a semana. Entram as semanas que já têm 12 meses de resultado.</p>
-          <p style="margin:0 0 8px"><b>Zona de Oportunidade</b> = até ${din(d.zOport)} hoje (faixa inferior das 52 semanas). <b>Zona Cara</b> = acima de ${din(d.zCara)} hoje (faixa superior). Em cada semana do passado, as faixas são recalculadas só com os dados que existiam até aquela data, sem olhar o futuro.</p>
-          <p style="margin:0 0 8px"><b>Retorno 12M</b> = (valor 12 meses depois, com dividendos reinvestidos) ÷ (valor na semana do sinal) − 1.</p>
-          <p style="margin:0 0 8px"><b>Sinal validado:</b> acertou em mais de 60% das vezes, rendeu melhor do que a referência (comprar em uma semana qualquer) e teve pelo menos 8 casos.</p>
-          <p style="margin:0">Um sinal invalidado nunca entra na decisão do topo da tela.</p>
-        </div></div></details>`;
-    }
-    render(false);
-    return render;
-  })($('backtest'));
+  /* ---------------- backtest: SEÇÃO REMOVIDA (issue #47, item 13). "Os sinais funcionaram no
+     passado?" validava/invalidava sinais e virava responsabilidade do app (SINAL INVALIDADO,
+     simulação de R$10.000 etc.). O Fintai não valida sinal nenhum: mostra só posição de preço
+     (item 10) + fundamentos (item 11). Espaço vazio de propósito, sem substituir. */
 
   /* ---------------- bloco de cada modo */
   function renderBloco() {
@@ -1419,7 +1216,7 @@ function montar(root, d) {
   }
 
   const SECOES = { faixa: ['graham'], tendencia: ['graham', 'lynch', 'simons'], minmax: ['graham', 'simons'],
-    fundamentos: ['graham', 'lynch'], justo: ['graham'], indicadores: ['graham', 'lynch'], retorno: ['graham', 'lynch'], backtest: ['graham'] };
+    fundamentos: ['graham', 'lynch'], indicadores: ['graham', 'lynch'], retorno: ['graham', 'lynch'] };
   function renderModo() {
     root.querySelectorAll('.modos button').forEach(b => b.setAttribute('aria-pressed', b.dataset.modo === modo));
     Object.entries(SECOES).forEach(([id, modos]) => { $(id).hidden = !modos.includes(modo); });

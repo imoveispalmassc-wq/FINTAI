@@ -191,14 +191,14 @@ def test_simons_usa_faixa_e_mm200():
 def test_lynch_csmg3_oportunidade_pela_mm200():
     from utils.lynch import preco_lynch
     p = preco_lynch(54.67, 56.94)
-    assert p["codigo"] == "COMPRAR" and p["zona"] == "Zona de oportunidade" and p["dist"] == -3.99
+    assert p["codigo"] == "COMPRAR" and p["zona"] == "Faixa inferior" and p["dist"] == -3.99
     assert [round(p[k], 2) for k in ("bemAbaixoAte", "oportunidadeAte", "caroAcima")] == [51.25, 59.79, 65.48]
     assert p["texto"] == "Ponto de oportunidade em R$ 59,79"
 
 
-@pytest.mark.parametrize("preco,codigo,zona", [(85, "COMPRAR", "Bem abaixo da MM200"), (90, "COMPRAR", "Zona de oportunidade"),
-                                               (105, "COMPRAR", "Zona de oportunidade"), (106, "AGUARDAR", "Zona neutra"),
-                                               (114.9, "AGUARDAR", "Zona neutra"), (115, "CARO", "Zona cara")])
+@pytest.mark.parametrize("preco,codigo,zona", [(85, "COMPRAR", "Bem abaixo da MM200"), (90, "COMPRAR", "Faixa inferior"),
+                                               (105, "COMPRAR", "Faixa inferior"), (106, "AGUARDAR", "Zona neutra"),
+                                               (114.9, "AGUARDAR", "Zona neutra"), (115, "CARO", "Faixa superior")])
 def test_lynch_faixas_so_pela_mm200(preco, codigo, zona):
     from utils.lynch import preco_lynch
     p = preco_lynch(preco, 100)

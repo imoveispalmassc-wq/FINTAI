@@ -607,6 +607,98 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   a cotação do dia (já buscada pela tela, Yahoo) entra separadamente em `montar()`, nunca pelo
   módulo de dados fixos.
 
+## Issue #47 (26/11/2026): zonas sem julgamento, selo de fundamentos, bloco único LPA+P/L, remoção de backtest e preço justo, retorno sem misturar moeda
+
+- **Item 10 - Zonas sem influenciar o usuário, cores mantidas**: "Oportunidade" e "Cara" saíram do
+  texto em todo lugar (cards, barra "Você está aqui", gráfico) - as CORES continuam exatamente as
+  mesmas (verde degradê embaixo, cinza no meio, âmbar/amarelo em cima), só o nome mudou, porque o
+  nome antigo já era uma recomendação disfarçada de posição de preço. `utils/signals.py`
+  (`Estado.zona`, `decidir_estado`/`decidir_estado_conservador`) e `utils/lynch.py` (Lynch, só
+  MM200) agora devolvem "Faixa inferior" / "Zona neutra" / "Faixa superior" em vez de "Zona de
+  oportunidade" / "Zona neutra" / "Zona cara". No card "Faixa de preço": "Faixa inferior" / "Zona
+  neutra" (nome mantido) / "Faixa superior"; na régua (linha `zonas-rot`): "Inferior" / "Neutra" /
+  "Superior"; no gráfico (linhas tracejadas do Conservador/Lynch): "Faixa superior acima de" /
+  "Faixa neutra até" / "Média 200d" / "Faixa inferior 1" / "Faixa inferior 2" / "Faixa inferior 3"
+  (1 = mais perto do neutro, 3 = mais embaixo - mesma ordem de antes, só o nome mudou); legenda do
+  gráfico (abaixo dele): "Inferior" / "Neutra" / "Superior" / "Média 200d" / "Bem abaixo" (Lynch).
+  DECISÃO SOBRE ESCOPO: o rótulo do badge de decisão no topo ("COMPRAR - Oportunidade" / "AGUARDAR
+  - Neutro" / "CARO - Evitar") NÃO mudou - é um conceito diferente (o veredito, travado desde antes
+  deste issue na regra "Decisão" deste arquivo), não o nome da zona de preço. O modo SIMONS também
+  não mudou (continua usando OPORTUNIDADE/NEUTRO/CARO como nome interno da sua própria
+  classificação por MM200 - é uma metodologia própria, documentada à parte neste arquivo, e
+  renomeá-la arriscava quebrar a lógica de entrada escalonada sem ganho claro); se for pedido depois,
+  entra como item separado.
+- **Item 11 - Selo de Fundamentos** (fato, nunca recomendação; fica logo abaixo de "Faixa inferior"):
+  `utils.signals.avaliar_fundamentos()` implementa a regra travada dos 3 fundamentos - (1) LPA
+  CONTÁBIL (nunca ajustado) caindo vs. mesmo trimestre do ano anterior; (2) ROE caindo vs. 12 meses
+  atrás; (3) dividendo cortado/reduzido vs. 12 meses atrás (ignorado para quem não paga dividendo,
+  ex. MU - usa só lucro + ROE). Níveis: 1 de 3 ruim = "Observar: [fundamento]" (cinza/amarelo
+  claro); 2 de 3 = "Fundamentos em alerta" (laranja); os 3 ruins por 2+ trimestres seguidos
+  (estrutural: lucro caindo 3-4 trimestres ou prejuízo + ROE caindo e abaixo de 10% por 2+
+  trimestres + dividendo cortado 2x seguidas + dívida subindo) = "Fundamentos deteriorados"
+  (vermelho escuro). Sem fundamento ruim: sem selo nenhum. **LIMITAÇÃO CONHECIDA, documentada com
+  honestidade**: a função está implementada e testada (`tests/test_signals.py`), mas HOJE o projeto
+  não guarda o histórico trimestral que ela precisa - nem ROE (não existe em lugar nenhum do app,
+  nunca foi calculado) nem LPA contábil trimestral suficiente para comparar "mesmo trimestre do ano
+  anterior" (`utils/contabil_br.json` e `utils/contabil_sec.json` guardam só os últimos 4
+  trimestres, não 5+). Por isso `tela/dados.montar()` chama `avaliar_fundamentos(lucro_caindo=None,
+  roe_caindo=None)`, que sempre devolve `None`, e o selo nunca aparece na tela por enquanto (regra
+  "nunca invente comparação" - ver regra geral do projeto). Para o selo aparecer de verdade, uma
+  issue futura precisa: (a) o robô de contábil (B3 e EUA) guardar 5+ trimestres em vez de 4; (b)
+  calcular e guardar ROE trimestral (lucro ÷ patrimônio líquido), hoje inexistente no projeto.
+- **Item 12 e 14 - Bloco único "Lucro e Preço vs Lucro"**: os antigos cards "Preço vs Lucro (P/L)" e
+  "Crescimento de Lucro (LPA)" (que podiam se contradizer - ex. lucro caindo -66% com selo
+  "Favorável" de P/L) viraram 1 card só, sem o selo "Favorável"/"Desfavorável"/"Neutro" de nenhum
+  dos dois (quem avisa fundamento ruim agora é só o Selo de Fundamentos do item 11, lá na Faixa de
+  preço) e sem "Ver como calculamos"/texto gigante de cálculo. REGRA TRAVADA: 1 LPA só no app
+  inteiro = LPA CONTÁBIL TTM; o ajustado (Yahoo) só aparece como linha extra `[Ajustado]`, cinza
+  claro, nunca entra no P/L nem em nenhuma conta. Estrutura do card: conta em 1 linha cinza
+  (cotação ÷ LPA contábil TTM = P/L), linha `[Ajustado]` quando existir e divergir 10%+, "Visão do
+  ano" (Início do ano = guidance congelado · Contábil 12 meses (TTM) · Previsão atual = guidance
+  oficial ou consenso, com o selo de confiabilidade quando poucos analistas), 1 linha "Média: 3
+  anos X • 5 anos X • 10 anos X" (cada parte só aparece se tiver dado - nunca escreve "Sem dado"
+  solto), e o P/L médio 12m. Linha sem dado: SOME, nunca aparece como "Sem dado" (regra do item 12).
+  Dividendos virou um card próprio, simplificado, dentro da mesma seção: DPA, DY atual, DY média
+  12m, Projetado `[Projeção]` (guidance), sem selo, sem a simulação "Se você investir R$ 10.000..."
+  (tirada - item 14) e sem "Ver como calculamos". DY que sobe só porque o preço caiu não aparece
+  como nada "favorável" (não tem mais selo para isso). Frase de fato "Dividendo reduzido vs 12
+  meses atrás: de X para Y" aparece quando o dividendo caiu 5%+ - é só informativa (quem decide o
+  Selo de Fundamentos é a função do item 11, com a regra própria dela, não esta frase). FONTE
+  SEGURA do item 8 (biblioteca de fonte+data por número) ainda não está implementada neste PR - é
+  outra issue; por enquanto a linha de fonte do card usa `d.lpaFonte`/`d.balanco`, o que já existe.
+- **Item 13 - Seção "Os sinais funcionaram no passado?" REMOVIDA** (backtest, cards SINAL
+  VALIDADO/INVALIDADO, simulação de R$/US$ 10.000, "comprar em uma semana qualquer rendeu..."):
+  tirada inteira de `tela/detalhe.js`, sem substituir por nada - o espaço fica vazio de propósito.
+  O cálculo em si (`utils.signals.backtest_percentil`, `tela/dados._backtest`) continua existindo no
+  backend (usado só por `decidir_estado`/avisos internos que já não apareciam na tela desde a regra
+  "Faixa de 52 semanas" deste arquivo) - não foi removido porque a issue pediu só a remoção da
+  TELA, e mexer no backend sem necessidade arriscava quebrar outros pontos à toa.
+- **Item 15 - Seção "Preço justo" REMOVIDA** (Bazin, Conservador e P/L histórico como preço-alvo,
+  "FAIXA JUSTA ESTIMADA", selo "Faixa justa consistente"): tirada inteira, sem substituir - o app
+  mostra só posição de preço (item 10) + fundamentos (item 11), nunca mais um preço-alvo. O card
+  "Lucro por ação" do Conservador continua mostrando "P/L Conservador"/"Preço teto conservador"
+  como diagnóstico (isso já não era a Faixa de preço desde a mudança anterior documentada acima em
+  "CONSERVADOR") - não fazia parte da seção "Preço justo" removida.
+- **Item 16 - Retorno acumulado sem misturar moeda, sem simulação de dinheiro**: `app.comparadores()`
+  agora devolve 3 valores (comparadores, padrão, renda_fixa) e filtra por moeda - ticker da B3 só
+  recebe Ibovespa/IPCA/Poupança (R$); ticker dos EUA só recebe S&P 500/Nasdaq (US$). CDI e Selic
+  saíram do dicionário de comparadores e foram para `renda_fixa` (card "Renda fixa `[Outro tipo de
+  investimento]`", separado do gráfico de retorno - BR apenas). SEM conversão BCB/Fed implementada
+  ainda: por isso um índice em moeda diferente simplesmente não entra, nunca aparece misturado sem
+  conversão (ex.: ticker dos EUA não mostra Ibovespa nem CDI/Selic/IPCA/Poupança). **LIMITAÇÃO
+  CONHECIDA**: não existe hoje fonte de T-Bill/Fed Funds integrada ao projeto - por isso o card
+  "Renda fixa" só aparece para tickers da B3 (CDI/Selic); para os EUA fica vazio (nunca inventado) -
+  implementar isso é outra issue. Removida a simulação "Se você tivesse investido R$/US$ 10.000...":
+  a tela mostra só % de retorno e a diferença em pontos contra o comparador. Removido "Ver como
+  calculamos" do retorno - 1 linha só, "Fonte: Yahoo Finance - Dados até DD/MM/AAAA" (continuam
+  mantidos: gráfico de barras, aviso "Retorno passado não garante retorno futuro" e os botões
+  1/3/5 anos e Reinvestindo/Sem reinvestir). **LIMITAÇÃO CONHECIDA**: o cálculo de retorno com
+  dividendos reinvestidos (`calculos.calcular`) continua usando o preço ajustado do Yahoo
+  internamente (não foi trocado por B3/RI ou SEC, que é uma mudança de backend maior, fora do
+  escopo deste PR de UI) - só o TEXTO que citava "preço ajustado Yahoo" foi tirado da tela, para não
+  prometer uma fonte que o cálculo ainda não usa; a fonte real do cálculo é Yahoo Finance, como a
+  linha "Fonte" agora diz.
+
 ## UI (Issue #46)
 
 - **Preview do WhatsApp**: o Streamlit é um app de página única - `st.set_page_config(page_title=...)`
@@ -680,7 +772,10 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   a largura real estimada de cada rótulo (mesma técnica de `largadorPx`/`pxParaPct` já usada pros
   números da régua logo abaixo), não um valor igual pra todos - confirmado visualmente com
   Playwright (CBRS real: "Oportunidade" some corretamente, sem quebrar palavra; PETR4, com zona bem
-  mais larga, continua mostrando os 3 rótulos normalmente).
+  mais larga, continua mostrando os 3 rótulos normalmente). NOTA: este item (#46) foi corrigido
+  antes do item 10 da Issue #47 renomear "Oportunidade"/"Cara" para "Inferior"/"Superior" - a lógica
+  de ocultar o rótulo quando a coluna é estreita demais continua a mesma, só o texto exibido mudou
+  (ver Issue #47 acima).
 
 ## Textos
 

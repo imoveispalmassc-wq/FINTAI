@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from utils.percentile import percentil_na_faixa
-from utils.signals import (avaliar_criterio, backtest_percentil, decidir_estado,
+from utils.signals import (avaliar_criterio, avaliar_fundamentos, backtest_percentil, decidir_estado,
                            fundamento_quebrou, selo_backtest)
 
 MINIMO, MAXIMO = 37.34, 67.82
@@ -25,7 +25,7 @@ def test_aguardar_entre_o_ponto_e_o_fim_da_neutra():
 
 def test_comprar_ate_o_ponto_de_oportunidade():
     sim = estado(30, compra_validada=True)
-    assert (sim.codigo, sim.rotulo, sim.zona) == ("COMPRAR", "COMPRAR - Oportunidade", "Zona de oportunidade")
+    assert (sim.codigo, sim.rotulo, sim.zona) == ("COMPRAR", "COMPRAR - Oportunidade", "Faixa inferior")
     assert sim.validado and sim.alerta == ""
     nao = estado(10, compra_validada=False)
     assert nao.codigo == "COMPRAR" and not nao.validado
@@ -35,7 +35,7 @@ def test_comprar_ate_o_ponto_de_oportunidade():
 def test_caro_acima_do_fim_da_neutra():
     for p in (70.1, 85, 100):
         e = estado(p, venda_validada=True)
-        assert (e.codigo, e.rotulo, e.zona) == ("CARO", "CARO - Evitar", "Zona cara")
+        assert (e.codigo, e.rotulo, e.zona) == ("CARO", "CARO - Evitar", "Faixa superior")
 
 
 def test_texto_e_sempre_o_ponto_de_oportunidade_do_ativo():
@@ -153,3 +153,44 @@ def test_backtest_janela_de_5_anos():
 def test_backtest_avisa_historico_insuficiente():
     b = backtest_percentil(_hist(np.linspace(10, 30, 900)), anos=5)   # ~3,5 anos
     assert b["insuficiente"] and b["anos"] < 5
+
+
+# ------------------------------------------------------------ selo de fundamentos (issue #47, item 11)
+def test_selo_fundamentos_sem_historico_nao_aparece():
+    # sem lucro_caindo ou roe_caindo (histórico insuficiente): nunca inventa comparação
+    assert avaliar_fundamentos(lucro_caindo=None, roe_caindo=False) is None
+    assert avaliar_fundamentos(lucro_caindo=False, roe_caindo=None) is None
+    # paga dividendo mas falta o dado de dividendo: também não aparece
+    assert avaliar_fundamentos(lucro_caindo=False, roe_caindo=False, dividendo_cortado=None) is None
+
+
+def test_selo_fundamentos_sem_nenhum_ruim():
+    assert avaliar_fundamentos(lucro_caindo=False, roe_caindo=False, dividendo_cortado=False) is None
+
+
+def test_selo_fundamentos_nivel_1_observar():
+    s = avaliar_fundamentos(lucro_caindo=True, roe_caindo=False, dividendo_cortado=False)
+    assert s["nivel"] == 1 and s["titulo"] == "Observar: Lucro"
+
+
+def test_selo_fundamentos_nivel_2_alerta():
+    s = avaliar_fundamentos(lucro_caindo=True, roe_caindo=True, dividendo_cortado=False)
+    assert s["nivel"] == 2 and s["titulo"] == "Fundamentos em alerta"
+
+
+def test_selo_fundamentos_nivel_3_deteriorados():
+    s = avaliar_fundamentos(lucro_caindo=True, lucro_trimestres_seguidos=3, roe_caindo=True,
+                            roe_abaixo_10=True, roe_trimestres_seguidos=2, dividendo_cortado=True,
+                            dividendo_cortes_seguidos=2, divida_subindo=True)
+    assert s["nivel"] == 3 and s["titulo"] == "Fundamentos deteriorados"
+
+
+def test_selo_fundamentos_empresa_sem_dividendo_ignora_esse_criterio():
+    # ex. MU: não paga dividendo - usa só lucro + ROE, sem exigir o dado de dividendo
+    s = avaliar_fundamentos(lucro_caindo=True, roe_caindo=True, paga_dividendo=False)
+    assert s["nivel"] == 2
+    # nível 3 sem dívida subindo não dispara, mesmo com os outros 2 ruins
+    s2 = avaliar_fundamentos(lucro_caindo=True, lucro_trimestres_seguidos=4, roe_caindo=True,
+                             roe_abaixo_10=True, roe_trimestres_seguidos=2, paga_dividendo=False,
+                             divida_subindo=False)
+    assert s2["nivel"] == 2

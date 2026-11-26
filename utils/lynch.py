@@ -96,11 +96,11 @@ def preco_lynch(preco: float, mm200: float | None, simbolo: str = "R$") -> dict 
         return None
     dist = round((preco / mm200 - 1) * 100, 2)   # arredonda como na tela (evita 14,9999...)
     if dist >= LYNCH_CARO:
-        codigo, rotulo, zona = "CARO", "CARO - Evitar", "Zona cara"
+        codigo, rotulo, zona = "CARO", "CARO - Evitar", "Faixa superior"
     elif dist > LYNCH_OPORTUNIDADE:
         codigo, rotulo, zona = "AGUARDAR", "AGUARDAR - Neutro", "Zona neutra"
     elif dist >= LYNCH_BEM_ABAIXO:
-        codigo, rotulo, zona = "COMPRAR", "COMPRAR - Oportunidade", "Zona de oportunidade"
+        codigo, rotulo, zona = "COMPRAR", "COMPRAR - Oportunidade", "Faixa inferior"
     else:
         codigo, rotulo, zona = "COMPRAR", "COMPRAR - Oportunidade", "Bem abaixo da MM200"
     ate = mm200 * (1 + LYNCH_OPORTUNIDADE / 100)
