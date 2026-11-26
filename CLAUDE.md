@@ -732,6 +732,10 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Selo de Fundamentos é a função do item 11, com a regra própria dela, não esta frase). FONTE
   SEGURA do item 8 (biblioteca de fonte+data por número) ainda não está implementada neste PR - é
   outra issue; por enquanto a linha de fonte do card usa `d.lpaFonte`/`d.balanco`, o que já existe.
+  AUDITORIA DA LISTA DE QUINTA (26/11/2026): a frase "Se você investir R$ 10.000, recebe X / ano"
+  também sobrevivia no card separado "Indicadores" (`tela/detalhe.js`, cartão "Dividendo anual",
+  variável `por10k`) - um card diferente do "Dividendos" dentro deste bloco único, que já estava
+  correto. Removida (mesma regra do item 14/13: nunca simular renda).
 - **Item 13 - Seção "Os sinais funcionaram no passado?" REMOVIDA** (backtest, cards SINAL
   VALIDADO/INVALIDADO, simulação de R$/US$ 10.000, "comprar em uma semana qualquer rendeu..."):
   tirada inteira de `tela/detalhe.js`, sem substituir por nada - o espaço fica vazio de propósito.
