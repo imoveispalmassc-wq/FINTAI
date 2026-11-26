@@ -1023,6 +1023,25 @@ def _marcar_lag(ttm: dict, docs: list[dict]) -> None:
             return
 
 
+def _avisar_divergencia_ttm(ticker: str, prev: dict, ttm: dict, docs: list[dict]) -> None:
+    """Issue #48, item 9: LPA TTM recalculado por um documento novo é diferente do que já estava
+    salvo -> abre a Issue de divergência sozinho (utils.divergencia). Best-effort: qualquer falha
+    (sem GITHUB_TOKEN, API fora do ar) é só logada - nunca derruba o catch-up do TTM."""
+    try:
+        import utils.divergencia as divergencia
+        if not divergencia.detectar(prev.get("lpa_ttm"), ttm.get("lpa_ttm")):
+            return
+        doc_mais_novo = max(docs, key=lambda d: d["data"])
+        base = "[Ajustado]" if ttm.get("lpa_tipo") == "ajustado" else "contábil"
+        divergencia.abrir_issue_divergencia(
+            ticker=ticker, campo="lpa_ttm", salvo=prev.get("lpa_ttm"), novo=ttm.get("lpa_ttm"),
+            fonte=f"{doc_mais_novo.get('form', 'documento')} de {doc_mais_novo['data']}",
+            link=doc_mais_novo.get("link"), data_hora=ttm.get("last_updated") or "", base=base)
+    except Exception as e:  # noqa: BLE001
+        print(f"AVISO: não consegui abrir a issue de divergência de {ticker} ({e.__class__.__name__}: {e})",
+              file=sys.stderr)
+
+
 # ---------------------------------------------------------------------------
 # Execução principal
 # ---------------------------------------------------------------------------
@@ -1086,6 +1105,11 @@ def executar(base: Path, hoje: date, fontes: Any) -> int:
                         for c in CAMPOS_MARCACAO:     # nunca apaga a marcação já gravada
                             if ttm.get(c) is None and prev and prev.get(c) is not None:
                                 ttm[c] = prev[c]
+                        # Issue #48, item 9: TTM recalculado de verdade (documento novo) e diferente
+                        # do que já estava salvo -> abre a Issue de divergência sozinho (best-effort;
+                        # a gravação do TTM nunca espera nem trava por causa disso).
+                        if docs and prev and prev.get("lpa_ttm") is not None and ttm.get("lpa_ttm") is not None:
+                            _avisar_divergencia_ttm(t, prev, ttm, docs)
                 else:
                     ttm = {c: prev.get(c) for c in CAMPOS_TTM}
                     ttm["status"] = "SEM_NOVO_DOCUMENTO"

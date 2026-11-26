@@ -1,0 +1,76 @@
+name: Biblioteca própria (Perplexity)
+
+# Issue #48, item 8: biblioteca própria de dados fundamentalistas (utils/biblioteca.json).
+# Biblioteca primeiro, rede depois: para cada ticker já acompanhado (utils/guidance_tickers.json),
+# `utils.biblioteca.obter` só busca fora se o dado não estiver na biblioteca ou estiver
+# desatualizado - e, nessa ordem, só recorre à Perplexity (PROMPT PADRÃO da Issue #48) depois das
+# fontes já existentes no projeto (aqui, direto na Perplexity: ver utils/biblioteca.py). A API do
+# Claude só confirma/corrige o número que a Perplexity já trouxe com fonte, nunca inventa um
+# número por conta própria (`confirmar_com_claude`). SEM n8n em nenhum passo.
+#
+# Resultado vai sempre para um PR (nunca direto na main), igual à REGRA 6 do TTM automático -
+# a biblioteca pode guardar qualquer dado fundamentalista (não só contábil TTM), então segue a
+# mesma cautela.
+
+on:
+  schedule:
+    - cron: "30 11 * * *"   # todo dia, depois do guidance automático (8h de Brasília = 11h UTC)
+  workflow_dispatch: {}      # botão "Run workflow" para rodar na hora
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: biblioteca-perplexity
+  cancel-in-progress: false
+
+jobs:
+  biblioteca:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências do robô
+        run: pip install -r requirements-guidance.txt pytest
+
+      # REGRA 6 (mesma cautela): pytest antes de qualquer PR
+      - name: Testes (python -m pytest)
+        run: python -m pytest -q
+
+      - name: Biblioteca -> Perplexity -> confirmação da API do Claude
+        env:
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m utils.biblioteca atualizar --tickers utils/guidance_tickers.json --campo lpa_atual
+
+      - name: Abrir/atualizar pull request da biblioteca
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # git diff --quiet não vê arquivo novo (biblioteca.json ainda não existia no repo) -
+          # git status --porcelain pega os dois casos (novo e modificado), igual à fila de tickers.
+          if [ -z "$(git status --porcelain -- utils/biblioteca.json)" ]; then
+            echo "Biblioteca sem mudança."
+            exit 0
+          fi
+          git fetch origin main
+          ramo="biblioteca/revisar"   # sempre o mesmo ramo: atualiza o PR aberto em vez de abrir outro
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git stash --include-untracked || true
+          git checkout -B "$ramo" origin/main
+          git stash pop || true
+          git add utils/biblioteca.json
+          git commit -m "Biblioteca própria atualizada (Perplexity + confirmação da API do Claude) - $(date -u +%d/%m/%Y)"
+          git push --force origin "$ramo"
+          gh pr create --base main --head "$ramo" \
+            --title "Biblioteca própria: revisar ($(date -u +%d/%m/%Y))" \
+            --body "Dados novos/confirmados pela Perplexity (fonte + data/hora em cada campo), com a API do Claude confirmando o número antes de salvar. Contábil é sempre o campo \`valor\`; \`valor_ajustado\` só aparece com a etiqueta [Ajustado]." \
+            || gh pr edit "$ramo" --body "Biblioteca própria atualizada de novo - revisar o diff."

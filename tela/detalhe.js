@@ -119,6 +119,17 @@ function montar(root, d) {
   /* ---------------- topo e decisão */
   $('t-nome').textContent = d.nome;
   $('t-bolsa').textContent = d.bolsa ? `${d.bolsa} (${d.ticker})` : d.ticker;
+  // cabeçalho fixo (sticky, CSS) ao rolar: nome + preço sempre visíveis, pra nunca perder de vista
+  // qual ativo está sendo olhado. O preço aqui é o mesmo d.preco do cartão de decisão, só repetido.
+  $('t-preco').textContent = f(d.preco);
+  $('t-preco').style.color = tem(d.varDia) ? cor(d.varDia) : '';
+  const topoEl = document.querySelector('.topo');
+  if (topoEl) {
+    const sombra = () => topoEl.classList.toggle('rolou', window.scrollY > 4);
+    sombra();
+    window.addEventListener('scroll', sombra, { passive: true });
+    limpar.push(() => window.removeEventListener('scroll', sombra));
+  }
   let modo = 'graham';
   try { modo = sessionStorage.getItem('fintai-modo') || 'graham'; } catch (e) { /* sem armazenamento */ }
   if (!['graham', 'lynch', 'simons'].includes(modo)) modo = 'graham';
@@ -549,11 +560,21 @@ function montar(root, d) {
         <div class="zona" style="--c:var(--ardosia)"><span class="rot">Zona neutra</span><b class="num">${f(zO)} a ${f(zC)}</b></div>
         <div class="zona" style="--c:var(--ambar)"><span class="rot">Faixa superior</span><b class="num">acima de ${din(zC)}</b></div>
         <div class="card">
-          <div class="zonas-rot" style="grid-template-columns:${a}fr ${b - a}fr ${100 - b}fr">
-            <span style="color:var(--verde)"><b>${a < 11 ? '' : 'Inferior'}</b></span>
-            <span style="color:#aab4c6"><b>${b - a < 11 ? '' : 'Neutra'}</b></span>
-            <span style="color:var(--ambar)"><b>${100 - b < 11 ? '' : 'Superior'}</b></span>
-          </div>
+          ${(() => {
+            // o nome da zona some quando a própria coluna é estreita demais pra caber o texto sem
+            // quebrar palavra no meio (ex.: "Oportunidade" virando "Oportunida"/"de" em 2 linhas,
+            // num ativo com zona de oportunidade estreita, como CBRS) - um limiar fixo (11%) servia
+            // pra "Cara"/"Neutra" (curtos) mas não pra "Oportunidade", bem mais longo: o limiar
+            // agora usa a largura real estimada de cada rótulo (mesma técnica de largadorPx/
+            // pxParaPct já usada acima pros números da régua), não um número igual pra todos
+            const precisaRot = texto => pxParaPct(largadorPx(texto));
+            const rot = (col, texto) => col < precisaRot(texto) ? '' : texto;
+            return `<div class="zonas-rot" style="grid-template-columns:${a}fr ${b - a}fr ${100 - b}fr">
+            <span style="color:var(--verde)"><b>${rot(a, 'Inferior')}</b></span>
+            <span style="color:#aab4c6"><b>${rot(b - a, 'Neutra')}</b></span>
+            <span style="color:var(--ambar)"><b>${rot(100 - b, 'Superior')}</b></span>
+          </div>`;
+          })()}
           <div class="marca-cima limites num">
             <span class="esq">${textoEsq}</span>
             ${(() => {
