@@ -292,6 +292,85 @@ class TestRegrasTravadas(unittest.TestCase):
         tmp.cleanup()
 
 
+class TestDivergenciaAutomatica(unittest.TestCase):
+    """Issue #48, item 9: TTM recalculado por documento novo e diferente do que já estava salvo
+    -> o robô mesmo abre a Issue de divergência (best-effort, nunca trava o catch-up)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_ttm_diferente_do_anterior_aciona_a_issue_de_divergencia(self):
+        anterior = {"data": "2026-11-17", "ticker": "ADM", "lucro_ttm": 2486e6, "lucro_moeda": "USD",
+                    "lpa_ttm": 5.13, "lpa_moeda": "USD", "trimestres": ["2026-09-30"],
+                    "fonte": "SEC XBRL", "link_oficial": SEC, "status": "ATUALIZADO",
+                    "pendencias": [], "preco": 69.0, "preco_moeda": "USD", "pl": 13.45}
+        preparar(self.dir, ["ADM"], last_run="2026-11-17", historico=[anterior])
+        f = FontesFalsas(docs={("ADM", "2026-11-18"): [{"form": "8-K", "data": "2026-11-18",
+                                                        "link": SEC + "adm-8k.htm"}]},
+                         ttm={"ADM": (999.0, 9.99)})  # bem diferente do anterior (5,13)
+
+        import utils.divergencia as divergencia
+        chamadas = []
+        original = divergencia.abrir_issue_divergencia
+        divergencia.abrir_issue_divergencia = lambda **kw: chamadas.append(kw) or {"number": 1}
+        try:
+            self.assertEqual(t.executar(self.dir, date(2026, 11, 18), f), 0)
+        finally:
+            divergencia.abrir_issue_divergencia = original
+
+        self.assertEqual(len(chamadas), 1)
+        self.assertEqual(chamadas[0]["ticker"], "ADM")
+        self.assertEqual(chamadas[0]["salvo"], 5.13)
+        self.assertEqual(chamadas[0]["novo"], 9.99)
+        self.assertEqual(chamadas[0]["link"], SEC + "adm-8k.htm")
+
+    def test_ttm_igual_ao_anterior_nao_aciona_issue(self):
+        anterior = {"data": "2026-11-17", "ticker": "ADM", "lucro_ttm": 1000.0, "lucro_moeda": "USD",
+                    "lpa_ttm": 2.0, "lpa_moeda": "USD", "trimestres": ["2026-09-30"],
+                    "fonte": "SEC XBRL", "link_oficial": SEC, "status": "ATUALIZADO",
+                    "pendencias": [], "preco": 69.0, "preco_moeda": "USD", "pl": 13.45}
+        preparar(self.dir, ["ADM"], last_run="2026-11-17", historico=[anterior])
+        f = FontesFalsas(docs={("ADM", "2026-11-18"): [{"form": "8-K", "data": "2026-11-18", "link": SEC}]},
+                         ttm={"ADM": (1000.0, 2.0)})  # igual ao anterior
+
+        import utils.divergencia as divergencia
+        chamadas = []
+        original = divergencia.abrir_issue_divergencia
+        divergencia.abrir_issue_divergencia = lambda **kw: chamadas.append(kw) or {"number": 1}
+        try:
+            self.assertEqual(t.executar(self.dir, date(2026, 11, 18), f), 0)
+        finally:
+            divergencia.abrir_issue_divergencia = original
+        self.assertEqual(chamadas, [])
+
+    def test_falha_ao_abrir_issue_nao_derruba_o_catchup(self):
+        anterior = {"data": "2026-11-17", "ticker": "ADM", "lucro_ttm": 2486e6, "lucro_moeda": "USD",
+                    "lpa_ttm": 5.13, "lpa_moeda": "USD", "trimestres": ["2026-09-30"],
+                    "fonte": "SEC XBRL", "link_oficial": SEC, "status": "ATUALIZADO",
+                    "pendencias": [], "preco": 69.0, "preco_moeda": "USD", "pl": 13.45}
+        preparar(self.dir, ["ADM"], last_run="2026-11-17", historico=[anterior])
+        f = FontesFalsas(docs={("ADM", "2026-11-18"): [{"form": "8-K", "data": "2026-11-18", "link": SEC}]},
+                         ttm={"ADM": (999.0, 9.99)})
+
+        import utils.divergencia as divergencia
+
+        def explode(**kw):
+            raise RuntimeError("sem GITHUB_TOKEN (simulado)")
+
+        original = divergencia.abrir_issue_divergencia
+        divergencia.abrir_issue_divergencia = explode
+        try:
+            self.assertEqual(t.executar(self.dir, date(2026, 11, 18), f), 0)
+        finally:
+            divergencia.abrir_issue_divergencia = original
+        r18 = next(r for r in ler(self.dir, "ttm_diario.json") if r["data"] == "2026-11-18")
+        self.assertEqual(r18["lpa_ttm"], 9.99)   # gravou o TTM novo mesmo com a issue falhando
+
+
 class TestFonteOficialB3(unittest.TestCase):
     """Issue #26: release de resultados > CVM. BBAS3 = R$ 12,45 bi (Análise do Desempenho), não 11,02 bi (DRE CVM)."""
 
