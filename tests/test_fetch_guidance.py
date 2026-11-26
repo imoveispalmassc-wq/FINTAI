@@ -480,6 +480,155 @@ def test_q4_release_do_repositorio_tem_panw_com_fonte():
     assert cfg["31/07/2026"]["lpa"] == -0.35 and cfg["31/07/2026"]["url"].startswith("https://")
 
 
+# ------------------------------------------------------------ issue #54: janela de 4 trimestres nunca retrocede
+# Trecho real do press release da NVIDIA (8-K Exhibit 99.1, Form 8-K de 17/11/2026, "q3fy27pr.htm"):
+# o 10-Q formal do 3T FY2027 (fim 25/10/2026) ainda não tinha sido protocolado na SEC nesse momento.
+NVDA_PR_3T_FY27 = (
+    "SANTA CLARA, Calif.—Nov. 17, 2026― NVIDIA (NASDAQ: NVDA) today reported revenue for the "
+    "third quarter ended October 25, 2026, of $115.8 billion, up 20% from the previous quarter and up "
+    "103% from a year ago. For the quarter, GAAP and non-GAAP gross margins were 74.8% and 74.9%, "
+    "respectively. GAAP and non-GAAP earnings per diluted share were $2.70 and $2.68, respectively.")
+
+NVDA_PR_TABELA = (
+    "Q3 Fiscal 2027 Summary GAAP ($ in billions, except earnings per share) Q3 FY27 Q2 FY27 Q3 FY26 "
+    "Revenue $115.8 $96.2 $57.0 Diluted earnings per share $2.70 $2.46 $1.30 Non-GAAP ($ in billions, "
+    "except earnings per share) Q3 FY27 Q2 FY27 Q3 FY26 Diluted earnings per share $2.68 $2.22 $1.27")
+
+
+def test_extrair_eps_gaap_trimestre_na_frase_combinada_gaap_e_non_gaap():
+    assert fg.extrair_eps_gaap_trimestre(NVDA_PR_3T_FY27) == 2.70
+
+
+def test_extrair_eps_gaap_trimestre_na_tabela_antes_do_non_gaap():
+    assert fg.extrair_eps_gaap_trimestre(NVDA_PR_TABELA) == 2.70
+
+
+def test_extrair_eps_gaap_trimestre_ignora_outlook_e_full_year():
+    texto = ("Full year GAAP earnings per diluted share of $9.00. For the fourth quarter, the Company "
+             "expects GAAP and non-GAAP earnings per diluted share were $3.00 and $3.10, respectively "
+             "in its outlook.")
+    assert fg.extrair_eps_gaap_trimestre(texto) is None
+
+
+def test_extrair_fim_trimestre_da_data_por_extenso():
+    assert fg.extrair_fim_trimestre(NVDA_PR_3T_FY27) == dt.date(2026, 10, 25)
+    assert fg.extrair_fim_trimestre("sem data nenhuma aqui") is None
+
+
+def _fatos_nvda_sem_3t_fy27():
+    """Reproduz o estado real da SEC em 22/11/2026 (issue #54): só 4 trimestres no XBRL, mas são os
+    4 ERRADOS (26/10/2025 a 26/07/2026) porque o 10-Q do 3T FY2027 (fim 25/10/2026) ainda não saiu."""
+    e = [
+        _fato("2025-07-28", "2025-10-26", 1.30, "10-Q", "2025-11-20"),   # 3T FY26 (seria descartado)
+        _fato("2025-01-27", "2025-10-26", 3.00, "10-Q", "2025-11-20"),   # 9m acumulado FY26
+        _fato("2025-01-27", "2026-01-25", 4.76, "10-K", "2026-03-18"),   # FY26 anual -> deriva 4T = 1,76
+        _fato("2026-01-26", "2026-04-26", 2.39, "10-Q", "2026-05-28"),   # 1T FY27
+        _fato("2026-04-27", "2026-07-26", 2.46, "10-Q", "2026-08-27"),   # 2T FY27
+        # 3T FY27 (fim 25/10/2026, LPA 2,70) NÃO está aqui: só no press release/8-K, sem 10-Q ainda.
+    ]
+    return {"facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"USD/shares": e}}}}}
+
+
+NVDA_ANTERIOR_SALVO = {
+    "status": "ok", "lpa_12m": 9.31,
+    "trimestres": [
+        {"fim": "25/01/2026", "lpa": 1.76, "form": "10-K"},
+        {"fim": "26/04/2026", "lpa": 2.39, "form": "10-Q"},
+        {"fim": "26/07/2026", "lpa": 2.46, "form": "10-Q"},
+        {"fim": "25/10/2026", "lpa": 2.70, "fonte": "NVIDIA press release 3T FY2027 (GAAP)"},
+    ],
+}
+
+
+def test_bug_issue_54_sem_fix_o_xbrl_sozinho_retrocederia_para_7_91():
+    """Prova de que o fixture reproduz o bug real: sem a trava, lpa_ttm_sec (só XBRL) dá 7,91 e
+    'perde' o trimestre de 25/10/2026 - exatamente o que aconteceu no PR #53."""
+    sem_fix = fg.lpa_ttm_sec(_fatos_nvda_sem_3t_fy27(), dt.date(2026, 11, 22), "NVDA")
+    assert sem_fix["status"] == "ok"
+    assert sem_fix["lpa_12m"] == pytest.approx(7.91)
+    assert sem_fix["trimestres"][-1]["fim"] == "26/07/2026"
+
+
+def test_lpa_ttm_sec_aceita_trimestre_extra_do_press_release():
+    """extra_total (issue #54) entra no lugar do trimestre que falta no XBRL e reconstrói a janela certa."""
+    extra = {"fim": dt.date(2026, 10, 25), "val": 2.70, "filed": "2026-11-17",
+             "fonte": "NVIDIA press release de resultados (GAAP), Form 8-K Exhibit 99.1 de 17/11/2026",
+             "url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000088/q3fy27pr.htm"}
+    com_fix = fg.lpa_ttm_sec(_fatos_nvda_sem_3t_fy27(), dt.date(2026, 11, 22), "NVDA", extra_total=extra)
+    assert com_fix["status"] == "ok" and com_fix["lpa_12m"] == pytest.approx(9.31)
+    assert [t["fim"] for t in com_fix["trimestres"]] == ["25/01/2026", "26/04/2026", "26/07/2026", "25/10/2026"]
+    assert com_fix["trimestres"][-1]["fonte"].startswith("NVIDIA press release")
+
+
+def test_extra_total_e_ignorado_quando_o_xbrl_ja_tem_o_trimestre():
+    """O 10-Q/10-K formal sempre ganha do press release quando os dois cobrem o mesmo trimestre."""
+    fatos = _fatos_adm()
+    extra = {"fim": dt.date(2026, 9, 30), "val": 999.0, "filed": "2026-11-01", "fonte": "x", "url": "y"}
+    c = fg.lpa_ttm_sec(fatos, dt.date(2026, 11, 17), extra_total=extra)
+    assert c["lpa_12m"] == pytest.approx(5.12)   # 999 não entrou: 30/09/2026 já vinha do 10-Q
+
+
+def test_trimestre_pendente_gaap_so_aceita_documento_consecutivo():
+    doc = {"form": "8-K", "data": "2026-11-17", "acc": "a1", "cik": "1045810"}
+    # "apos" bem mais antigo: o trimestre de 25/10/2026 do press release não é consecutivo a ele
+    # (gap bem maior que 100 dias) - não pode ser aceito como se fosse o trimestre que falta.
+    pendente = fg._trimestre_pendente_gaap(
+        "1045810", {"User-Agent": "x"}, dt.date(2025, 1, 1), nome="NVIDIA CORP",
+        buscar_docs=lambda *a, **k: [doc],
+        ler=lambda d, c: ("https://sec/x", NVDA_PR_3T_FY27))
+    assert pendente is None
+
+
+def test_trimestre_pendente_gaap_acha_o_press_release_certo():
+    doc = {"form": "8-K", "data": "2026-11-17", "acc": "0001045810-26-000088", "cik": "1045810"}
+    pendente = fg._trimestre_pendente_gaap(
+        "1045810", {"User-Agent": "x"}, dt.date(2026, 7, 26), nome="NVIDIA CORP",
+        buscar_docs=lambda *a, **k: [doc],
+        ler=lambda d, c: ("https://www.sec.gov/.../q3fy27pr.htm", NVDA_PR_3T_FY27))
+    assert pendente == {"fim": dt.date(2026, 10, 25), "val": 2.70, "filed": "2026-11-17",
+                        "fonte": "NVIDIA CORP press release de resultados (GAAP), "
+                                 "Form 8-K Exhibit 99.1 de 17/11/2026",
+                        "url": "https://www.sec.gov/.../q3fy27pr.htm"}
+
+
+def test_regressao_issue_54_contabil_eua_nunca_retrocede_com_fonte_alternativa():
+    """Cenário exato da Issue #54: SEC sem o 10-Q do 3T FY2027, mas com o press release/8-K disponível
+    -> contabil_eua tem que voltar com lpa_12m = 9,31, nunca regredir para 7,91."""
+    doc_8k = {"form": "8-K", "data": "2026-11-17", "acc": "0001045810-26-000088", "cik": "1045810"}
+    import unittest.mock as mock
+    with mock.patch.object(fg, "_get_sec") as get_sec:
+        get_sec.return_value.json.return_value = _fatos_nvda_sem_3t_fy27()
+        resultado = fg.contabil_eua(
+            "NVDA", dt.date(2026, 11, 22),
+            cabecalho=lambda: {"User-Agent": "x"},
+            buscar_cik=lambda t, c: ("1045810", "NVIDIA CORP"),
+            anterior=NVDA_ANTERIOR_SALVO,
+            buscar_pendente=lambda cik, cab, apos, nome=None: fg._trimestre_pendente_gaap(
+                cik, cab, apos, nome=nome, buscar_docs=lambda *a, **k: [doc_8k],
+                ler=lambda d, c: ("https://www.sec.gov/.../q3fy27pr.htm", NVDA_PR_3T_FY27)),
+        )
+    assert resultado["status"] == "ok" and resultado["lpa_12m"] == pytest.approx(9.31)
+    assert [t["fim"] for t in resultado["trimestres"]] == ["25/01/2026", "26/04/2026", "26/07/2026", "25/10/2026"]
+    assert "press release" in resultado["trimestres"][-1]["fonte"].lower()
+    assert resultado["lpa_12m"] != pytest.approx(7.91)   # nunca mais o retrocesso do PR #53
+
+
+def test_sem_fonte_alternativa_mantem_o_anterior_em_vez_de_retroceder():
+    """Sem press release/8-K confirmado para o trimestre mais recente: MANTÉM o anterior
+    (MANTIDO_TTM_ANTERIOR) em vez de aceitar uma janela mais antiga que o já salvo."""
+    import unittest.mock as mock
+    with mock.patch.object(fg, "_get_sec") as get_sec:
+        get_sec.return_value.json.return_value = _fatos_nvda_sem_3t_fy27()
+        resultado = fg.contabil_eua(
+            "NVDA", dt.date(2026, 11, 22),
+            cabecalho=lambda: {"User-Agent": "x"},
+            buscar_cik=lambda t, c: ("1045810", "NVIDIA CORP"),
+            anterior=NVDA_ANTERIOR_SALVO,
+            buscar_pendente=lambda cik, cab, apos, nome=None: None,   # nenhuma fonte alternativa achada
+        )
+    assert resultado["status"] == "mantido_ttm_anterior"
+    assert "25/10/2026" in resultado["motivo"]
+
 
 # ------------------------------------------------------------ contábil BBAS3 pelo release do BB (CVM)
 BB_LUCRO = {"4T25": 5.70, "1T26": 3.40, "2T26": 3.91, "3T26": 1.27}     # R$ bi, exemplo do pedido
