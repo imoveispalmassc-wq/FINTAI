@@ -521,6 +521,50 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   (ações/lucro/dividendo só mudam com balanço novo - não precisa bater na CVM/SEC a cada refresh);
   a cotação do dia (já buscada pela tela, Yahoo) entra separadamente em `montar()`, nunca pelo
   módulo de dados fixos.
+  P/VP, Payout e ROE (Issue #35): mesmo arquivo `dados_fixos.json`, mesmo ticket único por balanço -
+  3 campos novos, `patrimonio_liquido` (BR e EUA) e as 2 fórmulas que usam ele. `patrimonio_liquido`
+  é um valor de BALANÇO (estoque, "quanto a empresa tem agora"), DIFERENTE de lucro/dividendo
+  (fluxo, somado 4 trimestres) - é sempre o valor do balanço MAIS RECENTE, do MESMO documento que já
+  deu `acoes_total`/o último trimestre de lucro (nunca um documento adicional, nunca somado entre
+  trimestres - igual a como `acoes_total` já pega o valor mais recente, não uma soma). B3 =
+  `extrair_patrimonio_liquido_br`, 2 formas vistas nos documentos da CVM: (a) tabela de destaques
+  com colunas por trimestre (ex. BBAS3, "3T25 2T26 3T26 ..."), mesma técnica de
+  `ler_lucro_trimestre`/`colunas_do_cabecalho` já usada pro lucro - reaproveitada direto, chamando
+  `ler_lucro_trimestre(texto, tri, "Patrimônio Líquido", tabela_vence=True)`; (b) Balanço
+  Patrimonial com 2 colunas de DATA, mais recente primeiro (ex. PETR4/Petrobras, "PASSIVO - R$
+  milhões 30.09.2026 31.12.2025 ... Patrimônio Líquido 505.631 417.587") - usa a 1ª coluna,
+  confirmando que a data bate com o trimestre já identificado para lucro/ações (nunca aceita uma
+  data diferente), e a unidade (milhões/bilhões) do próprio cabeçalho da tabela; ignora "Retorno
+  sobre Patrimônio Líquido"/RSPL (isso é ROE, não o patrimônio em si). Sem achar em nenhuma das 2
+  formas: `patrimonio_liquido: null`, `patrimonio_motivo` explica, nunca estima. EUA =
+  `us-gaap:StockholdersEquity` (`_patrimonio_sec`; se faltar,
+  `StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest` - companhias com
+  participação de não controladores às vezes só têm o segundo), valor no MESMO período/instante
+  (`end`) que já deu `lucro_12m`/`acoes_total` - NUNCA somado (é fato de instante/estoque na XBRL,
+  diferente de `NetIncomeLoss`, que é de período/fluxo). Fórmulas fixas (não mude):
+  `VPA = patrimonio_liquido / acoes_total`; `P/VP = cotacao / VPA`;
+  `ROE = lucro_12m / patrimonio_liquido` (os 2 totais - equivale a `LPA / VPA`, já que ambos ÷
+  `acoes_total` se cancelam: dá o mesmo resultado goste o jeito que for). `Payout = dividendo_12m /
+  LPA`, NÃO `dividendo_12m / lucro_12m` ao pé da letra: `dividendo_12m` já é por ação (Issue #31,
+  "em R$ por ação") e `lucro_12m` é o total da empresa (R$, não por ação) - dividir um pelo outro
+  direto misturaria as 2 bases (R$/ação ÷ R$ total) e daria uma % sem sentido (ordens de grandeza
+  bem diferentes). `dividendo_12m / LPA` é matematicamente a MESMA razão que dividendo TOTAL ÷
+  lucro TOTAL (os 2 ÷ `acoes_total` se cancelam), só que com os dados que o módulo já tem - decisão
+  tomada ao implementar, documentada aqui e no PR da Issue #35, não uma variação livre da fórmula.
+  Sem `patrimonio_liquido`: `P/VP`, `ROE` e `VPA` ficam `null`/"Sem dado" (e `Payout` também fica
+  "Sem dado" sem `dividendo_12m` ou sem LPA - mesma regra de "nunca estima" dos outros indicadores).
+  Sem selo de favorável/neutro/desfavorável pra esses 3 (decisão, não esquecimento): a regra de
+  comparar com uma "média de 12 meses" (ver P/L Médio 12m acima) existe pra indicadores com
+  histórico TRIMESTRAL de cotação já disponível (P/L) - P/VP, Payout e ROE precisariam do
+  patrimônio líquido de cada um dos últimos 4 trimestres (não só o do balanço mais recente), que a
+  Issue #35 não pediu e que exigiria ler/guardar 4x mais dados de patrimônio por ticker. Construir
+  esse histórico sem pedido claro seria inventar uma comparação não testada - melhor mostrar só o
+  número dos 3 indicadores, sem selo, do que simular uma "média" não validada. Na tela
+  (`tela/dados.dados_fixos_tela`, `tela/detalhe.js`, mesmo card "Dados fixos" - não um card novo
+  separado, mesmo padrão dos indicadores existentes): 3 linhas novas (P/VP, Payout, ROE) na mesma
+  lista do card, com a conta embaixo (ex. "Payout: 4,0000 / 10,8922 = 36,7%", "ROE: 140,40 bi /
+  505,63 bi = 27,8%", "P/VP: 42,67 / (505,63 bi / 12,89 bi)") e uma nota explicando a ausência do
+  selo de média 12m.
 
 ## Textos
 

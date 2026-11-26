@@ -23,6 +23,20 @@ Fórmulas fixas (não mude):
 ADR: LPA_ADR = LPA x fator_adr; Dividendo_ADR = Dividendo x fator_adr (fator_adr = quantas ações
 compõem 1 ADR; default 1 quando o ticker não é um ADR). Lucro e cotação nunca se misturam entre
 moedas: `moeda_resultado` diz em que moeda o lucro/dividendo foram divulgados.
+
+Issue #35 (P/VP, Payout, ROE) - usam `patrimonio_liquido`, o valor de BALANÇO (estoque) do mesmo
+documento/balanço mais recente que já deu `lucro_12m`/`acoes_total` - NUNCA somado como lucro/
+dividendo (ver `extrair_patrimonio_liquido_br` e `_patrimonio_sec`):
+    VPA    = patrimonio_liquido / acoes_total
+    P/VP   = cotacao / VPA
+    ROE    = lucro_12m / patrimonio_liquido
+    Payout = dividendo_12m / LPA   (ver nota abaixo)
+
+Nota sobre Payout: `dividendo_12m` já é por ação (Issue #31), e `lucro_12m` é o total da empresa -
+dividir um pelo outro direto misturaria as duas bases (R$/ação ÷ R$ total) e daria uma % sem
+sentido. Por isso o Payout usa LPA (lucro_12m / acoes_total) no denominador, não lucro_12m puro -
+matematicamente é a MESMA razão que dividendo total / lucro total (os dois ÷ acoes_total se
+cancelam), só que com os dados já calculados. Documentado com mais detalhe no CLAUDE.md.
 """
 from __future__ import annotations
 
@@ -46,6 +60,7 @@ from utils.fetch_guidance import (
     documentos_dividendo_cvm,
     fim_do_trimestre,
     ler_lucro_trimestre,
+    multiplicador,
     normalizar,
     numero_br,
     sem_acento,
@@ -222,6 +237,51 @@ def _dividendo_por_tri(tris_faltando: set[str], hoje: dt.date, empresa: tuple[st
     return achados
 
 
+# ------------------------------------------------------------ Brasil: patrimônio líquido (Issue #35)
+# Patrimônio líquido é um valor de BALANÇO (estoque, "quanto a empresa tem agora"), NUNCA um fluxo
+# trimestral somado como lucro/dividendo - é sempre o valor do balanço MAIS RECENTE, igual a como
+# acoes_total já pega o valor mais recente (não uma soma). Vem do MESMO documento mais recente que já
+# deu acoes_total/o último trimestre de lucro (nunca abre documento adicional). Duas formas vistas nos
+# documentos da CVM: (a) tabela de destaques com colunas por trimestre (ex. BBAS3, "3T25 2T26 3T26 ..."),
+# mesma técnica de `ler_lucro_trimestre`/`colunas_do_cabecalho` já usada para o lucro; (b) Balanço
+# Patrimonial com 2 colunas de DATA, mais recente primeiro (ex. PETR4/Petrobras, "30.09.2026 31.12.2025") -
+# usa a 1ª coluna, confirmando que a data bate com o trimestre `tri` já identificado para o lucro/ações, e
+# a unidade (milhões/bilhões) do próprio cabeçalho da tabela.
+RE_CABECALHO_DATAS_PL = re.compile(
+    r"R\$\s*(milh[õo]es|bilh[õo]es)[^\n]{0,20}?(\d{2}\.\d{2}\.\d{4})\s+(\d{2}\.\d{2}\.\d{4})", re.I)
+RE_PATRIMONIO_LINHA = re.compile(
+    r"patrim[ôo]nio\s+l[íi]quido(?:\s+consolidado)?\s*"
+    r"((?:\(?-?\d{1,3}(?:\.\d{3})*(?:,\d+)?\)?\s+){1,6})", re.I)
+RE_EXCLUIR_PATRIMONIO = re.compile(r"(retorno|rentabilidade|rspl)\s+sobre|sobre\s+o?\s*patrim", re.I)
+
+
+def extrair_patrimonio_liquido_br(texto: str, tri: str) -> tuple[float | None, str]:
+    """Patrimônio líquido do balanço mais recente (trimestre `tri`), nunca somado. None sem achar
+    em nenhuma das 2 formas vistas nos documentos da CVM (ver comentário acima)."""
+    t = normalizar(texto)
+    r = ler_lucro_trimestre(t, tri, "Patrimônio Líquido", tabela_vence=True)
+    if r["valor"] is not None:
+        return r["valor"], "tabela de destaques do release/relatório (coluna do trimestre)"
+    data_esperada = f"{fim_do_trimestre(tri):%d.%m.%Y}"
+    for h in RE_CABECALHO_DATAS_PL.finditer(t):
+        unidade, data1, data2 = h.groups()
+        if data1 != data_esperada:
+            continue
+        mult = multiplicador(unidade)
+        if not mult:
+            continue
+        resto = t[h.end(): h.end() + 4000]
+        for m in RE_PATRIMONIO_LINHA.finditer(resto):
+            antes = resto[max(0, m.start() - 40): m.start()]
+            if RE_EXCLUIR_PATRIMONIO.search(antes):
+                continue
+            valores = m.group(1).split()
+            if not valores or valores[0].startswith("("):
+                continue                      # patrimônio líquido negativo - leitura suspeita, ignora
+            return numero_br(valores[0]) * mult, f"Balanço Patrimonial ({unidade}, coluna {data1})"
+    return None, ""
+
+
 def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, buscar_docs=documentos_cvm,
                     ler_pdf=texto_do_pdf, buscar_docs_dividendo=documentos_dividendo_cvm) -> dict:
     """Fonte oficial do Brasil: 1º PDF RI (release/ITR/DFP), documentos entregues à CVM (IPE).
@@ -238,6 +298,8 @@ def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, b
         f"{d.get('categoria', '')} {d.get('tipo', '')} {d.get('assunto', '')}"))), reverse=True)
     lidos: dict[str, dict] = {}
     dividendos: dict[str, float] = {}         # tri -> dividendo/JCP por ação (abordagem (a), tabela)
+    patrimonios: dict[str, float] = {}        # tri -> patrimônio líquido (valor do balanço, nunca somado)
+    fontes_patrimonio: dict[str, str] = {}
     acoes, acoes_detalhe, fonte_acoes = None, "", ""
     for doc in docs:
         data_doc = _data(doc["data"])
@@ -264,6 +326,10 @@ def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, b
             valor_div = extrair_dividendo_tabela(texto, tri)
             if valor_div is not None:
                 dividendos[tri] = valor_div
+        if tri not in patrimonios:
+            valor_pl, fonte_pl = extrair_patrimonio_liquido_br(texto, tri)
+            if valor_pl is not None:
+                patrimonios[tri], fontes_patrimonio[tri] = valor_pl, fonte_pl
         ordem = sorted(lidos, key=fim_do_trimestre)
         if acoes and len(ordem) >= 4 and all(tri_anterior(b) == a for a, b in zip(ordem[-4:], ordem[-3:])):
             break
@@ -292,14 +358,25 @@ def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, b
             f"dividendo/JCP por ação não encontrado para {', '.join(ainda_faltando)} "
             "nos documentos lidos (release/relatório de resultados e Fato Relevante/Aviso aos Acionistas)")
         fonte_dividendo = None
+    # patrimônio líquido (Issue #35): valor do balanço MAIS RECENTE (tris_ult[-1]), NUNCA somado -
+    # mesmo documento que já deu acoes_total/o último trimestre de lucro.
+    tri_recente = tris_ult[-1]
+    patrimonio_liquido = patrimonios.get(tri_recente)
+    if patrimonio_liquido is not None:
+        patrimonio_motivo, fonte_patrimonio = None, fontes_patrimonio[tri_recente]
+    else:
+        patrimonio_motivo = f"Patrimônio Líquido não encontrado no documento mais recente ({tri_recente})"
+        fonte_patrimonio = None
     return {
         "status": "ok", "acoes_total": acoes, "acoes_detalhe": acoes_detalhe,
         "tipo_acao": "ON+PN" if " + " in acoes_detalhe else ("ON" if "ON" in acoes_detalhe else acoes_detalhe),
         "fator_adr": 1, "moeda_resultado": "BRL",
         "fonte_oficial": f"PDF RI (CVM/IPE) - ações: {fonte_acoes}; lucro: release de resultados trimestral"
-                        + (f"; dividendo: {fonte_dividendo}" if fonte_dividendo else ""),
+                        + (f"; dividendo: {fonte_dividendo}" if fonte_dividendo else "")
+                        + (f"; patrimônio líquido: {fonte_patrimonio}" if fonte_patrimonio else ""),
         "data_ultimo_balanco": ult[-1]["fim"], "lucro_12m": sum(x["lucro"] for x in ult),
         "dividendo_12m": dividendo_12m, "dividendo_motivo": dividendo_motivo,
+        "patrimonio_liquido": patrimonio_liquido, "patrimonio_motivo": patrimonio_motivo,
         "trimestres": ult,
     }
 
@@ -378,6 +455,24 @@ def _acoes_sec(fatos: dict) -> float | None:
     return float(melhor["val"])
 
 
+TAGS_PATRIMONIO_SEC = ("StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest")
+
+
+def _patrimonio_sec(fatos: dict, data_fim: dt.date) -> tuple[float | None, str | None]:
+    """Patrimônio líquido (us-gaap:StockholdersEquity; se faltar,
+    StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest - companhias com
+    participação de não controladores às vezes só têm o segundo). Valor do balanço no MESMO
+    período/instante (`data_fim`) que já deu lucro_12m/acoes_total - NUNCA somado (é estoque, não
+    fluxo). None sem o fato nessa data em nenhuma das 2 tags."""
+    for tag in TAGS_PATRIMONIO_SEC:
+        unidades = (((fatos.get("facts") or {}).get("us-gaap") or {}).get(tag) or {}).get("units", {}).get("USD", [])
+        candidatos = [e for e in unidades if _data(e.get("end")) == data_fim]
+        if candidatos:
+            melhor = max(candidatos, key=lambda e: e.get("filed") or "")
+            return float(melhor["val"]), tag
+    return None, None
+
+
 def buscar_fixos_eua(ticker: str, hoje: dt.date, *, cabecalho=cabecalho_sec, buscar_cik=cik_do_ticker) -> dict:
     """Fonte oficial dos EUA: SEC EDGAR, XBRL companyfacts - os mesmos fatos estruturados que vêm
     dos formulários 10-Q/10-K (nunca Investor Relations: a issue pede IR como 2º passo, mas a SEC já
@@ -445,9 +540,11 @@ def pl_medio_12m_fixo(fixos: dict, cotacoes_trimestrais: list[float] | None) -> 
     return sum(pls) / len(pls)
 
 
-def _contas(fixos: dict, lpa: float | None, pl: float | None, dy: float | None, cotacao: float) -> dict:
-    """Texto da conta embaixo de cada indicador (CLAUDE.md / Issue #29, item 6)."""
+def _contas(fixos: dict, lpa: float | None, pl: float | None, dy: float | None, cotacao: float,
+           vpa: float | None, pvp: float | None, payout: float | None, roe: float | None) -> dict:
+    """Texto da conta embaixo de cada indicador (CLAUDE.md / Issue #29 item 6; Issue #35: P/VP, Payout, ROE)."""
     acoes, lucro, dividendo = fixos.get("acoes_total"), fixos.get("lucro_12m"), fixos.get("dividendo_12m")
+    patrimonio = fixos.get("patrimonio_liquido")
     fonte, data_bal = fixos.get("fonte_oficial", ""), fixos.get("data_ultimo_balanco", "")
     bi = lambda v: _fmt(v / 1e9, 2) if v is not None else "Sem dado"
     return {
@@ -456,22 +553,42 @@ def _contas(fixos: dict, lpa: float | None, pl: float | None, dy: float | None, 
         "pl": f"P/L Atual: {_fmt(cotacao)} / {_fmt(lpa, 4)}" if lpa is not None else "P/L Atual: Sem dado",
         "dividendo": f"Dividendo Anual: {_fmt(dividendo, 4)}" if dividendo is not None else "Dividendo Anual: Sem dado",
         "dy": f"DY: {_fmt(dividendo, 4)} / {_fmt(cotacao)}" if dy is not None else "DY: Sem dado",
+        "pvp": (f"P/VP: {_fmt(cotacao)} / ({bi(patrimonio)} bi / {bi(acoes)} bi)"
+               if pvp is not None else "P/VP: Sem dado"),
+        "payout": (f"Payout: {_fmt(dividendo, 4)} / {_fmt(lpa, 4)} = {_fmt(payout * 100, 1)}%"
+                  if payout is not None else "Payout: Sem dado"),
+        "roe": (f"ROE: {bi(lucro)} bi / {bi(patrimonio)} bi = {_fmt(roe * 100, 1)}%"
+               if roe is not None else "ROE: Sem dado"),
     }
 
 
 def calcular_indicadores(fixos: dict, cotacao: float, *, cotacoes_trimestrais: list[float] | None = None) -> dict:
-    """As fórmulas fixas da Issue #29, puras (sem rede): LPA, P/L, DY, P/L Médio 12m e a versão ADR."""
+    """As fórmulas fixas da Issue #29 (LPA, P/L, DY, P/L Médio 12m, ADR) + Issue #35 (P/VP, Payout,
+    ROE), puras (sem rede).
+
+    P/VP e ROE usam `patrimonio_liquido` como está (valor total do balanço, igual à Issue). Payout
+    usa LPA no denominador, não `lucro_12m` bruto: `dividendo_12m` já é por ação (Issue #31), então
+    dividir pelo lucro TOTAL daria uma % sem sentido (ordens de grandeza diferentes); dividendo por
+    ação ÷ LPA é a mesma conta de dividendo total ÷ lucro total (ambos ÷ acoes_total se cancelam),
+    só que com os dados que já temos - mesmo resultado, sem o passo extra. Decisão documentada no
+    CLAUDE.md e no PR da Issue #35."""
     acoes, lucro, dividendo = fixos.get("acoes_total"), fixos.get("lucro_12m"), fixos.get("dividendo_12m")
+    patrimonio = fixos.get("patrimonio_liquido")
     fator_adr = fixos.get("fator_adr") or 1
     lpa = lucro / acoes if acoes and lucro is not None else None
     pl = cotacao / lpa if lpa and cotacao else None
     dy = dividendo / cotacao if dividendo is not None and cotacao else None
     pl_medio = pl_medio_12m_fixo(fixos, cotacoes_trimestrais)
+    vpa = patrimonio / acoes if acoes and patrimonio is not None else None
+    pvp = cotacao / vpa if vpa and cotacao else None
+    payout = dividendo / lpa if dividendo is not None and lpa else None
+    roe = lucro / patrimonio if patrimonio and lucro is not None else None
     return {
         "cotacao": cotacao, "lpa": lpa, "pl": pl, "dy": dy, "plMedio12m": pl_medio,
         "lpaAdr": lpa * fator_adr if lpa is not None else None,
         "dividendoAdr": dividendo * fator_adr if dividendo is not None else None,
-        "contas": _contas(fixos, lpa, pl, dy, cotacao),
+        "vpa": vpa, "pvp": pvp, "payout": payout, "roe": roe,
+        "contas": _contas(fixos, lpa, pl, dy, cotacao, vpa, pvp, payout, roe),
     }
 
 
