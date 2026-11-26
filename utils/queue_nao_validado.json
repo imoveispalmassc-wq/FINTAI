@@ -82,5 +82,9 @@
   "TAEE11": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
     "data": "22/11/2026"
+  },
+  "TRPL4": {
+    "motivo": "CNPJ não encontrado no cadastro da CVM",
+    "data": "26/11/2026"
   }
 }
