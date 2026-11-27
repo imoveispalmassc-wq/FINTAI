@@ -52,6 +52,11 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--azul); ou
 .topo .bolsa { display: inline-flex; align-items: center; gap: 6px; color: var(--suave); font-size: 12.5px; margin-top: 2px; }
 .topo .bolsa svg { flex: none; }
 .topo .preco-topo { font-family: var(--display); font-size: 17px; font-weight: 700; flex: none; }
+/* Ao rolar (.rolou): esconde nome completo/bolsa/preço, mostra só o ticker - pedido explícito de
+   não repetir preço no cabeçalho fixo (já aparece no cartão de decisão logo abaixo). */
+.topo .ticker-topo { display: none; font-family: var(--display); font-size: 19px; font-weight: 700; }
+.topo.rolou .meio, .topo.rolou .preco-topo { display: none; }
+.topo.rolou .ticker-topo { display: block; }
 svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* cartão de decisão */
@@ -370,6 +375,7 @@ body { margin: 0; background: var(--bg); font-family: var(--corpo); }
       <div class="bolsa" id="t-bolsa"></div>
     </div>
     <div class="preco-topo num" id="t-preco"></div>
+    <div class="ticker-topo" id="t-ticker"></div>
   </header>
   <div class="modo-linha">
     <h2 class="visao-t">Visão geral</h2>
@@ -520,10 +526,13 @@ function montar(root, d) {
   /* ---------------- topo e decisão */
   $('t-nome').textContent = d.nome;
   $('t-bolsa').textContent = d.bolsa ? `${d.bolsa} (${d.ticker})` : d.ticker;
-  // cabeçalho fixo (sticky, CSS) ao rolar: nome + preço sempre visíveis, pra nunca perder de vista
-  // qual ativo está sendo olhado. O preço aqui é o mesmo d.preco do cartão de decisão, só repetido.
+  // cabeçalho fixo (sticky, CSS): nome completo + bolsa + preço no topo da página. Ao rolar (classe
+  // .rolou, abaixo), esconde tudo isso e mostra SÓ o ticker (ex. "MU") - achado após a 1ª versão
+  // mostrar nome/preço também ao rolar: o pedido original era só manter o TICKER visível, pra saber
+  // qual ativo está aberto, sem repetir preço (que já está no cartão de decisão logo abaixo).
   $('t-preco').textContent = f(d.preco);
   $('t-preco').style.color = tem(d.varDia) ? cor(d.varDia) : '';
+  $('t-ticker').textContent = d.ticker;
   const topoEl = document.querySelector('.topo');
   if (topoEl) {
     const sombra = () => topoEl.classList.toggle('rolou', window.scrollY > 4);

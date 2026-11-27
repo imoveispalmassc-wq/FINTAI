@@ -119,10 +119,13 @@ function montar(root, d) {
   /* ---------------- topo e decisão */
   $('t-nome').textContent = d.nome;
   $('t-bolsa').textContent = d.bolsa ? `${d.bolsa} (${d.ticker})` : d.ticker;
-  // cabeçalho fixo (sticky, CSS) ao rolar: nome + preço sempre visíveis, pra nunca perder de vista
-  // qual ativo está sendo olhado. O preço aqui é o mesmo d.preco do cartão de decisão, só repetido.
+  // cabeçalho fixo (sticky, CSS): nome completo + bolsa + preço no topo da página. Ao rolar (classe
+  // .rolou, abaixo), esconde tudo isso e mostra SÓ o ticker (ex. "MU") - achado após a 1ª versão
+  // mostrar nome/preço também ao rolar: o pedido original era só manter o TICKER visível, pra saber
+  // qual ativo está aberto, sem repetir preço (que já está no cartão de decisão logo abaixo).
   $('t-preco').textContent = f(d.preco);
   $('t-preco').style.color = tem(d.varDia) ? cor(d.varDia) : '';
+  $('t-ticker').textContent = d.ticker;
   const topoEl = document.querySelector('.topo');
   if (topoEl) {
     const sombra = () => topoEl.classList.toggle('rolou', window.scrollY > 4);

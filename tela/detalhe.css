@@ -30,6 +30,11 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--azul); ou
 .topo .bolsa { display: inline-flex; align-items: center; gap: 6px; color: var(--suave); font-size: 12.5px; margin-top: 2px; }
 .topo .bolsa svg { flex: none; }
 .topo .preco-topo { font-family: var(--display); font-size: 17px; font-weight: 700; flex: none; }
+/* Ao rolar (.rolou): esconde nome completo/bolsa/preço, mostra só o ticker - pedido explícito de
+   não repetir preço no cabeçalho fixo (já aparece no cartão de decisão logo abaixo). */
+.topo .ticker-topo { display: none; font-family: var(--display); font-size: 19px; font-weight: 700; }
+.topo.rolou .meio, .topo.rolou .preco-topo { display: none; }
+.topo.rolou .ticker-topo { display: block; }
 svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* cartão de decisão */
