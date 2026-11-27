@@ -29,20 +29,28 @@ BBAS3 = {"acoes_total": 5.71e9, "lucro_12m": 12.45e9, "dividendo_12m": None, "fa
 #     (PR #32, via Fato Relevante por trimestre): 1,18732774 + 1,34814262 + 0,70097272 + 0,62622908
 #     = R$ 3,8627016/ação.
 # BBAS3 - "Análise do Desempenho 3T26" (Relatório de Análise Gerencial, CVM/IPE, protocolo 1589018,
-# entregue em 13/11/2026) - TUDO reconfirmado ao vivo (os 4 campos, não só o patrimônio líquido):
-#   - acoes_total: Assembleia de 30/03/2026, "Ações Ordinárias (ON) ... 2.842.623.097" (BBAS3 fez um
-#     grupamento de ações entre a Issue #31 e agora - a fixture antiga, 5,71 bi, está desatualizada;
-#     por isso BBAS3_REAL usa só dados desta busca, nunca a fixture antiga).
-#   - lucro_12m: soma dos 4 trimestres da própria tabela de destaques ("Lucro Líquido" por tri):
-#     4T25 R$ 1,079 bi + 1T26 R$ 3,090 bi + 2T26 R$ 3,175 bi + 3T26 R$ 1,216 bi = R$ 8,56 bi.
-#   - dividendo_12m (linha "JCP/Dividendos por Ação", já por ação): 0,26 + 0,15 + 0,16 + 0,04 =
-#     R$ 0,61 por ação.
-#   - patrimonio_liquido NOVO (Issue #35): mesma tabela de destaques, linha "Patrimônio Líquido"
-#     coluna 3T26 = R$ 190,121 bilhões; confirmado também na Nota 23 das Demonstrações Contábeis do
-#     mesmo documento, "Patrimônio líquido consolidado 190.121.308" (em milhares de reais).
+# entregue em 13/11/2026):
+#   - acoes_total e lucro_12m CORRIGIDOS (27/11/2026, bug real achado comparando "Indicadores" com
+#     "Dados fixos" na tela pro mesmo ticker): a 1ª tentativa desta issue leu "Ações Ordinárias (ON)
+#     ... 2.842.623.097" e achou que BBAS3 tinha feito um grupamento de ações - ERRADO. Esse número
+#     é só o FREE FLOAT (49,6% do total, linha "Ações em circulação (free float)" das Demonstrações
+#     Contábeis) - o TOTAL emitido continua R$ 5.708.922.664/5.730.834.040 ("Número médio ponderado
+#     de ações" e "Total emitido" no mesmo documento), igual à fixture antiga (5,71 bi). Do mesmo
+#     jeito, lucro_12m usava a linha genérica "Lucro Líquido" em vez de "Lucro Líquido Contábil"
+#     (a linha certa, configurada em contabil_br_config.json) e bateu errado no 4T25 (R$ 1,079 bi em
+#     vez de R$ 4,972 bi) - `buscar_fixos_br` agora REUSA utils/contabil_br.json pra ações e lucro
+#     quando o ticker está configurado lá, em vez de reimplementar essa extração (ver
+#     `_contabil_br_configurado`, CLAUDE.md). lucro_12m real: 4T25 R$ 4,972 bi + 1T26 R$ 3,090 bi +
+#     2T26 R$ 3,175 bi + 3T26 R$ 1,216 bi = R$ 12,453 bi (bate com utils/contabil_br.json).
+#   - dividendo_12m (linha "JCP/Dividendos por Ação", já por ação, não afetada pelos 2 bugs acima):
+#     0,26 + 0,15 + 0,16 + 0,04 = R$ 0,61 por ação.
+#   - patrimonio_liquido (Issue #35, também não afetado): mesma tabela de destaques, linha
+#     "Patrimônio Líquido" coluna 3T26 = R$ 190,121 bilhões; confirmado também na Nota 23 das
+#     Demonstrações Contábeis do mesmo documento, "Patrimônio líquido consolidado 190.121.308" (em
+#     milhares de reais).
 #   - cotação de teste (23,07): tirada do próprio documento, "Valor de mercado por ação (R$) 23,07".
 PETR4_REAL = {**PETR4, "dividendo_12m": 3.8627016, "patrimonio_liquido": 505.631e9}
-BBAS3_REAL = {"acoes_total": 2_842_623_097.0, "lucro_12m": 8_560_000_000.0, "dividendo_12m": 0.61,
+BBAS3_REAL = {"acoes_total": 5_708_922_664.0, "lucro_12m": 12_453_000_000.0, "dividendo_12m": 0.61,
               "patrimonio_liquido": 190.121e9, "fator_adr": 1, "moeda_resultado": "BRL",
               "fonte_oficial": "PDF RI (CVM/IPE)", "data_ultimo_balanco": "30/09/2026"}
 
@@ -115,10 +123,10 @@ def test_petr4_pvp_payout_roe_batem_com_o_balanco_real():
 
 def test_bbas3_pvp_payout_roe_batem_com_o_balanco_real():
     ind = df.calcular_indicadores(BBAS3_REAL, 23.07)                # cotação do próprio documento
-    assert ind["vpa"] == pytest.approx(66.8822, abs=0.001)          # 190,121 bi / 2,8426 bi ações
-    assert ind["pvp"] == pytest.approx(0.34493, abs=0.0001)         # 23,07 / 66,8822
-    assert ind["roe"] == pytest.approx(0.045024, abs=0.0001)        # 8,56 bi / 190,121 bi = 4,5%
-    assert ind["payout"] == pytest.approx(0.202570, abs=0.0001)     # 0,61 / LPA 3,0113 = 20,3%
+    assert ind["vpa"] == pytest.approx(33.3024, abs=0.001)          # 190,121 bi / 5,708922664 bi ações
+    assert ind["pvp"] == pytest.approx(0.69274, abs=0.0001)         # 23,07 / 33,3024
+    assert ind["roe"] == pytest.approx(0.065500, abs=0.0001)        # 12,453 bi / 190,121 bi = 6,55%
+    assert ind["payout"] == pytest.approx(0.279647, abs=0.0001)     # 0,61 / LPA 2,1813 = 28,0%
 
 
 def test_roe_e_igual_seja_pelo_total_ou_pelo_lpa_vpa():
@@ -207,7 +215,7 @@ def test_buscar_fixos_br_grava_patrimonio_liquido_do_balanco_mais_recente():
         return b"", textos[link.rsplit("/", 1)[1]]
 
     r = df.buscar_fixos_br("PETR4", dt.date(2026, 11, 22), buscar_cnpj=busca_cnpj, buscar_docs=busca_docs,
-                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo)
+                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo, contabil_cfg={})
     assert r["status"] == "ok"
     assert r["patrimonio_liquido"] == pytest.approx(505.631e9)
     assert r["patrimonio_motivo"] is None
@@ -236,7 +244,7 @@ def test_buscar_fixos_br_sem_patrimonio_em_nenhum_documento_fica_sem_dado():
         return b"", textos[link.rsplit("/", 1)[1]]
 
     r = df.buscar_fixos_br("PETR4", dt.date(2026, 11, 22), buscar_cnpj=busca_cnpj, buscar_docs=busca_docs,
-                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo)
+                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo, contabil_cfg={})
     assert r["status"] == "ok"
     assert r["patrimonio_liquido"] is None
     assert r["patrimonio_motivo"] and "não encontrado" in r["patrimonio_motivo"]
@@ -468,7 +476,7 @@ def test_buscar_fixos_br_petr4_estilo_fato_relevante_preenche_dividendo():
         return b"", texto
 
     r = df.buscar_fixos_br("PETR4", dt.date(2026, 11, 22), buscar_cnpj=busca_cnpj, buscar_docs=busca_docs,
-                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo)
+                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo, contabil_cfg={})
     assert r["status"] == "ok"
     esperado = 1.18732774 + 1.34814262 + 0.70097272 + 0.62622908
     assert r["dividendo_12m"] == pytest.approx(esperado)
@@ -515,7 +523,7 @@ def test_buscar_fixos_br_bbas3_estilo_tabela_preenche_dividendo():
         return b"", textos[data]
 
     r = df.buscar_fixos_br("BBAS3", dt.date(2026, 11, 22), buscar_cnpj=busca_cnpj, buscar_docs=busca_docs,
-                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo)
+                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo, contabil_cfg={})
     assert r["status"] == "ok"
     assert r["dividendo_12m"] == pytest.approx(0.04 + 0.16 + 0.15 + 0.10)
     assert r["dividendo_motivo"] is None
@@ -548,10 +556,173 @@ def test_buscar_fixos_br_sem_dividendo_em_nenhum_documento_fica_sem_dado():
         return b"", textos[link.rsplit("/", 1)[1]]
 
     r = df.buscar_fixos_br("PETR4", dt.date(2026, 11, 22), buscar_cnpj=busca_cnpj, buscar_docs=busca_docs,
-                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo)
+                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo, contabil_cfg={})
     assert r["status"] == "ok"
     assert r["dividendo_12m"] is None
     assert r["dividendo_motivo"] and "não encontrado" in r["dividendo_motivo"]
     ind = df.calcular_indicadores(r, 42.67)
     assert ind["dy"] is None and ind["contas"]["dy"] == "DY: Sem dado"
     assert r["lucro_12m"] == pytest.approx(39.75e9 + 52.45e9 + 32.71e9 + 28.00e9)  # lucro continua normal
+
+
+# ------------------------------------------------------------ bug real corrigido (27/11/2026): ações = free
+# float em vez do total emitido, e lucro = linha genérica em vez da linha específica do ticker. Achado
+# comparando "Indicadores" (Yahoo/contabil_br.json) com "Dados fixos" (extração própria) pro BBAS3: Ações
+# 2,84 bi (errado, free float) vs 5,71 bi (certo, total emitido); LPA 3,0113 (errado) vs 2,18 (certo).
+def test_extrair_acoes_br_ignora_free_float_e_acha_o_total():
+    texto = (
+        "k) Movimentação de ações em circulação/free float\n"
+        "Ações Ordinárias em circulação (free float) no fim do período 2.843.025.842\n"
+        "...\n"
+        "Composição do Capital Social\n"
+        "Ações Ordinárias (ON) .......... 5.730.834.040\n"
+    )
+    total, detalhe = df.extrair_acoes_br(texto)
+    assert total == 5_730_834_040 and "ON" in detalhe
+
+
+def test_extrair_acoes_br_so_com_free_float_nao_acha_nada():
+    # nenhuma ocorrência de "ordinárias" fora do contexto de free float/tesouraria -> não inventa
+    # um total que não está no documento (nunca aceita o subconjunto como se fosse o total).
+    texto = "Ações Ordinárias em circulação (free float) no fim do período 2.843.025.842"
+    assert df.extrair_acoes_br(texto) == (None, "")
+
+
+def test_extrair_acoes_br_ignora_tesouraria():
+    texto = (
+        "Ações Ordinárias em tesouraria 10.000.000\n"
+        "Ações Ordinárias (ON) emitidas 5.730.834.040\n"
+    )
+    total, _ = df.extrair_acoes_br(texto)
+    assert total == 5_730_834_040
+
+
+# ------------------------------------------------------------ reuso de utils/contabil_br.json (27/11/2026)
+CONTABIL_CFG_BBAS3 = {"BBAS3": {"linha": "Lucro Líquido Contábil", "linha_ajustado": "Lucro Líquido Ajustado",
+                                "fonte": "BB, Análise do Desempenho, Lucro Líquido Contábil"}}
+CONTABIL_TABELA_BBAS3_OK = {"BBAS3": {
+    "status": "ok", "acoes": 5_708_922_664.0, "lucro_12m": 12_453_000_000.0, "lpa_12m": 2.1813,
+    "fonte": "BB, Análise do Desempenho, Lucro Líquido Contábil",
+    "trimestres": [
+        {"tri": "4T25", "fim": "31/12/2025", "lucro": 4_972_000_000.0, "data": "24/02/2026", "url": "https://cvm/4t25"},
+        {"tri": "1T26", "fim": "31/03/2026", "lucro": 3_090_000_000.0, "data": "13/05/2026", "url": "https://cvm/1t26"},
+        {"tri": "2T26", "fim": "30/06/2026", "lucro": 3_175_000_000.0, "data": "17/08/2026", "url": "https://cvm/2t26"},
+        {"tri": "3T26", "fim": "30/09/2026", "lucro": 1_216_000_000.0, "data": "13/11/2026", "url": "https://cvm/3t26"},
+    ],
+}}
+
+
+def test_contabil_br_configurado_devolve_none_sem_config():
+    assert df._contabil_br_configurado("BBAS3", tabela_cfg={}, tabela_contabil=CONTABIL_TABELA_BBAS3_OK) is None
+
+
+def test_contabil_br_configurado_devolve_none_sem_status_ok():
+    tabela = {"BBAS3": {"status": "yahoo_pendente"}}
+    assert df._contabil_br_configurado("BBAS3", tabela_cfg=CONTABIL_CFG_BBAS3, tabela_contabil=tabela) is None
+
+
+def test_contabil_br_configurado_devolve_o_registro_quando_ok():
+    c = df._contabil_br_configurado("bbas3", tabela_cfg=CONTABIL_CFG_BBAS3, tabela_contabil=CONTABIL_TABELA_BBAS3_OK)
+    assert c is not None and c["acoes"] == 5_708_922_664.0
+
+
+def test_buscar_fixos_br_reusa_contabil_br_json_pra_acoes_e_lucro():
+    """BBAS3 configurado e com contabil_br.json "ok": ações e lucro vêm de lá (5,71 bi / 12,45 bi,
+    LPA 2,18), nunca da extração própria (que bateria 2,84 bi / 8,56 bi, LPA 3,0113 - o bug real).
+    Só dividendo (tabela do release, mesmo formato de TABELA_BBAS3) e patrimônio líquido (mesmo
+    formato de TABELA_PL_BBAS3) continuam extraídos aqui, já que contabil_br.json não guarda esses
+    2 campos - 1 único documento (3T26) já traz os 2."""
+    texto_3t26 = f"{TABELA_BBAS3}{TABELA_PL_BBAS3}"
+
+    def busca_cnpj(ticker, hoje):
+        return ("00.000.000/0001-91", "BCO BRASIL S.A.")
+
+    def busca_docs(cnpj, hoje):
+        return [_doc("2026-11-13", link="https://cvm/3t26")]
+
+    def busca_docs_dividendo(cnpj, hoje):
+        return []
+
+    def ler_pdf(link):
+        return b"", texto_3t26
+
+    r = df.buscar_fixos_br("BBAS3", dt.date(2026, 11, 22), buscar_cnpj=busca_cnpj, buscar_docs=busca_docs,
+                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo,
+                          contabil_cfg=CONTABIL_CFG_BBAS3, contabil_tabela=CONTABIL_TABELA_BBAS3_OK)
+    assert r["status"] == "ok"
+    assert r["acoes_total"] == 5_708_922_664.0
+    assert r["lucro_12m"] == pytest.approx(12_453_000_000.0)
+    # só o 3T26 foi passado (1 único documento) - dividendo precisa dos 4 trimestres, fica sem
+    # dado (nunca inventa os outros 3); patrimônio só precisa do MAIS RECENTE (3T26), que já veio.
+    assert r["dividendo_12m"] is None
+    assert r["patrimonio_liquido"] == pytest.approx(190.121e9)
+    assert "contabil_br.json" in r["fonte_oficial"]
+    ind = df.calcular_indicadores(r, 17.80)
+    assert ind["lpa"] == pytest.approx(2.1813, abs=0.001)
+
+
+def test_buscar_fixos_br_sem_contabil_configurado_usa_extracao_propria_como_antes():
+    """Ticker fora de contabil_br_config.json (ou ainda sem contabil_br.json "ok"): continua
+    extraindo ações/lucro sozinho - comportamento inalterado pra quem não está configurado."""
+    docs_resultado = [_doc("2026-11-10"), _doc("2026-08-06"), _doc("2026-05-11"), _doc("2026-02-12")]
+    textos = {
+        "2026-11-10": f"{CAPA_ACOES}\nNo 3T26, o lucro líquido foi de R$ 39,75 bilhões.",
+        "2026-08-06": "No 2T26, o lucro líquido foi de R$ 52,45 bilhões.",
+        "2026-05-11": "No 1T26, o lucro líquido foi de R$ 32,71 bilhões.",
+        "2026-02-12": "No 4T25, o lucro líquido foi de R$ 28,00 bilhões.",
+    }
+
+    def busca_cnpj(ticker, hoje):
+        return ("11.111.111/0001-11", "TICKER NOVO")
+
+    def busca_docs(cnpj, hoje):
+        return docs_resultado
+
+    def busca_docs_dividendo(cnpj, hoje):
+        return []
+
+    def ler_pdf(link):
+        return b"", textos[link.rsplit("/", 1)[1]]
+
+    r = df.buscar_fixos_br("ABCD4", dt.date(2026, 11, 22), buscar_cnpj=busca_cnpj, buscar_docs=busca_docs,
+                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo, contabil_cfg={})
+    assert r["status"] == "ok"
+    assert r["acoes_total"] == 6_000_000_000.0   # CAPA_ACOES: 5bi ON + 1bi PN
+    assert r["lucro_12m"] == pytest.approx(39.75e9 + 52.45e9 + 32.71e9 + 28.00e9)
+    assert "contabil_br.json" not in r["fonte_oficial"]
+
+
+def test_buscar_fixos_br_fallback_usa_a_linha_configurada_nao_a_generica():
+    """Ticker configurado em contabil_br_config.json (linha específica) mas AINDA sem
+    contabil_br.json "ok" (robô não rodou ainda pra ele): a extração própria já usa a linha
+    certa do config, não a genérica "Lucro Líquido" - reproduz o bug real do 4T25 da BBAS3, onde
+    "Lucro Líquido" batia numa linha diferente (errada) de "Lucro Líquido Contábil" (certa)."""
+    texto_4t25 = ("R$ milhões 3T25 4T25\n"
+                 "Lucro Líquido de Serviços 950 1.079 (10,0)\n"   # linha genérica bateria aqui (errado)
+                 "Lucro Líquido Contábil 4.500 4.972 (3,5)\n")    # linha do config bate aqui (certo)
+    docs_resultado = [_doc("2026-02-24", link="https://cvm/4t25"), _doc("2026-05-13", link="https://cvm/1t26"),
+                     _doc("2026-08-17", link="https://cvm/2t26"), _doc("2026-11-13", link="https://cvm/3t26")]
+    textos = {
+        "4t25": texto_4t25,
+        "1t26": "R$ milhões 4T25 1T26\nLucro Líquido Contábil 4.972 3.090 (37,8)\n",
+        "2t26": "R$ milhões 1T26 2T26\nLucro Líquido Contábil 3.090 3.175 2,7\n",
+        "3t26": f"{CAPA_ACOES}\nR$ milhões 2T26 3T26\nLucro Líquido Contábil 3.175 1.216 (61,7)\n",
+    }
+
+    def busca_cnpj(ticker, hoje):
+        return ("00.000.000/0001-91", "BCO BRASIL S.A.")
+
+    def busca_docs(cnpj, hoje):
+        return docs_resultado
+
+    def busca_docs_dividendo(cnpj, hoje):
+        return []
+
+    def ler_pdf(link):
+        return b"", textos[link.rsplit("/", 1)[1]]
+
+    r = df.buscar_fixos_br("BBAS3", dt.date(2026, 11, 22), buscar_cnpj=busca_cnpj, buscar_docs=busca_docs,
+                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo,
+                          contabil_cfg=CONTABIL_CFG_BBAS3, contabil_tabela={})
+    assert r["status"] == "ok"
+    assert r["lucro_12m"] == pytest.approx(4_972_000_000.0 + 3_090_000_000.0 + 3_175_000_000.0 + 1_216_000_000.0)

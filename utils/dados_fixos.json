@@ -1,13 +1,13 @@
 {
   "BBAS3": {
-    "acoes_total": 2842623097.0,
-    "acoes_detalhe": "ON 2.842.623.097",
-    "tipo_acao": "ON",
+    "acoes_total": 5708922664.0,
+    "acoes_detalhe": "mesmo total usado no LPA contábil",
+    "tipo_acao": "Total (contabil_br.json)",
     "fator_adr": 1,
     "moeda_resultado": "BRL",
-    "fonte_oficial": "PDF RI (CVM/IPE) - ações: Assembleia de 30/03/2026; lucro: release de resultados trimestral; dividendo: tabela do release/relatório de resultados (por ação); patrimônio líquido: tabela de destaques do release/relatório (coluna do trimestre)",
+    "fonte_oficial": "PDF RI (CVM/IPE) - ações: BB, Análise do Desempenho, Lucro Líquido Contábil (reusado de contabil_br.json, Issue #26); lucro: reusado de contabil_br.json (Issue #26); dividendo: tabela do release/relatório de resultados (por ação); patrimônio líquido: tabela de destaques do release/relatório (coluna do trimestre)",
     "data_ultimo_balanco": "30/09/2026",
-    "lucro_12m": 8560000000.0,
+    "lucro_12m": 12453000000.0,
     "dividendo_12m": 0.61,
     "dividendo_motivo": null,
     "patrimonio_liquido": 190121000000.0,
@@ -16,7 +16,7 @@
       {
         "tri": "4T25",
         "fim": "31/12/2025",
-        "lucro": 1079000000.0,
+        "lucro": 4972000000.0,
         "data": "24/02/2026",
         "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1481390&numSequencia=1006096&numVersao=3",
         "dividendo": 0.26

@@ -100,6 +100,44 @@ def _gravar(dados: dict) -> None:
     ARQ.write_text(json.dumps(dict(sorted(dados.items())), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+# ------------------------------------------------------------ reuso de utils/contabil_br.json (27/11/2026)
+# BUG REAL CORRIGIDO: este módulo reimplementava sua própria extração de ações/lucro da CVM, que
+# divergia de utils/contabil_br.json pra BBAS3 - a linha genérica "Lucro Líquido" batia num valor
+# errado no 4T25 (1,08 bi em vez de 4,97 bi) e extrair_acoes_br pegava o free float (2,84 bi) em
+# vez do total emitido (5,71 bi). Em vez de corrigir as 2 extrações em paralelo (e arriscar
+# divergir nas 2 de novo no futuro), quando o ticker já está configurado em
+# utils/contabil_br_config.json (linha de lucro específica + travas de coluna do Issue #26, já
+# testado), REUSA o resultado já calculado em utils/contabil_br.json pra ações e lucro - só
+# dividendo e patrimônio líquido (que contabil_br.json não guarda) continuam extraídos aqui. Sem
+# configuração (ticker novo), cai pra extração própria, corrigida pros mesmos 2 bugs (ver
+# `extrair_acoes_br` acima e `linha_lucro` em `buscar_fixos_br` abaixo). Ver CLAUDE.md.
+ARQ_CONTABIL_BR = Path(__file__).with_name("contabil_br.json")
+ARQ_CONTABIL_BR_CFG = Path(__file__).with_name("contabil_br_config.json")
+
+
+def _ler_json(caminho: Path) -> dict:
+    try:
+        d = json.loads(caminho.read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _contabil_br_configurado(ticker: str, *, tabela_cfg: dict | None = None,
+                             tabela_contabil: dict | None = None) -> dict | None:
+    """Registro de utils/contabil_br.json pra `ticker`, só se ele estiver em
+    utils/contabil_br_config.json e com status "ok", lucro e ações já calculados - None quando o
+    ticker não está configurado (extração própria assume) ou o contábil ainda está pendente."""
+    cfg = tabela_cfg if tabela_cfg is not None else _ler_json(ARQ_CONTABIL_BR_CFG)
+    if ticker.upper() not in cfg:
+        return None
+    tab = tabela_contabil if tabela_contabil is not None else _ler_json(ARQ_CONTABIL_BR)
+    c = tab.get(ticker.upper())
+    if not c or c.get("status") != "ok" or c.get("lucro_12m") is None or not c.get("acoes") or not c.get("trimestres"):
+        return None
+    return c
+
+
 # ------------------------------------------------------------ Brasil: PDF RI (release/ITR/DFP) na CVM
 # Capa do ITR/DFP traz "Composição do Capital Social" com ações Ordinárias, Preferenciais e, quando
 # há (ex.: units/BDRs - mais raro, mas existe na B3, ex. SANB11), Units, cada uma com a quantidade
@@ -116,14 +154,39 @@ def _inteiro_br(s: str) -> float:
     return float(s.replace(".", ""))
 
 
+# BUG CORRIGIDO (27/11/2026, achado com BBAS3): o 1º número batido perto de "ordinárias" podia ser
+# o de "Ações em circulação (free float)" (49,6% do total) em vez do TOTAL emitido (ex.: BBAS3,
+# 2,84 bi de free float vs 5,71 bi de total emitido) - LPA/indicadores por ação precisam sempre do
+# TOTAL, nunca de um subconjunto (free float, tesouraria, em poder de terceiros). Documentado com
+# mais detalhe no CLAUDE.md.
+RE_QUALIFICADOR_SUBCONJUNTO = re.compile(r"circula[çc][ãa]o|free\s*float|tesouraria|em\s+poder\s+d[oe]", re.I)
+
+
+def _primeiro_total(regex: re.Pattern, texto: str, janela: int = 120) -> str | None:
+    """1º número batido por `regex` cujo contexto - ANTES do match E dentro dele (ex.: "ordinárias
+    em circulação (free float) ... 2.843.025.842", onde o qualificador fica ENTRE a palavra-chave e
+    o número capturado) - não indica um subconjunto do total (circulação/free float/tesouraria).
+    Pula esses e segue procurando um match melhor."""
+    for m in regex.finditer(texto):
+        # só a MESMA linha antes do match - uma linha de free float/tesouraria ANTERIOR (ex.: uma
+        # seção inteira sobre movimentação de free float, várias linhas antes da linha certa) não
+        # pode desqualificar uma linha diferente, sem relação, mais abaixo no documento.
+        antes = texto[max(0, m.start() - janela):m.start()].rsplit("\n", 1)[-1]
+        if RE_QUALIFICADOR_SUBCONJUNTO.search(antes) or RE_QUALIFICADOR_SUBCONJUNTO.search(m.group(0)):
+            continue
+        return m.group(1)
+    return None
+
+
 def extrair_acoes_br(texto: str) -> tuple[float | None, str]:
-    """ON + PN + Units em circulação achados no texto (capa do ITR/DFP). None se nenhuma classe for
-    encontrada. `detalhe` lista as classes achadas, para a conta aparecer na tela."""
+    """ON + PN + Units TOTAIS emitidos achados no texto (capa do ITR/DFP, "Composição do Capital
+    Social") - nunca um subconjunto como free float ou tesouraria (ver `_primeiro_total`). None se
+    nenhuma classe for encontrada. `detalhe` lista as classes achadas, para a conta aparecer na tela."""
     partes = []
     for nome, regex in (("ON", RE_ON), ("PN", RE_PN), ("Units", RE_UNITS)):
-        m = regex.search(texto)
-        if m:
-            partes.append((nome, _inteiro_br(m.group(1))))
+        valor = _primeiro_total(regex, texto)
+        if valor:
+            partes.append((nome, _inteiro_br(valor)))
     if not partes:
         return None, ""
     total = sum(v for _, v in partes)
@@ -283,8 +346,15 @@ def extrair_patrimonio_liquido_br(texto: str, tri: str) -> tuple[float | None, s
 
 
 def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, buscar_docs=documentos_cvm,
-                    ler_pdf=texto_do_pdf, buscar_docs_dividendo=documentos_dividendo_cvm) -> dict:
+                    ler_pdf=texto_do_pdf, buscar_docs_dividendo=documentos_dividendo_cvm,
+                    contabil_cfg: dict | None = None, contabil_tabela: dict | None = None) -> dict:
     """Fonte oficial do Brasil: 1º PDF RI (release/ITR/DFP), documentos entregues à CVM (IPE).
+
+    Ações e lucro: REUSA utils/contabil_br.json quando o ticker já está configurado em
+    utils/contabil_br_config.json (ver `_contabil_br_configurado`) - nunca reimplementa essa
+    extração aqui (bug real corrigido 27/11/2026: a extração própria divergia do contabil_br.json
+    pra BBAS3, ver CLAUDE.md). Sem configuração (ticker novo), cai pra extração própria
+    (`extrair_acoes_br` + a linha de lucro do config, se existir, senão "Lucro Líquido" genérico).
 
     2º passo (B3) não está implementado: hoje só a CVM, que já é a fonte primária (release/ITR/DFP
     é o próprio documento entregue pela empresa) - ver limitação no PR."""
@@ -296,16 +366,35 @@ def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, b
         return {"status": "nao_encontrado", "motivo": "nenhum documento de resultado na CVM"}
     docs = sorted(docs, key=lambda d: (d["data"], bool(RE_PRIORIDADE_DOC.search(
         f"{d.get('categoria', '')} {d.get('tipo', '')} {d.get('assunto', '')}"))), reverse=True)
-    lidos: dict[str, dict] = {}
+
+    contabil = _contabil_br_configurado(ticker, tabela_cfg=contabil_cfg, tabela_contabil=contabil_tabela)
     dividendos: dict[str, float] = {}         # tri -> dividendo/JCP por ação (abordagem (a), tabela)
     patrimonios: dict[str, float] = {}        # tri -> patrimônio líquido (valor do balanço, nunca somado)
     fontes_patrimonio: dict[str, str] = {}
-    acoes, acoes_detalhe, fonte_acoes = None, "", ""
+
+    if contabil:
+        lidos: dict[str, dict] = {x["tri"]: {"tri": x["tri"], "fim": x["fim"], "lucro": x["lucro"],
+                                             "data": x.get("data", ""), "url": x.get("url", "")}
+                                  for x in contabil["trimestres"][-4:]}
+        acoes = contabil["acoes"]
+        acoes_detalhe = "mesmo total usado no LPA contábil"
+        fonte_acoes = f"{contabil.get('fonte') or 'release de resultados'} (reusado de contabil_br.json, Issue #26)"
+        linha_lucro = None   # lucro já veio pronto de contabil_br.json, não precisa extrair de novo
+    else:
+        lidos, acoes, acoes_detalhe, fonte_acoes = {}, None, "", ""
+        cfg = contabil_cfg if contabil_cfg is not None else _ler_json(ARQ_CONTABIL_BR_CFG)
+        linha_lucro = (cfg.get(ticker.upper()) or {}).get("linha") or "Lucro Líquido"
+
     for doc in docs:
         data_doc = _data(doc["data"])
         if not data_doc:
             continue
         tri = trimestre_do_documento(data_doc)
+        falta_lucro = linha_lucro is not None and tri not in lidos
+        falta_div = tri in lidos and tri not in dividendos
+        falta_pl = tri in lidos and tri not in patrimonios
+        if not (falta_lucro or falta_div or falta_pl) and acoes:
+            continue
         try:
             _, texto = ler_pdf(doc["link"])
         except Exception as e:  # noqa: BLE001
@@ -316,22 +405,23 @@ def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, b
             if a:
                 acoes, acoes_detalhe = a, det
                 fonte_acoes = f"{doc.get('categoria') or doc.get('tipo') or 'documento CVM'} de {_data_br(doc['data'])}"
-        if tri not in lidos:
+        if falta_lucro:
             relatorio = bool(RE_RELATORIO_DOC.search(f"{doc.get('categoria', '')} {doc.get('tipo', '')} {doc.get('assunto', '')}"))
-            r = ler_lucro_trimestre(texto, tri, "Lucro Líquido", tabela_vence=relatorio)
+            r = ler_lucro_trimestre(texto, tri, linha_lucro, tabela_vence=relatorio)
             if r["valor"] is not None:
                 lidos[tri] = {"tri": tri, "fim": f"{fim_do_trimestre(tri):%d/%m/%Y}", "lucro": r["valor"],
                              "data": _data_br(doc["data"]), "url": doc["link"]}
-        if tri not in dividendos:
+        if tri in lidos and tri not in dividendos:
             valor_div = extrair_dividendo_tabela(texto, tri)
             if valor_div is not None:
                 dividendos[tri] = valor_div
-        if tri not in patrimonios:
+        if tri in lidos and tri not in patrimonios:
             valor_pl, fonte_pl = extrair_patrimonio_liquido_br(texto, tri)
             if valor_pl is not None:
                 patrimonios[tri], fontes_patrimonio[tri] = valor_pl, fonte_pl
         ordem = sorted(lidos, key=fim_do_trimestre)
-        if acoes and len(ordem) >= 4 and all(tri_anterior(b) == a for a, b in zip(ordem[-4:], ordem[-3:])):
+        completo_lucro = acoes and len(ordem) >= 4 and all(tri_anterior(b) == a for a, b in zip(ordem[-4:], ordem[-3:]))
+        if completo_lucro and set(ordem[-4:]) <= set(dividendos) and ordem[-1] in patrimonios:
             break
     if not acoes:
         return {"status": "nao_encontrado", "motivo": "número de ações (ON/PN/Units) não encontrado nos documentos da CVM"}
@@ -367,11 +457,19 @@ def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, b
     else:
         patrimonio_motivo = f"Patrimônio Líquido não encontrado no documento mais recente ({tri_recente})"
         fonte_patrimonio = None
+    if contabil:
+        tipo_acao = "Total (contabil_br.json)"
+    elif " + " in acoes_detalhe:
+        tipo_acao = "ON+PN"
+    elif "ON" in acoes_detalhe:
+        tipo_acao = "ON"
+    else:
+        tipo_acao = acoes_detalhe
+    lucro_fonte_txt = "reusado de contabil_br.json (Issue #26)" if contabil else "release de resultados trimestral"
     return {
-        "status": "ok", "acoes_total": acoes, "acoes_detalhe": acoes_detalhe,
-        "tipo_acao": "ON+PN" if " + " in acoes_detalhe else ("ON" if "ON" in acoes_detalhe else acoes_detalhe),
+        "status": "ok", "acoes_total": acoes, "acoes_detalhe": acoes_detalhe, "tipo_acao": tipo_acao,
         "fator_adr": 1, "moeda_resultado": "BRL",
-        "fonte_oficial": f"PDF RI (CVM/IPE) - ações: {fonte_acoes}; lucro: release de resultados trimestral"
+        "fonte_oficial": f"PDF RI (CVM/IPE) - ações: {fonte_acoes}; lucro: {lucro_fonte_txt}"
                         + (f"; dividendo: {fonte_dividendo}" if fonte_dividendo else "")
                         + (f"; patrimônio líquido: {fonte_patrimonio}" if fonte_patrimonio else ""),
         "data_ultimo_balanco": ult[-1]["fim"], "lucro_12m": sum(x["lucro"] for x in ult),

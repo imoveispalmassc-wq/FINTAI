@@ -940,6 +940,50 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   também buscado por `biblioteca.py` pra nenhum ticker (confirmado - `biblioteca.json` só tem
   `lpa_atual`, um campo que `dados_fixos.py` nem calcula desse jeito). O problema real era só a
   falta de versionamento do arquivo, já corrigido acima.
+  BUG REAL CORRIGIDO (27/11/2026, achado comparando "Indicadores" com "Dados fixos" na tela pro
+  mesmo ticker, BBAS3): os 2 cards mostravam números diferentes pro MESMO indicador - Ações 5,71 bi
+  (Indicadores) vs 2,84 bi (Dados fixos); LPA 2,18 vs 3,0113 - não era "Yahoo vs CVM" nem "ON vs
+  ON+PN": eram 2 bugs reais na extração própria de `dados_fixos.buscar_fixos_br`, confirmados
+  direto no documento oficial (Demonstrações Contábeis 3T26):
+  1. **Ações = free float, não o total emitido**: `extrair_acoes_br` batia no 1º número perto de
+     "ordinárias" sem checar o contexto - e esse número era "Ações em circulação (free float) no
+     fim do período 2.843.025.842" (49,6% do total), não o "Total emitido" (5.730.834.040) nem o
+     "Número médio ponderado de ações" (5.709.745.992, a base que a própria BBAS3 usa pro LPA
+     oficial) - os 2 batem com "Indicadores" (Yahoo), que estava CERTO. Corrigido: `_primeiro_total`
+     pula qualquer match cujo contexto (antes do número E entre a palavra-chave e o número, na
+     MESMA linha) tenha "circulação"/"free float"/"tesouraria"/"em poder de", procurando um match
+     melhor - nunca aceita um subconjunto como se fosse o total.
+  2. **Lucro = linha genérica errada num trimestre**: `buscar_fixos_br` usava sempre a linha
+     genérica "Lucro Líquido" (nunca `utils/contabil_br_config.json`, que já tem "Lucro Líquido
+     Contábil" pra BBAS3) - testado direto no documento do 4T25: "Lucro Líquido" bate 1,079 bi
+     (uma linha diferente/errada), "Lucro Líquido Contábil" bate 4,972 bi (a certa, confirmada em
+     `utils/contabil_br.json`). Isso puxava o lucro_12m todo pra baixo (8,56 bi em vez de 12,45 bi).
+  **CORREÇÃO ARQUITETURAL, não só os 2 regexes**: em vez de corrigir as 2 extrações em paralelo (e
+  arriscar divergir de novo no futuro, já que são 2 pipelines independentes lendo os MESMOS
+  documentos da CVM), `buscar_fixos_br` agora REUSA `utils/contabil_br.json` pra ações e lucro
+  quando o ticker já está configurado em `utils/contabil_br_config.json` com status "ok"
+  (`_contabil_br_configurado`) - só dividendo e patrimônio líquido (que contabil_br.json não
+  guarda) continuam extraídos aqui, pros MESMOS 4 trimestres já resolvidos. Sem configuração
+  (ticker novo), cai pra extração própria - corrigida pros mesmos 2 bugs: `extrair_acoes_br` com o
+  filtro de contexto acima, e a linha de lucro usa a configurada em `contabil_br_config.json`
+  quando existir (mesmo sem `contabil_br.json` ainda "ok" pra esse ticker), senão "Lucro Líquido"
+  genérico como antes. `fonte_oficial`/`tipo_acao` deixam claro quando o número veio reusado
+  ("reusado de contabil_br.json, Issue #26"). Testado ao vivo: BBAS3 agora bate Ações 5,71 bi e
+  LPA 2,18 nos 2 cards. `tests/test_dados_fixos.py` tem testes pros 2 bugs (`extrair_acoes_br`
+  ignorando free float/tesouraria) e pro reuso (`_contabil_br_configurado`,
+  `test_buscar_fixos_br_reusa_contabil_br_json_pra_acoes_e_lucro`,
+  `test_buscar_fixos_br_fallback_usa_a_linha_configurada_nao_a_generica`); a fixture `BBAS3_REAL`
+  (que documentava, errado, uma teoria de "grupamento de ações" pra explicar a divergência) foi
+  corrigida pros valores reais (5,71 bi / 12,45 bi) - a teoria do grupamento nunca aconteceu, era
+  só os 2 bugs acima.
+  **DIVIDENDO: 2 métodos diferentes, não um bug** - continuam separados de propósito: "Indicadores"
+  (card Dividendo anual, Yahoo) soma os dividendos efetivamente PAGOS nos últimos 365 dias corridos
+  (por data de pagamento); "Dados fixos" (CVM) soma os 4 últimos trimestres DECLARADOS na tabela do
+  release. As datas de declaração e pagamento não coincidem exatamente (BBAS3: R$0,66 pago vs
+  R$0,61 declarado, ~8% de diferença, dentro do esperado) - a tela agora deixa isso explícito nos 2
+  lugares ("Dividendo anual" nos Indicadores diz "pago nos últimos 365 dias"; "Dividendo Anual
+  (declarado, 4 tri)" nos Dados fixos; nota cruzada nos 2 cards explicando a diferença), em vez de
+  dar a entender que é a mesma conta com resultados diferentes.
 
 ## Issue #47 (26/11/2026): zonas sem julgamento, selo de fundamentos, bloco único LPA+P/L, remoção de backtest e preço justo, retorno sem misturar moeda
 

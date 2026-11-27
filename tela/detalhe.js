@@ -938,6 +938,7 @@ function montar(root, d) {
         <div class="card">
           <strong>Dividendos</strong>
           ${linhasDiv.length ? `<div class="lista-v num" style="margin-top:8px">${linhasDiv.map(([r, v]) => `<div>${r}<b>${v}</b></div>`).join('')}</div>` : `<div class="nota" style="margin-top:8px">${INDISP}</div>`}
+          ${linhasDiv.length ? `<div class="nota" style="margin-top:6px">Pago nos últimos 365 dias corridos (Yahoo Finance). Diferente do card "Dados fixos" abaixo, que soma os 4 últimos trimestres DECLARADOS na CVM - as 2 datas não coincidem exatamente.</div>` : ''}
           ${fraseDiv ? `<p class="nota" style="margin-top:8px">${fraseDiv}</p>` : ''}
         </div>
       </div>`;
@@ -970,7 +971,7 @@ function montar(root, d) {
           <div>LPA<b>${tem(DF.lpa) ? f(DF.lpa, 4) : 'Sem dado'}</b></div>
           <div>P/L Atual<b>${tem(DF.pl) ? f(DF.pl, 2) : 'Sem dado'}</b></div>
           <div>P/L Médio 12m<b>${tem(DF.plMedio12m) ? f(DF.plMedio12m, 2) : 'Sem dado'}</b></div>
-          <div>Dividendo Anual<b>${tem(DF.dividendo12m) ? f(DF.dividendo12m, 4) : 'Sem dado'}</b></div>
+          <div>Dividendo Anual (declarado, 4 tri)<b>${tem(DF.dividendo12m) ? f(DF.dividendo12m, 4) : 'Sem dado'}</b></div>
           <div>DY<b>${tem(DF.dy) ? `${f(DF.dy * 100, 2)}%` : 'Sem dado'}</b></div>
           <div>P/VP<b>${tem(DF.pvp) ? f(DF.pvp, 2) : 'Sem dado'}</b></div>
           <div>Payout<b>${tem(DF.payout) ? `${f(DF.payout * 100, 1)}%` : 'Sem dado'}</b></div>
@@ -978,7 +979,7 @@ function montar(root, d) {
         </div>
         ${adrHtml}
         <div class="nota" style="margin-top:10px">${[C.acoes, C.lpa, C.pl, C.dividendo, C.dy, C.pvp, C.payout, C.roe].filter(Boolean).join('<br>')}</div>
-        <div class="nota" style="margin-top:6px">Fonte: ${DF.fonteOficial || '—'} · balanço de ${DF.dataUltimoBalanco || '—'}.${DF.dividendoMotivo ? ` Dividendo: ${DF.dividendoMotivo}.` : ''}${DF.patrimonioMotivo ? ` Patrimônio líquido: ${DF.patrimonioMotivo}.` : ''} Ações, LPA, dividendo e patrimônio líquido só mudam com balanço novo - a cotação atualiza todo dia. P/VP, Payout e ROE não têm selo de favorável/desfavorável: não existe, hoje, uma média de 12 meses desses 3 indicadores no projeto (precisaria de histórico trimestral de patrimônio líquido, fora do escopo desta issue) - mostramos só o número.</div>
+        <div class="nota" style="margin-top:6px">Fonte: ${DF.fonteOficial || '—'} · balanço de ${DF.dataUltimoBalanco || '—'}.${DF.dividendoMotivo ? ` Dividendo: ${DF.dividendoMotivo}.` : ''}${DF.patrimonioMotivo ? ` Patrimônio líquido: ${DF.patrimonioMotivo}.` : ''} Ações, LPA, dividendo e patrimônio líquido só mudam com balanço novo - a cotação atualiza todo dia. Dividendo Anual aqui é a soma dos 4 últimos trimestres DECLARADOS na CVM - diferente do "Dividendo anual" do card Indicadores (Yahoo), que é o PAGO nos últimos 365 dias; as 2 datas não coincidem exatamente. P/VP, Payout e ROE não têm selo de favorável/desfavorável: não existe, hoje, uma média de 12 meses desses 3 indicadores no projeto (precisaria de histórico trimestral de patrimônio líquido, fora do escopo desta issue) - mostramos só o número.</div>
       </div>`;
   })($('dados-fixos'));
 
@@ -997,7 +998,7 @@ function montar(root, d) {
       c('P/L atual', tem(d.pl) ? f(d.pl) : null, tem(difPL) ? `${sinal(difPL)} vs. média de 12m` : '', `Você paga ${din(d.pl)} para cada ${d.moeda} 1 de lucro. Conta: ${f(d.preco)} / ${f(d.lpa)} = ${f(d.pl)}`),
       c('P/L médio 12 meses', tem(d.plMedio12) ? f(d.plMedio12) : null, medioSub, d.plMetodo === 'simplificado' ? 'Estimativa: preço médio do ano dividido pelo LPA atual, porque o Yahoo não traz o lucro de cada trimestre.' : d.plMetodo === 'contabil' ? `Média do P/L de cada pregão desde ${d.mediaDesde}, com o lucro contábil em vigor em cada data.` : 'Média do P/L de cada pregão do último ano, com o lucro já divulgado em cada data.'),
       c('LPA básico', tem(d.lpa) ? din(d.lpa) : null, 'últimos 12 meses', `Lucro por ação. Cada ação ganhou ${din(d.lpa)} em 12 meses.${q ? ` Conta: Lucro / ${q} de ações` : ''}`),
-      c('Dividendo anual', tem(d.dividendo) ? din(d.dividendo) : null, 'pago em 12 meses', `O que pingou na sua conta por ação em 12 meses.`),
+      c('Dividendo anual', tem(d.dividendo) ? din(d.dividendo) : null, 'pago nos últimos 365 dias', `O que pingou na sua conta por ação nos últimos 365 dias corridos (Yahoo Finance, data de pagamento) - diferente do card "Dados fixos" (CVM), que soma os 4 últimos trimestres DECLARADOS; as 2 datas não coincidem exatamente.`),
       c('Dividend yield', tem(dy) ? `${f(dy)}%` : null, tem(dy) ? `${f(d.dividendo)} / ${f(d.preco)}` : '', `Quanto o dividendo representa sobre o preço. ${f(d.dividendo)} / ${f(d.preco)} = ${f(dy)}%.${naoPagadora ? ` É baixo porque a ${d.ticker} reinveste o lucro, não porque está com problema.` : ''}`),
       c('Ações em circulação', q, 'quantos pedaços a empresa foi dividida', `A ${d.ticker} foi fatiada em ${q} de ações.`),
     ];
