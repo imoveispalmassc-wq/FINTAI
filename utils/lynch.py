@@ -109,4 +109,4 @@ def preco_lynch(preco: float, mm200: float | None, simbolo: str = "R$") -> dict 
     num = f"{ate:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     return {"codigo": codigo, "rotulo": rotulo, "zona": zona, "dist": dist,
             "bemAbaixoAte": mm200 * (1 + LYNCH_BEM_ABAIXO / 100), "oportunidadeAte": ate,
-            "caroAcima": mm200 * (1 + LYNCH_CARO / 100), "texto": f"Faixa inferior até {simbolo} {num}"}
+            "caroAcima": mm200 * (1 + LYNCH_CARO / 100), "texto": f"Faixa neutra a partir de {simbolo} {num}"}

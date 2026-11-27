@@ -19,7 +19,7 @@ def estado(percentil, **kw):
 def test_aguardar_entre_o_ponto_e_o_fim_da_neutra():
     e = estado(percentil_na_faixa(55.15, MINIMO, MAXIMO), compra_validada=True)
     assert (e.codigo, e.rotulo, e.zona) == ("AGUARDAR", "Neutro", "Zona neutra")
-    assert e.texto == "Faixa inferior até R$ 46,48"
+    assert e.texto == "Faixa neutra a partir de R$ 46,48"
     assert estado(31).codigo == "AGUARDAR" and estado(70).codigo == "AGUARDAR"
 
 
@@ -40,9 +40,9 @@ def test_caro_acima_do_fim_da_neutra():
 
 def test_texto_e_sempre_o_ponto_de_oportunidade_do_ativo():
     for p in (5, 50, 95):
-        assert estado(p).texto == "Faixa inferior até R$ 46,48"
+        assert estado(p).texto == "Faixa neutra a partir de R$ 46,48"
     mu = decidir_estado(55, 192.59, 1255.0, compra_validada=False, simbolo="US$", preco=778.31, tendencia="Alta")
-    assert mu.texto == "Faixa inferior até US$ 511,31"
+    assert mu.texto == "Faixa neutra a partir de US$ 511,31"
 
 
 def test_fundamento_quebrado_vira_alerta_e_nao_muda_o_botao():
