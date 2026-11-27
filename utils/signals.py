@@ -103,22 +103,33 @@ def decidir_estado(percentil: float, minimo: float, maximo: float, *,
     `rotulo` nunca usa palavra de julgamento ("Oportunidade"/"Evitar") nem verbo de recomendação
     ("AGUARDAR") - só o nome neutro da zona, pra nunca sugerir uma recomendação de compra/venda/
     espera ao usuário (só `codigo`, interno, continua COMPRAR/AGUARDAR/CARO - usado pra cor/classe
-    CSS, nunca mostrado). O texto é sempre o início da zona neutra calculado para o ativo (o mesmo
-    valor que fecha a faixa inferior - "a partir de", não "até", porque é onde a zona neutra começa,
-    não onde a faixa inferior termina). Os avisos (zona não validada pelo histórico, fundamento
-    quebrado) vão em `alerta` e não mudam o botão. A posição numérica na faixa nunca aparece no
-    texto.
+    CSS, nunca mostrado).
+
+    `texto` descreve o limite da PRÓPRIA zona em que o preço está (REGRA TRAVADA, 27/11/2026 - bug
+    reportado pelo usuário com BBAS3: preço na Faixa inferior mostrava "Faixa neutra a partir de
+    R$ 15,11", confundindo porque descrevia a zona ACIMA, não a zona onde o preço realmente estava):
+    - Preço na Faixa inferior: "Faixa inferior até [limite de 30%]" - o preço está nessa zona, então
+      o texto fecha ela por cima.
+    - Preço na Zona neutra: "Faixa neutra a partir de [limite de 30%]" - mesmo valor de sempre (o
+      início da própria zona neutra, que é onde o preço está).
+    - Preço na Faixa superior: "Faixa superior acima de [limite de 70%]" - mesma ideia, abrindo a
+      própria zona por baixo.
+    Os avisos (zona não validada pelo histórico, fundamento quebrado) vão em `alerta` e não mudam o
+    botão. A posição numérica na faixa nunca aparece no texto.
     """
     alvo = preco_no_percentil(minimo, maximo, P_OPORTUNIDADE)
-    texto = f"Faixa neutra a partir de {simbolo} {num(alvo)}"
     avisos = [f"Atenção: {motivo_quebra}."] if quebrou and motivo_quebra else []
     if percentil <= P_OPORTUNIDADE:
         if not compra_validada:
             avisos.append("Comprar nessa zona não foi validado pelo histórico deste ativo.")
+        texto = f"Faixa inferior até {simbolo} {num(alvo)}"
         return Estado("COMPRAR", "Faixa inferior", texto, "Faixa inferior",
                       compra_validada, " ".join(avisos))
     if percentil > P_CARO:
+        cara = preco_no_percentil(minimo, maximo, P_CARO)
+        texto = f"Faixa superior acima de {simbolo} {num(cara)}"
         return Estado("CARO", "Faixa superior", texto, "Faixa superior", False, " ".join(avisos))
+    texto = f"Faixa neutra a partir de {simbolo} {num(alvo)}"
     return Estado("AGUARDAR", "Neutro", texto, "Zona neutra", False, " ".join(avisos))
 
 
@@ -134,16 +145,20 @@ def decidir_estado_conservador(preco: float, teto: float, caro_acima: float | No
     - Preço > caro_acima:                                     CARO, rótulo "Faixa superior"
 
     `rotulo` sem palavra de julgamento nem verbo de recomendação - mesma regra de `decidir_estado`
-    acima (`codigo` continua interno, só pra cor/classe CSS). Nunca validado por teste histórico
-    (não existe backtest para este critério)."""
+    acima (`codigo` continua interno, só pra cor/classe CSS). `texto` descreve o limite da PRÓPRIA
+    zona em que o preço está - mesma regra travada de `decidir_estado` acima ("Faixa inferior até"/
+    "Faixa neutra a partir de"/"Faixa superior acima de"). Nunca validado por teste histórico (não
+    existe backtest para este critério)."""
     alvo = teto * 0.70
     caro_acima = teto * 1.30 if caro_acima is None else caro_acima
-    texto = f"Faixa neutra a partir de {simbolo} {num(alvo)}"
     avisos = [f"Atenção: {motivo_quebra}."] if quebrou and motivo_quebra else []
     if preco <= alvo:
+        texto = f"Faixa inferior até {simbolo} {num(alvo)}"
         return Estado("COMPRAR", "Faixa inferior", texto, "Faixa inferior", False, " ".join(avisos))
     if preco > caro_acima:
+        texto = f"Faixa superior acima de {simbolo} {num(caro_acima)}"
         return Estado("CARO", "Faixa superior", texto, "Faixa superior", False, " ".join(avisos))
+    texto = f"Faixa neutra a partir de {simbolo} {num(alvo)}"
     return Estado("AGUARDAR", "Neutro", texto, "Zona neutra", False, " ".join(avisos))
 
 

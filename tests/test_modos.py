@@ -193,7 +193,7 @@ def test_lynch_csmg3_oportunidade_pela_mm200():
     p = preco_lynch(54.67, 56.94)
     assert p["codigo"] == "COMPRAR" and p["zona"] == "Faixa inferior" and p["dist"] == -3.99
     assert [round(p[k], 2) for k in ("bemAbaixoAte", "oportunidadeAte", "caroAcima")] == [51.25, 59.79, 65.48]
-    assert p["texto"] == "Faixa neutra a partir de R$ 59,79"
+    assert p["texto"] == "Faixa inferior até R$ 59,79"   # preço está na Faixa inferior (dist -3,99)
 
 
 @pytest.mark.parametrize("preco,codigo,zona", [(85, "COMPRAR", "Bem abaixo da MM200"), (90, "COMPRAR", "Faixa inferior"),
@@ -204,6 +204,19 @@ def test_lynch_faixas_so_pela_mm200(preco, codigo, zona):
     p = preco_lynch(preco, 100)
     assert (p["codigo"], p["zona"]) == (codigo, zona)
     assert preco_lynch(100, None) is None
+
+
+@pytest.mark.parametrize("preco,texto_esperado", [
+    (85, "Faixa inferior até R$ 105,00"),     # Bem abaixo da MM200: também descreve a Faixa inferior
+    (90, "Faixa inferior até R$ 105,00"),     # Faixa inferior
+    (110, "Faixa neutra a partir de R$ 105,00"),   # Zona neutra
+    (120, "Faixa superior acima de R$ 115,00"),    # Faixa superior
+])
+def test_lynch_texto_descreve_o_limite_da_propria_zona_do_preco(preco, texto_esperado):
+    # mesmo bug reportado com BBAS3 (utils.signals.decidir_estado): o texto tem que descrever o
+    # limite da zona em que o PREÇO está, nunca o de uma zona diferente.
+    from utils.lynch import preco_lynch
+    assert preco_lynch(preco, 100)["texto"] == texto_esperado
 
 
 # ------------------------------------------------------------ "melhor" linha do histórico

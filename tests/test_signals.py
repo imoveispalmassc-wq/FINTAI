@@ -38,9 +38,12 @@ def test_caro_acima_do_fim_da_neutra():
         assert (e.codigo, e.rotulo, e.zona) == ("CARO", "Faixa superior", "Faixa superior")
 
 
-def test_texto_e_sempre_o_ponto_de_oportunidade_do_ativo():
-    for p in (5, 50, 95):
-        assert estado(p).texto == "Faixa neutra a partir de R$ 46,48"
+def test_texto_descreve_o_limite_da_propria_zona_do_preco():
+    # bug reportado pelo usuário com BBAS3: preço na Faixa inferior mostrava "Faixa neutra a
+    # partir de" - o texto tem que descrever o limite da zona em que o PREÇO está, não de outra.
+    assert estado(5).texto == "Faixa inferior até R$ 46,48"
+    assert estado(50).texto == "Faixa neutra a partir de R$ 46,48"
+    assert estado(95).texto == "Faixa superior acima de R$ 58,68"
     mu = decidir_estado(55, 192.59, 1255.0, compra_validada=False, simbolo="US$", preco=778.31, tendencia="Alta")
     assert mu.texto == "Faixa neutra a partir de US$ 511,31"
 

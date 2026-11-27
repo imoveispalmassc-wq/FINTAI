@@ -93,20 +93,28 @@ LYNCH_CARO = 15.0          # caro: +15% ou mais acima da MM200
 def preco_lynch(preco: float, mm200: float | None, simbolo: str = "R$") -> dict | None:
     """Bem abaixo (< -10%) e Faixa inferior (-10% a +5%) = COMPRAR; Neutro (+5% a +15%); Faixa
     superior (+15% ou mais). `rotulo` sem palavra de julgamento nem verbo de recomendação (mesma
-    regra de `utils.signals.decidir_estado` - `codigo` continua interno, só pra cor/classe CSS)."""
+    regra de `utils.signals.decidir_estado` - `codigo` continua interno, só pra cor/classe CSS).
+    `texto` descreve o limite da PRÓPRIA zona em que o preço está, mesma regra travada de
+    `utils.signals.decidir_estado` ("Faixa inferior até"/"Faixa neutra a partir de"/"Faixa superior
+    acima de" - nunca o limite de uma zona diferente da que o preço está)."""
     if not mm200 or mm200 <= 0 or preco is None:
         return None
     dist = round((preco / mm200 - 1) * 100, 2)   # arredonda como na tela (evita 14,9999...)
+    ate = mm200 * (1 + LYNCH_OPORTUNIDADE / 100)
+    cara = mm200 * (1 + LYNCH_CARO / 100)
+    num = lambda v: f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     if dist >= LYNCH_CARO:
         codigo, rotulo, zona = "CARO", "Faixa superior", "Faixa superior"
+        texto = f"Faixa superior acima de {simbolo} {num(cara)}"
     elif dist > LYNCH_OPORTUNIDADE:
         codigo, rotulo, zona = "AGUARDAR", "Neutro", "Zona neutra"
+        texto = f"Faixa neutra a partir de {simbolo} {num(ate)}"
     elif dist >= LYNCH_BEM_ABAIXO:
         codigo, rotulo, zona = "COMPRAR", "Faixa inferior", "Faixa inferior"
+        texto = f"Faixa inferior até {simbolo} {num(ate)}"
     else:
         codigo, rotulo, zona = "COMPRAR", "Bem abaixo da MM200", "Bem abaixo da MM200"
-    ate = mm200 * (1 + LYNCH_OPORTUNIDADE / 100)
-    num = f"{ate:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        texto = f"Faixa inferior até {simbolo} {num(ate)}"
     return {"codigo": codigo, "rotulo": rotulo, "zona": zona, "dist": dist,
             "bemAbaixoAte": mm200 * (1 + LYNCH_BEM_ABAIXO / 100), "oportunidadeAte": ate,
-            "caroAcima": mm200 * (1 + LYNCH_CARO / 100), "texto": f"Faixa neutra a partir de {simbolo} {num}"}
+            "caroAcima": cara, "texto": texto}

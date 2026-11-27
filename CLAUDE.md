@@ -210,15 +210,31 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   CORRIGIDO 27/11/2026: a 1ª versão dizia "Faixa inferior até [valor]", mas [valor] é onde a zona
   neutra COMEÇA, não onde a faixa inferior termina - "até" dava a entender que o valor pertencia à
   faixa inferior, quando na verdade é o início da neutra, logo acima; "a partir de" descreve o mesmo
-  ponto do lado certo). A pequena pílula que repetia a mesma zona embaixo do badge
-  (ex. "Zona neutra") foi removida por ficar redundante com o próprio badge, que agora já diz a
-  zona. Aplicado nos 3 modos (`utils.signals.decidir_estado`/`decidir_estado_conservador`,
-  `utils.lynch.preco_lynch`, e o badge do SIMONS em `tela/detalhe.js`/`renderDecisao()`, que usa o
-  mesmo componente visual). NÃO aplicado (fica pra outra issue, se pedido): o vocabulário interno
-  do próprio modo SIMONS mais abaixo na tela (`utils/simons.py`, a classificação OPORTUNIDADE/
-  NEUTRO/CARO e a entrada escalonada "AGUARDAR"/"NÃO COMPRA"/"OBSERVA" de `timing()`) - é uma
-  metodologia própria, já documentada como escopo à parte na Issue #47 item 10, e só o badge
-  compartilhado do topo (que usa o mesmo componente dos outros 2 modos) foi corrigido aqui.
+  ponto do lado certo).
+  REGRA TRAVADA (2º bug, 27/11/2026, reportado pelo usuário com BBAS3): a frase descreve sempre o
+  limite de 30% ("alvo") - mas isso só faz sentido pra quem está na Faixa inferior ou na Zona neutra
+  (que começa exatamente ali); pra quem está na Faixa superior, mostrar o limite de 30% é o limite
+  da zona ERRADA (BBAS3 a R$ 14,69, na Faixa inferior, chegou a mostrar "Faixa neutra a partir de
+  R$ 15,11" - o texto nem sequer descrevia a própria zona do preço). Corrigido: `texto` passa a
+  descrever o limite da PRÓPRIA zona em que o preço está, não sempre o mesmo valor de 30%:
+  - Preço na Faixa inferior: "Faixa inferior até [limite de 30%]".
+  - Preço na Zona neutra: "Faixa neutra a partir de [limite de 30%]" (igual a antes).
+  - Preço na Faixa superior: "Faixa superior acima de [limite de 70%]" (valor NOVO - antes também
+    usava o de 30%, errado).
+  Mesma regra nos 3 modos: `utils.signals.decidir_estado` (faixa de 52 semanas, limites 30%/70% da
+  amplitude) e `decidir_estado_conservador` (valuation, 70%/130% da âncora); `utils.lynch.preco_lynch`
+  (MM200, "Faixa inferior"/"Bem abaixo da MM200" usam o limite de +5% sobre a MM200, "Faixa superior"
+  usa o de +15%); e o texto do SIMONS em `tela/detalhe.js`/`renderDecisao()` (usa `sm.oportunidadeAte`
+  pras 2 zonas de baixo, `sm.caraAcima` pra Faixa superior). Testes travados em
+  `tests/test_signals.py::test_texto_descreve_o_limite_da_propria_zona_do_preco`,
+  `tests/test_dados.py::test_decidir_estado_conservador_texto_descreve_o_limite_da_propria_zona_do_preco`
+  (com os valores reais do BBAS3 do bug) e `tests/test_modos.py::test_lynch_texto_descreve_o_limite_da_propria_zona_do_preco`.
+  A pequena pílula que repetia a mesma zona embaixo do badge (ex. "Zona neutra") foi removida por
+  ficar redundante com o próprio badge, que agora já diz a zona. NÃO aplicado (fica pra outra issue,
+  se pedido): o vocabulário interno do próprio modo SIMONS mais abaixo na tela (`utils/simons.py`, a
+  classificação OPORTUNIDADE/NEUTRO/CARO e a entrada escalonada "AGUARDAR"/"NÃO COMPRA"/"OBSERVA" de
+  `timing()`) - é uma metodologia própria, já documentada como escopo à parte na Issue #47 item 10, e
+  só o badge compartilhado do topo (que usa o mesmo componente dos outros 2 modos) foi corrigido aqui.
 - Regra de prejuízo (Graham e Lynch): LPA dos últimos 3 anos; 1 ano negativo sai da média
   ("Ano de prejuízo excluído"); 2 ou mais, não calcula ("Sem cálculo - Empresa com prejuízo recorrente").
 - Graham em duas versões: atual = √(22,5 × LPA 12 meses × VPA); média = √(22,5 × LPA médio 3 anos × VPA),

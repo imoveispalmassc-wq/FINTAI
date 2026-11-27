@@ -298,10 +298,17 @@ def test_decidir_estado_conservador_caro_acima_explicito_sobrescreve_padrao():
     assert decidir_estado_conservador(110.01, 100.0, 110.0).codigo == "CARO"
 
 
-def test_decidir_estado_conservador_texto_mostra_sempre_o_alvo_de_30_por_cento():
+def test_decidir_estado_conservador_texto_descreve_o_limite_da_propria_zona_do_preco():
+    # bug reportado pelo usuário com BBAS3 (25/11/2026): preço R$ 14,69 na Faixa inferior (teto
+    # 21,59, alvo 70% = 15,11) mostrava "Faixa neutra a partir de R$ 15,11" - o texto tem que
+    # descrever o limite da zona em que o PREÇO está, não de uma zona diferente.
     from utils.signals import decidir_estado_conservador
-    e = decidir_estado_conservador(50.0, 100.0, simbolo="R$")
-    assert "70" in e.texto
+    bbas3 = decidir_estado_conservador(14.69, 21.59, simbolo="R$")
+    assert bbas3.codigo == "COMPRAR" and bbas3.texto == "Faixa inferior até R$ 15,11"
+    aguardar = decidir_estado_conservador(90.0, 100.0, simbolo="R$")
+    assert aguardar.codigo == "AGUARDAR" and aguardar.texto == "Faixa neutra a partir de R$ 70,00"
+    caro = decidir_estado_conservador(131.0, 100.0, simbolo="R$")
+    assert caro.codigo == "CARO" and caro.texto == "Faixa superior acima de R$ 130,00"
 
 # ------------------------------------------------------------ Faixa de preço do Conservador (ponta a ponta)
 def _faixa_conservador(media_1a, media_3a, media_5a, mm200, preco):
