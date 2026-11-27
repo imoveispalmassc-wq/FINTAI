@@ -29,12 +29,16 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--azul); ou
 .topo .nome { font-family: var(--display); font-size: 19px; font-weight: 700; line-height: 1.15; }
 .topo .bolsa { display: inline-flex; align-items: center; gap: 6px; color: var(--suave); font-size: 12.5px; margin-top: 2px; }
 .topo .bolsa svg { flex: none; }
-.topo .preco-topo { font-family: var(--display); font-size: 17px; font-weight: 700; flex: none; }
-/* Ao rolar (.rolou): esconde nome completo/bolsa/preço, mostra só o ticker - pedido explícito de
-   não repetir preço no cabeçalho fixo (já aparece no cartão de decisão logo abaixo). */
+.topo .preco-topo { font-family: var(--display); font-size: 17px; font-weight: 700; flex: none; margin-left: 4px; }
+.topo .var-topo { font-size: 13px; font-weight: 700; flex: none; }
+/* Ao rolar (.rolou): esconde nome completo/bolsa, mostra só o ticker + cotação + variação do dia. */
 .topo .ticker-topo { display: none; font-family: var(--display); font-size: 19px; font-weight: 700; }
 .topo.rolou .meio { display: none; }
 .topo.rolou .ticker-topo { display: block; }
+/* Afasta mais a cotação do ticker no estado rolado (pedido do usuário) - no estado normal o espaço
+   já é maior porque .meio ocupa o resto da largura (flex: 1), então aqui só o gap entre ticker/
+   cotação/variação precisa de um respiro extra. */
+.topo.rolou { gap: 18px; }
 svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
 /* cartão de decisão */
