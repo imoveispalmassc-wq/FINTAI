@@ -120,10 +120,12 @@ function montar(root, d) {
   $('t-nome').textContent = d.nome;
   $('t-bolsa').textContent = d.bolsa ? `${d.bolsa} (${d.ticker})` : d.ticker;
   // cabeçalho fixo (sticky, CSS): nome completo + bolsa + preço no topo da página. Ao rolar (classe
-  // .rolou, abaixo), esconde nome completo/bolsa e mostra só o ticker + a cotação (ex. "MU · US$
-  // 601,25", a pedido do usuário) - a cor da variação do dia é a mesma de baixo.
+  // .rolou, abaixo), esconde nome completo/bolsa e mostra só o ticker + a cotação + a variação do
+  // dia (ex. "MU  US$ 601,25  ▼ -4,53%", a pedido do usuário) - mesma cor/seta/sinal do resto da tela.
   $('t-preco').textContent = din(d.preco);
   $('t-preco').style.color = tem(d.varDia) ? cor(d.varDia) : '';
+  $('t-var').textContent = tem(d.varDia) ? `${seta(d.varDia)} ${sinal(d.varDia)}` : '';
+  $('t-var').style.color = tem(d.varDia) ? cor(d.varDia) : '';
   $('t-ticker').textContent = d.ticker;
   const topoEl = root.querySelector('.topo');
   const sentinela = $('t-sentinela-topo');
