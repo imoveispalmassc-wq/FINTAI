@@ -120,9 +120,8 @@ function montar(root, d) {
   $('t-nome').textContent = d.nome;
   $('t-bolsa').textContent = d.bolsa ? `${d.bolsa} (${d.ticker})` : d.ticker;
   // cabeçalho fixo (sticky, CSS): nome completo + bolsa + preço no topo da página. Ao rolar (classe
-  // .rolou, abaixo), esconde tudo isso e mostra SÓ o ticker (ex. "MU") - achado após a 1ª versão
-  // mostrar nome/preço também ao rolar: o pedido original era só manter o TICKER visível, pra saber
-  // qual ativo está aberto, sem repetir preço (que já está no cartão de decisão logo abaixo).
+  // .rolou, abaixo), esconde nome completo/bolsa e mostra só o ticker + a cotação (ex. "MU · US$
+  // 601,25", a pedido do usuário) - a cor da variação do dia é a mesma de baixo.
   $('t-preco').textContent = din(d.preco);
   $('t-preco').style.color = tem(d.varDia) ? cor(d.varDia) : '';
   $('t-ticker').textContent = d.ticker;
