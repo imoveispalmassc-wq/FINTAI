@@ -294,6 +294,18 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   a trava de link+página, a migração pra Agent API, o `effort: "low"`, a captura de `search_results`)
   não foi tocado - só ganhou 2 funções novas (`adicionar_ticker_a_lista`, `processar_ticker_novo`)
   e 1 subcomando de CLI (`ticker-novo`) por cima dele.
+  BUG CORRIGIDO (27/11/2026, achado testando PETR4 e AAPL de verdade pela 1ª vez): 2 Issues abertas
+  quase juntas (concurrency serializa os jobs, mas o 2º ainda roda pouco depois do 1º já ter
+  empurrado pro main) fazem o passo "Gravar lista mestra" do 2º job falhar com "You have unstaged
+  changes" no `git rebase` - a causa é `utils/biblioteca.json` ficar modificado e DE PROPÓSITO
+  ainda não commitado nesse ponto (quem commita ele é o passo seguinte, pro PR de
+  `biblioteca/revisar`), e isso bloqueia o rebase sempre que o `main` andou nesse meio-tempo.
+  Resultado real do teste: PETR4 entrou na lista (sem dado - Perplexity deu timeout de 60s,
+  corretamente não inventou nada); AAPL achou LPA real (2,02, fonte SEC 8-K) mas o job falhou
+  ANTES de salvar, perdendo o resultado daquela execução (nada ficou inconsistente - só precisou
+  rodar de novo). Corrigido com `git stash push --include-untracked -- utils/biblioteca.json`
+  antes do `fetch`/`rebase`/`push` da lista mestra, e `git stash pop` depois, pro próximo passo
+  (PR da biblioteca) continuar vendo a mudança.
 
 ## TTM automático: PROMPT TRAVADO (22/11/2026, vale para todos os robôs e para o ttm_auto.py)
 

@@ -116,9 +116,17 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add utils/biblioteca_tickers.json
           git commit -m "Lista mestra da biblioteca: ticker(s) novo(s) ($(date -u +'%d/%m/%Y %H:%M') UTC)"
+          # BUG CORRIGIDO (27/11/2026, achado testando PETR4+AAPL de verdade): utils/biblioteca.json
+          # pode estar modificado e AINDA NÃO commitado aqui de propósito (quem commita ele é o
+          # próximo passo, pro PR de biblioteca/revisar) - isso bloqueia "git rebase" com "You have
+          # unstaged changes" sempre que o main andou nesse meio-tempo (ex.: 2 Issues quase juntas,
+          # uma empurra pro main entre o fetch e o rebase da outra). Dá stash só dele antes do
+          # rebase e devolve depois, pro próximo passo continuar vendo a mudança.
+          git stash push --include-untracked -- utils/biblioteca.json || true
           git fetch origin main
           git rebase origin/main
           git push origin HEAD:main
+          git stash pop || true
 
       - name: Abrir/atualizar pull request da biblioteca (dados numéricos - REGRA 6, nunca direto na main)
         if: success()
