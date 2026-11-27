@@ -1,7 +1,9 @@
 # Só para o robô diário de guidance (GitHub Actions); o app não precisa destes.
+# yfinance travado na mesma versão exata de requirements.txt (câmbio EUR/USD do guidance trimestral
+# em euro usa yfinance também - mesma preocupação de "2 instalações, 2 versões, 2 resultados").
 requests>=2.31
 pypdf>=4.0
-yfinance>=0.2.40
+yfinance==1.8.0
 anthropic>=0.70
 pdfplumber>=0.11
 pymupdf>=1.24
