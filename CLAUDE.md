@@ -892,26 +892,46 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   cartão de decisão logo abaixo; o pedido era só manter o ticker identificável, sem repetir mais
   nada. `#t-ticker` (`ticker-topo`) é um elemento à parte, escondido por padrão e mostrado só com
   `.topo.rolou .ticker-topo`, enquanto `.topo.rolou .meio`/`.preco-topo` escondem o resto.
-  2º BUG CORRIGIDO (mesma data, achado depois pelo usuário): a tela roda dentro de um iframe do
-  componente do Streamlit (`st.components.v2.component`, `app.py`), que cresce pra caber TODO o
-  conteúdo em vez de ter scroll próprio - quem rola é a janela do Streamlit (`window.parent`), não
-  este iframe. `position: sticky` sozinho não funciona nesse caso: ele gruda só dentro do próprio
-  contexto de rolagem do iframe, que nunca rola de verdade (o iframe inteiro sobe junto com a
-  página) - por isso o cabeçalho simplesmente sumia da tela ao rolar, em vez de ficar fixo (bug
-  só visível com o app de verdade rodando dentro do Streamlit - a página de exemplo isolada,
-  `docs/index.html`, não roda dentro de iframe, então escondia esse bug nos testes anteriores).
-  Corrigido: quando dá pra acessar `window.parent` (mesma origem - é o caso normal do componente do
-  Streamlit, verificado com `window.frameElement`), calcula a posição real do próprio iframe na
-  janela pai a cada scroll (`getBoundingClientRect().top`) e, quando ela já passou do topo da tela
-  (`< 0`), troca pra `position: fixed` com o deslocamento exato (`top: ${-rect.top}px`) pra
-  compensar - fica visualmente preso no topo de verdade. Sem acesso a `window.parent` (origem
-  cruzada, caso raro), cai pro sticky simples de antes (best-effort, nunca quebra o app). Testado
-  com Playwright reproduzindo a arquitetura real (servidor HTTP local, página externa com um
-  `<iframe>` redimensionado pra caber todo o conteúdo - igual o Streamlit faz - rolando a PÁGINA
-  EXTERNA, não o iframe): antes de rolar mostra "Micron Technology, Inc. / NasdaqGS (MU) / 601,25"
-  em fluxo normal; rolando a página externa até o meio do conteúdo, "MU" aparece fixo no topo da
-  janela de verdade (`position: fixed`); voltando ao topo, retorna a `position: sticky`/estado
-  normal sem ficar preso errado.
+  2º BUG, CORRIGIDO ERRADO NA 1ª TENTATIVA (27/11/2026, PRs #61/#62 - registrado aqui com
+  honestidade, porque gastou 2 ciclos de PR do usuário num diagnóstico errado antes de achar a causa
+  real): a 1ª tentativa supôs que a tela roda dentro de um IFRAME do componente do Streamlit, que
+  cresceria pra caber todo o conteúdo em vez de ter scroll próprio - e "corrigiu" trocando pra
+  `position: fixed` com `window.parent`/`window.frameElement`. Essa suposição nunca foi testada
+  contra o app de verdade rodando (só contra uma página HTML simulada, montada à mão pra parecer um
+  iframe de Streamlit) - o usuário reportou que continuava sem funcionar ("Não está funcionando e só
+  está gastando meus créditos"). Investigação de verdade, rodando `streamlit run app.py` e inspecionando
+  com Playwright: **não existe nenhum iframe** (`document.querySelectorAll('iframe').length === 0`).
+  `st.components.v2.component` (mecanismo interno "BidiComponent") monta o conteúdo direto numa
+  SHADOW ROOT (`mode="open"`) dentro da própria página do Streamlit - `position: sticky` no CSS
+  sempre funcionou sozinho (confirmado prendendo `.topo` no topo real da tela), então a ideia do
+  iframe/`window.parent`/`position:fixed` nunca teve motivo de existir e foi removida por inteiro.
+  As causas reais eram 3, todas só visíveis testando o app de verdade (nunca uma simulação):
+  (a) `document.querySelector('.topo')` chamado de dentro do próprio script do componente sempre
+  retornava `null`, porque consulta de CSS feita a partir do `document` de fora nunca enxerga pra
+  dentro de uma shadow root (isolamento por design) - o `if` inteiro nunca rodava, sem erro nenhum;
+  corrigido usando `root` (o parâmetro da função `montar(root, d)`, a mesma raiz que o helper `$()`
+  já usa) em vez de `document` pra achar elementos do próprio componente; (b) mesmo corrigindo (a),
+  quem rola de verdade dentro do Streamlit é um `<main id="stMain">` interno (`overflow: auto`) -
+  nunca a `window`/`document` (`window.scrollY` fica sempre 0) - e um evento de scroll disparado
+  nesse elemento não "escapa" pra fora da árvore de quem o disparou, então nem um
+  `window.addEventListener('scroll', ...)` nem um `document.addEventListener('scroll', ..., {capture:
+  true})` registrado de dentro do script do componente conseguem vê-lo; corrigido trocando a
+  detecção de "rolou" de escutar evento de scroll para um `IntersectionObserver` numa sentinela de
+  1px colocada logo ACIMA de `.topo` no HTML (`#t-sentinela-topo`) - ele mede a posição real do
+  elemento na tela (`root: null` = viewport de verdade) e dispara sozinho, não importa qual
+  ancestral rolou nem como (não depende de nenhum id interno do Streamlit, que pode mudar de versão
+  pra versão); (c) o Streamlit tem a sua PRÓPRIA barra fixa no topo (menu/Deploy, fora da shadow
+  root deste componente, `[data-testid="stHeader"]`), `position: absolute`, `top: 0`, com z-index
+  altíssimo (999990 na versão testada) - mesmo com `.topo` preso em `top: 0` e seu próprio z-index,
+  essa barra do Streamlit ficava por cima e escondia o cabeçalho fixo inteiro atrás dela; corrigido
+  medindo a altura real dessa barra em tempo de execução (`getBoundingClientRect().height`, nunca um
+  valor fixo em pixels - quebraria se o Streamlit mudar essa altura numa versão futura) e somando ao
+  `top` do sticky, pra colar logo ABAIXO da barra, visível. Testado com Playwright contra o app real
+  (`mini_app.py`, reproduzindo `tela/detalhe.html`/`.css`/`.js` com dados reais da MU, já que o app
+  completo trava buscando dados nesta sandbox por limitação de rede, não um bug do app): rolando
+  `#stMain` de verdade, `.topo` ganha a classe `rolou`, prende logo abaixo da barra do Streamlit
+  (`rectTop: 60`) e mostra só "MU"; voltando ao topo, volta ao estado normal (nome completo + bolsa +
+  preço) sem ficar preso errado.
 - **CBRS sem Oportunidade 2/3 (item 6)**: investigado com dados reais do Yahoo Finance em
   26/11/2026 - NÃO é bug. CBRS tem só ~6 meses e meio de histórico de preço (IPO recente), então
   `media_fech_3a`/`media_fech_5a` ficam `None` (sem 3/5 anos de histórico - ver
