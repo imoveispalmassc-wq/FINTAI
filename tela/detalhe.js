@@ -264,9 +264,17 @@ function montar(root, d) {
       // mínima de 12px das outras (de baixo pra cima), pra nunca uma cair bem em cima da outra
       // quando os valores são próximos (ex. Oportunidade 1 e 2) ou iguais (Neutro e Caro, que
       // descrevem o mesmo valor de dois lados)
+      // Faixa neutra e Faixa superior dividem o MESMO valor (zCara) - sempre foi 1 divisa só, nunca
+      // 2 valores diferentes. Desenhar 2 linhas nesse mesmo ponto (bug corrigido, auditoria 26/11/2026)
+      // empurrava a segunda 12px pra baixo (regra de afastar linhas próximas, logo abaixo), fazendo
+      // "Faixa superior" parecer visualmente ABAIXO de "Faixa neutra" - o contrário do que elas
+      // significam. Agora é 1 linha só, com o rótulo mostrando a faixa completa (não só o teto); se
+      // zOport e zCara derem o mesmo valor (zona neutra de largura zero), não repete o número 2x.
+      const divisaTxt = Math.abs(zOport - zCara) < 1e-9
+        ? `Faixa neutra / superior a partir de ${f(zCara)}`
+        : `Faixa neutra ${f(zOport)} a ${f(zCara)} · Faixa superior acima de ${f(zCara)}`;
       const linhas = [
-        { y: Y(zCara), t: 'Faixa neutra até', v: f(zCara), c: '#aab4c6' },
-        { y: Y(zCara), t: 'Faixa superior acima de', v: f(zCara), c: '#f06a6a' },
+        { y: Y(zCara), t: divisaTxt, v: '', c: '#f06a6a' },
         ...(LPg ? [{ y: Y(LPg.bemAbaixoAte), t: 'Bem abaixo de', v: f(LPg.bemAbaixoAte), c: '#7aa2f7' }] : []),
         ...(tem(mm200Ref) ? [{ y: Y(mm200Ref), t: 'Média 200d', v: f(mm200Ref), c: '#f2994a' }] : []),
         { y: Y(zOport), t: 'Faixa inferior 1', v: f(zOport), c: '#2fbf8a' },
@@ -277,7 +285,7 @@ function montar(root, d) {
       linhas.forEach((r, k) => { if (k && r.y - linhas[k - 1].y < 12) r.y = linhas[k - 1].y + 12; });
       ctx.textAlign = 'left'; ctx.font = '10.5px Inter, system-ui, sans-serif';
       linhas.forEach(r => {
-        const texto = `${r.t}    ${r.v}`;
+        const texto = r.v ? `${r.t}    ${r.v}` : r.t;
         const largura = ctx.measureText(texto).width;
         ctx.setLineDash([5, 4]); ctx.strokeStyle = r.c; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(x0 + 10 + largura, r.y); ctx.lineTo(x1, r.y); ctx.stroke(); ctx.setLineDash([]);

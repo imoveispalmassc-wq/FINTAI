@@ -439,6 +439,14 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   texto (nunca passa atrás dele, só do fim do texto até a borda direita) - cada uma na sua própria altura, com
   folga mínima de 12px das outras (de baixo pra cima), pra nunca uma cair bem em cima da outra quando os valores
   são próximos (ex. Oportunidade 1 e 2) ou iguais (Neutro e Caro, que descrevem o mesmo valor dos dois lados).
+  BUG CORRIGIDO (auditoria 26/11/2026): Neutro e Caro SEMPRE descrevem o mesmo valor (a mesma variável zCara) -
+  nunca 2 valores diferentes. Desenhar 2 linhas tracejadas nesse mesmo ponto ("Faixa neutra até X" e "Faixa
+  superior acima de X") fazia a regra de afastar linhas próximas (acima) empurrar a segunda 12px pra baixo,
+  deixando "Faixa superior" visualmente ABAIXO de "Faixa neutra" no gráfico - o contrário do que elas
+  significam, pra qualquer ticker (não só um caso específico). Agora é 1 linha só na divisa neutra/superior,
+  com o rótulo mostrando a faixa completa em vez de só o teto (ex. "Faixa neutra 29,87 a 55,48 · Faixa
+  superior acima de 55,48"); se a oportunidade e a divisa coincidirem no mesmo valor (zona neutra de largura
+  zero), o número não se repete ("Faixa neutra / superior a partir de X").
   Sem a antiga linha
   "Média dos métodos ... não validado" (média do Conservador/P/L
   histórico/Bazin): tirada do gráfico por não ser validada e confundir com os cortes reais do valuation; os 3
