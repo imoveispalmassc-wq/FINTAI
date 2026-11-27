@@ -83,6 +83,23 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 
 ## Biblioteca própria (Perplexity) e divergência automática - Issue #48, itens 8 e 9
 
+- **DECISÃO TRAVADA (27/11/2026): Perplexity NÃO alimenta nenhum número da tela.** A chave
+  (`PERPLEXITY_API_KEY`) continua configurada nos Secrets do GitHub, mas o USO dela em cálculo foi
+  desligado por decisão do usuário - mesmo que `utils/biblioteca.py` (descrito abaixo) já exista e
+  tenha essa capacidade tecnicamente. Hoje ela já não alimenta nada mesmo na prática (confirmado em
+  27/11/2026 ao investigar um bug de "Sem dado" repetido no card "Lucro por ação" da B3: nenhuma
+  parte do app ou dos robôs que a tela lê chama `utils.biblioteca.obter()` - só o workflow
+  `biblioteca-perplexity.yml` grava um campo de exemplo, nunca lido de volta) - mas essa decisão
+  trava explicitamente que CONTINUE assim: nenhum número de LPA, Preço Teto, P/L ou qualquer
+  indicador mostrado na tela pode vir da Perplexity. Os números continuam SÓ Yahoo Finance (ou SEC/
+  CVM pros robôs de contábil/TTM) + `OVERRIDE` manual com fonte citada em `utils/override.py` - as
+  únicas fontes já documentadas no resto deste arquivo.
+  ÚNICO USO PERMITIDO da Perplexity (ainda não implementado - é trabalho futuro, não uma função já
+  existente): sugerir um LINK de fonte oficial (ex.: achar o release/Fato Relevante mais recente de
+  um ticker) pra um humano revisar e, se aprovar, cadastrar manualmente em `utils/override.py` -
+  nunca para preencher um número direto na tela ou em qualquer cache lido automaticamente. Ou seja,
+  a Perplexity pode no máximo virar uma FERRAMENTA DE BUSCA DE FONTE para quem mantém o `OVERRIDE`,
+  nunca uma fonte de dado ela mesma.
 - `utils/biblioteca.py` é um cache novo e genérico para qualquer dado fundamentalista pesquisado
   (LPA, lucro, dividendo, ROE etc.) - `utils/biblioteca.json`, no MESMO padrão dos outros caches
   do projeto (`contabil_br.json`/`contabil_sec.json`: ticker -> campo -> registro com valor, fonte
