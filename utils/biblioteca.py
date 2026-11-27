@@ -504,6 +504,57 @@ def atualizar_tickers(tickers: list[str], campo: str = "lpa_atual", hoje: dt.dat
     return resultados
 
 
+# ------------------------------------------------------------ lista mestra (gatilho por Issue, item 3)
+ARQ_TICKERS_BIBLIOTECA = RAIZ / "utils" / "biblioteca_tickers.json"
+
+
+def _ler_tickers(caminho: Path) -> dict:
+    """Lê um arquivo de lista de tickers nos 2 formatos que o projeto usa: lista simples (ex.
+    `utils/guidance_tickers.json`, sem país) ou dicionário ticker -> país (`biblioteca_tickers.json`,
+    este módulo). Devolve sempre dict (lista simples vira {ticker: None}), pra um único código ler
+    os dois formatos sem duplicar lógica."""
+    if not caminho.exists():
+        return {}
+    bruto = json.loads(caminho.read_text(encoding="utf-8"))
+    if isinstance(bruto, dict):
+        return bruto
+    return {t: None for t in bruto}
+
+
+def adicionar_ticker_a_lista(ticker: str, *, caminho: Path = ARQ_TICKERS_BIBLIOTECA) -> tuple[str, bool]:
+    """Garante que `ticker` está na lista mestra (`utils/biblioteca_tickers.json`), inferindo o país
+    (BR/US) automaticamente - NUNCA pedido na Issue, pra não depender de quem abre a Issue escrever
+    certo. Usa `utils.dados_fixos.eh_br` (mesmo detector já usado no resto do projeto, por formato
+    de ticker: sufixo ".SA" ou padrão B3 tipo "PETR4"), em vez de inventar uma 2ª lógica. Devolve
+    (pais, foi_novo) - foi_novo=False quando o ticker já estava cadastrado (idempotente: a mesma
+    Issue/ticker reprocessado não duplica nem some do arquivo)."""
+    from utils.dados_fixos import eh_br  # import tardio: evita import circular em tempo de carga do módulo
+
+    alvo = ticker.strip().upper()
+    dados = _ler_tickers(caminho) if caminho.exists() else {}
+    if alvo in dados and dados[alvo]:
+        return dados[alvo], False
+    pais = "BR" if eh_br(alvo) else "US"
+    dados[alvo] = pais
+    caminho.parent.mkdir(parents=True, exist_ok=True)
+    caminho.write_text(json.dumps(dados, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return pais, True
+
+
+def processar_ticker_novo(ticker: str, campo: str = "lpa_atual", hoje: dt.date | None = None, *,
+                          caminho_tickers: Path = ARQ_TICKERS_BIBLIOTECA, caminho_biblioteca: Path = ARQ_BIBLIOTECA,
+                          buscar_externo=None, chamar_perplexity=None, chamar_claude=None) -> dict:
+    """Gatilho por Issue (item 3): 1 ticker novo entra na lista mestra (idempotente) e já é
+    processado na hora pelo MESMO `atualizar_tickers`/`obter` que o workflow agendado usa - nenhuma
+    trava, nenhuma fonte, nenhuma lógica de confirmação é duplicada aqui, só a entrada na lista
+    muda. Roda pra qualquer ticker já cadastrado também (idempotente), sem duplicar na lista."""
+    pais, novo_na_lista = adicionar_ticker_a_lista(ticker, caminho=caminho_tickers)
+    resultado = atualizar_tickers([ticker.strip().upper()], campo, hoje, caminho=caminho_biblioteca,
+                                  buscar_externo=buscar_externo, chamar_perplexity=chamar_perplexity,
+                                  chamar_claude=chamar_claude)[0]
+    return {"ticker": ticker.strip().upper(), "pais": pais, "novo_na_lista": novo_na_lista, "resultado": resultado}
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
@@ -511,15 +562,22 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Biblioteca própria de dados fundamentalistas (Issue #48, item 8)")
     sub = p.add_subparsers(dest="cmd", required=True)
     pa = sub.add_parser("atualizar", help="biblioteca -> Perplexity -> confirmação da API do Claude, por ticker")
-    pa.add_argument("--tickers", required=True, help="arquivo JSON com a lista de tickers (ex.: utils/guidance_tickers.json)")
+    pa.add_argument("--tickers", required=True,
+                    help="arquivo JSON com a lista de tickers - lista simples (ex.: utils/guidance_tickers.json) "
+                         "ou dicionário ticker -> país (ex.: utils/biblioteca_tickers.json)")
     pa.add_argument("--campo", default="lpa_atual")
     pa.add_argument("--ticker", default=None,
                     help="processa só este ticker (tem de estar no arquivo de --tickers) - pra testar um "
                          "ticker isolado (ex.: Run workflow manual) ou pro gatilho por Issue/fila de um só ticker, "
                          "sem gastar chamada de API nos outros")
+    pn = sub.add_parser("ticker-novo",
+                        help="item 3: adiciona 1 ticker à lista mestra (utils/biblioteca_tickers.json) se "
+                             "ainda não estiver lá, e já processa esse ticker na hora - gatilho por Issue")
+    pn.add_argument("--ticker", required=True)
+    pn.add_argument("--campo", default="lpa_atual")
     args = p.parse_args(argv)
     if args.cmd == "atualizar":
-        tickers = json.loads(Path(args.tickers).read_text(encoding="utf-8"))
+        tickers = list(_ler_tickers(Path(args.tickers)).keys())
         if args.ticker:
             alvo = args.ticker.upper()
             tickers = [t for t in tickers if t.upper() == alvo]
@@ -529,6 +587,16 @@ def main(argv: list[str] | None = None) -> int:
         resultados = atualizar_tickers(tickers, args.campo)
         achados = sum(r["achado"] for r in resultados)
         log.info("biblioteca: %d ticker(s) processado(s), %d com dado novo/confirmado", len(resultados), achados)
+        return 0
+    if args.cmd == "ticker-novo":
+        # nomes do módulo (não os defaults já ligados na assinatura de processar_ticker_novo em
+        # tempo de import) - pra um monkeypatch.setattr(bib, "ARQ_TICKERS_BIBLIOTECA", ...) em
+        # teste valer também aqui, igual já valia pra ARQ_BIBLIOTECA no comando "atualizar".
+        info = processar_ticker_novo(args.ticker, args.campo,
+                                     caminho_tickers=ARQ_TICKERS_BIBLIOTECA, caminho_biblioteca=ARQ_BIBLIOTECA)
+        log.info("biblioteca: %s (%s) %s na lista mestra -> %s", info["ticker"], info["pais"],
+                 "entrou agora" if info["novo_na_lista"] else "já estava cadastrado",
+                 info["resultado"].get("valor", "sem dado"))
         return 0
     return 1
 

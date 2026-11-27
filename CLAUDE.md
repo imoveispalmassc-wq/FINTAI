@@ -252,6 +252,49 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   significa que, no estado atual, a maioria das divergências revisadas por este caminho só vira
   PR automático depois de uma melhoria futura que inclua o texto do documento no corpo da Issue.
 
+- **Lista mestra + gatilho por Issue (27/11/2026, "virar sistema")**: `utils/biblioteca_tickers.json`
+  é a lista mestra de tickers acompanhados pela biblioteca própria - dict `ticker -> país` ("BR"/
+  "US"), país SEMPRE inferido automaticamente por `utils.dados_fixos.eh_br` (`adicionar_ticker_a_lista`,
+  `utils/biblioteca.py`), nunca precisa vir escrito na Issue nem em lugar nenhum à mão. É um arquivo
+  DIFERENTE de `utils/guidance_tickers.json` (lista do guidance automático) - os dois podem ter
+  tickers em comum ou não; a biblioteca própria tem a sua própria lista porque pode (e deve, no
+  futuro) acompanhar tickers que não têm guidance anual nenhum, só dado fundamentalista pesquisado.
+  RESTRIÇÃO TÉCNICA REAL (documentada aqui com honestidade, porque o pedido original era "atualiza
+  a cada 2 min" e isso não é literalmente possível): o GitHub Actions não garante `cron` menor que
+  ~5 minutos - um `schedule` de 2 em 2 minutos não é confiável (pode atrasar, enfileirar ou nem
+  disparar). Por isso o mecanismo PRINCIPAL para "ticker novo entra na lista e já é processado"
+  NÃO é o schedule - é o gatilho `issues: opened`, que dispara em segundos/poucos minutos, no MESMO
+  padrão já usado em `fila-tickers.yml` (Issue #48, item 7). O `schedule` existe só como rede de
+  segurança (`.github/workflows/biblioteca-tickers.yml`, `*/5 * * * *` = a cada 5 minutos - o
+  menor intervalo prático de cron no GitHub Actions),
+  reprocessando a lista mestra inteira para o caso de o evento de Issue ter falhado - e mesmo
+  nesse caso NÃO é "varrer tudo gastando API à toa": cada ticker passa primeiro por
+  `buscar_na_biblioteca` (já existente, `DIAS_DESATUALIZADO` = 120 dias), que só busca de novo o
+  que está faltando ou desatualizado; ticker já em dia não gasta nenhuma chamada de Perplexity/
+  Claude nesse passo.
+  FLUXO: uma Issue título `"Biblioteca: TICKER"` com a label `biblioteca-ticker` dispara
+  `.github/workflows/biblioteca-tickers.yml` (`issues: opened`, filtro pela label, igual à fila de
+  guidance) - o ticker é extraído do próprio título (nunca precisa de um corpo de Issue formatado),
+  e `python -m utils.biblioteca ticker-novo --ticker TICKER` (novo subcomando, `processar_ticker_novo`
+  em `utils/biblioteca.py`) faz as 2 coisas: (1) `adicionar_ticker_a_lista` grava o ticker na lista
+  mestra se ainda não estiver lá (idempotente - a mesma Issue/ticker reprocessado não duplica); (2)
+  já chama o MESMO `atualizar_tickers`/`obter` que o workflow agendado usa, pra esse 1 ticker, na
+  hora - NENHUMA trava, fonte ou lógica de confirmação (Perplexity + confirmação da API do Claude,
+  link+página obrigatórios) é duplicada ou reescrita; é a mesma função já testada e validada com
+  BBAS3. O workflow comenta e fecha a própria Issue com o resultado.
+  GRAVAÇÃO: `utils/biblioteca_tickers.json` (a lista - só ticker/país, NENHUM dado fundamentalista)
+  vai DIRETO pra main, no mesmo padrão de `utils/guidance_tickers.json` em `fila-tickers.yml` - não
+  precisa da mesma cautela de PR porque não é um número pesquisado, é só "este ticker está sendo
+  acompanhado". Já `utils/biblioteca.json` (os NÚMEROS de verdade, com fonte/link/página) continua
+  TODO indo pelo PR em `biblioteca/revisar` - REGRA 6/mesma cautela do TTM automático, documentada
+  acima em "Biblioteca própria (Perplexity)", não muda com este sistema; o workflow novo reusa
+  exatamente o mesmo passo de PR que `biblioteca-perplexity.yml` já tinha (mesmo ramo, mesmo
+  título), só adicionando o passo de commit direto da lista mestra antes dele. O pipeline que já
+  funciona (`pesquisar_via_perplexity`, `confirmar_com_claude`, `salvar_na_biblioteca`, `obter`,
+  a trava de link+página, a migração pra Agent API, o `effort: "low"`, a captura de `search_results`)
+  não foi tocado - só ganhou 2 funções novas (`adicionar_ticker_a_lista`, `processar_ticker_novo`)
+  e 1 subcomando de CLI (`ticker-novo`) por cima dele.
+
 ## TTM automático: PROMPT TRAVADO (22/11/2026, vale para todos os robôs e para o ttm_auto.py)
 
 - Fonte, nesta ordem: release no RI > 8-K/6-K na SEC > CVM/ITR. Nunca só site de cotação para lucro/LPA. Domínio do

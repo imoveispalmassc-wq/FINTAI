@@ -415,3 +415,79 @@ def test_cli_atualizar_le_tickers_de_um_arquivo_json(tmp_path, monkeypatch):
     monkeypatch.setattr(bib, "ARQ_BIBLIOTECA", tmp_path / "biblioteca.json")
     monkeypatch.delenv("PERPLEXITY_API_KEY", raising=False)
     assert bib.main(["atualizar", "--tickers", str(tickers_json), "--campo", "lpa_atual"]) == 0
+
+
+def test_cli_atualizar_le_tickers_de_um_dicionario_ticker_pais(tmp_path, monkeypatch):
+    # utils/biblioteca_tickers.json (lista mestra, item 3) é dict ticker -> país, não lista
+    # simples como utils/guidance_tickers.json - o mesmo --tickers precisa ler os 2 formatos.
+    tickers_json = tmp_path / "tickers.json"
+    tickers_json.write_text('{"BBAS3": "BR", "AAPL": "US"}', encoding="utf-8")
+    monkeypatch.setattr(bib, "ARQ_BIBLIOTECA", tmp_path / "biblioteca.json")
+    monkeypatch.delenv("PERPLEXITY_API_KEY", raising=False)
+    assert bib.main(["atualizar", "--tickers", str(tickers_json)]) == 0
+
+
+# ------------------------------------------------------------ lista mestra (gatilho por Issue, item 3)
+def test_adicionar_ticker_a_lista_infere_pais_br(tmp_path):
+    caminho = tmp_path / "biblioteca_tickers.json"
+    pais, novo = bib.adicionar_ticker_a_lista("bbas3", caminho=caminho)
+    assert (pais, novo) == ("BR", True)
+    assert json.loads(caminho.read_text(encoding="utf-8")) == {"BBAS3": "BR"}
+
+
+def test_adicionar_ticker_a_lista_infere_pais_us(tmp_path):
+    caminho = tmp_path / "biblioteca_tickers.json"
+    pais, novo = bib.adicionar_ticker_a_lista("aapl", caminho=caminho)
+    assert (pais, novo) == ("US", True)
+
+
+def test_adicionar_ticker_a_lista_e_idempotente(tmp_path):
+    caminho = tmp_path / "biblioteca_tickers.json"
+    bib.adicionar_ticker_a_lista("PETR4", caminho=caminho)
+    pais, novo = bib.adicionar_ticker_a_lista("PETR4", caminho=caminho)
+    assert (pais, novo) == ("BR", False)
+    assert json.loads(caminho.read_text(encoding="utf-8")) == {"PETR4": "BR"}
+
+
+def test_adicionar_ticker_a_lista_preserva_tickers_existentes(tmp_path):
+    caminho = tmp_path / "biblioteca_tickers.json"
+    bib.adicionar_ticker_a_lista("BBAS3", caminho=caminho)
+    bib.adicionar_ticker_a_lista("AAPL", caminho=caminho)
+    assert json.loads(caminho.read_text(encoding="utf-8")) == {"BBAS3": "BR", "AAPL": "US"}
+
+
+def test_processar_ticker_novo_adiciona_na_lista_e_ja_processa(tmp_path):
+    caminho_tickers = tmp_path / "biblioteca_tickers.json"
+    caminho_biblioteca = tmp_path / "biblioteca.json"
+    chamar_perplexity = lambda p: "LPA | 0,21 | RI, release 3T26, página 3 (SIMULADO)"
+    chamar_claude = lambda i: ('{"achou": true, "valor_contabil": 0.21, "valor_ajustado": null, '
+                              '"fonte": "RI, release 3T26, página 3", "link": "https://ri.bb.com.br/release-3t26", '
+                              '"pagina": "página 3", "trecho": "LPA | 0,21 | RI, release 3T26, página 3 (SIMULADO)"}')
+    info = bib.processar_ticker_novo("bbas3", "lpa_atual", HOJE, caminho_tickers=caminho_tickers,
+                                     caminho_biblioteca=caminho_biblioteca,
+                                     chamar_perplexity=chamar_perplexity, chamar_claude=chamar_claude)
+    assert info["ticker"] == "BBAS3"
+    assert info["pais"] == "BR"
+    assert info["novo_na_lista"] is True
+    assert info["resultado"]["achado"] is True
+    assert info["resultado"]["valor"] == 0.21
+    assert json.loads(caminho_tickers.read_text(encoding="utf-8")) == {"BBAS3": "BR"}
+
+
+def test_processar_ticker_novo_repetido_nao_duplica_na_lista(tmp_path):
+    caminho_tickers = tmp_path / "biblioteca_tickers.json"
+    caminho_biblioteca = tmp_path / "biblioteca.json"
+    bib.processar_ticker_novo("PETR4", "lpa_atual", HOJE, caminho_tickers=caminho_tickers,
+                              caminho_biblioteca=caminho_biblioteca, chamar_perplexity=lambda p: None)
+    info = bib.processar_ticker_novo("PETR4", "lpa_atual", HOJE, caminho_tickers=caminho_tickers,
+                                     caminho_biblioteca=caminho_biblioteca, chamar_perplexity=lambda p: None)
+    assert info["novo_na_lista"] is False
+    assert json.loads(caminho_tickers.read_text(encoding="utf-8")) == {"PETR4": "BR"}
+
+
+def test_cli_ticker_novo_adiciona_na_lista_mestra(tmp_path, monkeypatch):
+    monkeypatch.setattr(bib, "ARQ_TICKERS_BIBLIOTECA", tmp_path / "biblioteca_tickers.json")
+    monkeypatch.setattr(bib, "ARQ_BIBLIOTECA", tmp_path / "biblioteca.json")
+    monkeypatch.delenv("PERPLEXITY_API_KEY", raising=False)
+    assert bib.main(["ticker-novo", "--ticker", "aapl"]) == 0
+    assert json.loads((tmp_path / "biblioteca_tickers.json").read_text(encoding="utf-8")) == {"AAPL": "US"}

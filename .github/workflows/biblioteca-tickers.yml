@@ -1,0 +1,145 @@
+name: Biblioteca própria - tickers novos (Issue)
+
+# Issue #48, item 8, "virar sistema" (27/11/2026): lista mestra de tickers da biblioteca própria
+# (utils/biblioteca_tickers.json, ticker -> país BR/US, inferido automaticamente por
+# utils.dados_fixos.eh_br - nunca precisa vir escrito na Issue) + gatilho por Issue, no MESMO
+# padrão já usado em fila-tickers.yml (Issue #48, item 7): abrir uma Issue título "Biblioteca:
+# TICKER" com a label "biblioteca-ticker" dispara este workflow na hora (issues: opened) e
+# processa SÓ aquele ticker - sem reprocessar o resto da lista.
+#
+# RESTRIÇÃO TÉCNICA REAL (documentada em CLAUDE.md): o GitHub Actions não garante cron menor que
+# ~5 minutos, então "atualizar a cada 2 min" não é um schedule confiável. O gatilho de Issue
+# (issues: opened) é o mecanismo PRINCIPAL (dispara em segundos/poucos minutos, como já documentado
+# pra fila-tickers.yml); o schedule abaixo é só a rede de segurança, reprocessando a lista mestra
+# pra pegar casos em que o evento de Issue falhou. 5 minutos é o menor intervalo prático de cron
+# no GitHub Actions (abaixo disso não há garantia de disparo). Mesmo no schedule, não é "varrer
+# tudo": cada ticker passa primeiro por `buscar_na_biblioteca` (utils/biblioteca.py), que só busca
+# de novo o que está faltando ou desatualizado (DIAS_DESATUALIZADO=120) - ticker já em dia não
+# gasta nenhuma chamada de API nesse passo.
+#
+# utils/biblioteca_tickers.json (lista mestra, sem dado fundamentalista - só ticker/país) vai
+# DIRETO pra main, no mesmo padrão de utils/guidance_tickers.json em fila-tickers.yml. Já
+# utils/biblioteca.json (os NÚMEROS pesquisados) continua pelo PR em biblioteca/revisar - REGRA 6
+# (mesma cautela do TTM automático) não muda com este workflow.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # rede de segurança - o gatilho de Issue abaixo é o mecanismo principal
+  workflow_dispatch: {}      # botão "Run workflow" para rodar na hora
+  issues:
+    types: [opened]          # dispara na hora quando uma Issue "Biblioteca: TICKER" abre
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: biblioteca-perplexity   # mesmo grupo de biblioteca-perplexity.yml - os 2 workflows tocam
+  cancel-in-progress: false      # a mesma branch biblioteca/revisar; serializa pra nunca colidir
+
+jobs:
+  biblioteca-tickers:
+    # só roda pro gatilho de Issue quando a label for biblioteca-ticker - outras Issues abertas no
+    # repositório não disparam este workflow (mesma regra de fila-tickers.yml, LABEL fila-ticker).
+    if: github.event_name != 'issues' || contains(github.event.issue.labels.*.name, 'biblioteca-ticker')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar dependências do robô
+        run: pip install -r requirements-guidance.txt pytest
+
+      # mesma cautela da REGRA 6 (biblioteca-perplexity.yml): pytest antes de qualquer PR
+      - name: Testes (python -m pytest)
+        run: python -m pytest -q
+
+      - name: 'Extrair ticker do título da Issue ("Biblioteca: TICKER")'
+        if: github.event_name == 'issues'
+        id: ticker
+        run: |
+          titulo="${{ github.event.issue.title }}"
+          ticker="$(echo "$titulo" | sed -n 's/^[Bb]iblioteca:[[:space:]]*\([A-Za-z0-9.]*\).*$/\1/p' | tr '[:lower:]' '[:upper:]')"
+          if [ -z "$ticker" ]; then
+            echo "Não consegui achar o ticker no título '$titulo' (esperado: 'Biblioteca: TICKER')." >&2
+            exit 1
+          fi
+          echo "ticker=$ticker" >> "$GITHUB_OUTPUT"
+
+      - name: Ticker novo da Issue -> lista mestra + processa na hora
+        if: github.event_name == 'issues'
+        env:
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m utils.biblioteca ticker-novo --ticker "${{ steps.ticker.outputs.ticker }}"
+
+      - name: Comentar e fechar a Issue com o resultado
+        if: always() && github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f utils/biblioteca_tickers.json ] && grep -q "\"${{ steps.ticker.outputs.ticker }}\"" utils/biblioteca_tickers.json; then
+            gh issue comment ${{ github.event.issue.number }} --body "Ticker \`${{ steps.ticker.outputs.ticker }}\` entrou na lista mestra (\`utils/biblioteca_tickers.json\`) e foi processado - ver o log da execução para o resultado (achou/não achou dado com fonte oficial)."
+          else
+            gh issue comment ${{ github.event.issue.number }} --body "Não consegui processar este ticker (ver o log da execução para o motivo). A Issue fica aberta."
+            exit 0
+          fi
+          gh issue close ${{ github.event.issue.number }}
+
+      - name: Rede de segurança - reprocessar a lista mestra inteira (schedule/manual)
+        if: github.event_name != 'issues'
+        env:
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -f utils/biblioteca_tickers.json ]; then
+            python -m utils.biblioteca atualizar --tickers utils/biblioteca_tickers.json --campo lpa_atual
+          else
+            echo "utils/biblioteca_tickers.json ainda não existe (nenhum ticker cadastrado pela Issue ainda)."
+          fi
+
+      - name: Gravar lista mestra (direto na main - mesmo padrão de guidance_tickers.json)
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git status --porcelain -- utils/biblioteca_tickers.json)" ]; then
+            echo "Lista mestra sem mudança."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add utils/biblioteca_tickers.json
+          git commit -m "Lista mestra da biblioteca: ticker(s) novo(s) ($(date -u +'%d/%m/%Y %H:%M') UTC)"
+          git fetch origin main
+          git rebase origin/main
+          git push origin HEAD:main
+
+      - name: Abrir/atualizar pull request da biblioteca (dados numéricos - REGRA 6, nunca direto na main)
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git status --porcelain -- utils/biblioteca.json)" ]; then
+            echo "Biblioteca sem mudança."
+            exit 0
+          fi
+          git fetch origin main
+          ramo="biblioteca/revisar"   # mesmo ramo do biblioteca-perplexity.yml - atualiza o PR aberto
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git stash --include-untracked || true
+          git checkout -B "$ramo" origin/main
+          git stash pop || true
+          git add utils/biblioteca.json
+          git commit -m "Biblioteca própria atualizada (ticker novo via Issue) - $(date -u +%d/%m/%Y)"
+          git push --force origin "$ramo"
+          gh pr create --base main --head "$ramo" \
+            --title "Biblioteca própria: revisar ($(date -u +%d/%m/%Y))" \
+            --body "Dados novos/confirmados pela Perplexity (fonte + data/hora em cada campo), com a API do Claude confirmando o número antes de salvar. Contábil é sempre o campo \`valor\`; \`valor_ajustado\` só aparece com a etiqueta [Ajustado]." \
+            || gh pr edit "$ramo" --body "Biblioteca própria atualizada de novo - revisar o diff."
