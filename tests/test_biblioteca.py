@@ -163,7 +163,7 @@ def test_pesquisar_via_perplexity_payload_e_resposta_da_agent_api(monkeypatch):
     resultado = bib.pesquisar_via_perplexity("BBAS3", "3T26")
 
     assert capturado["url"] == "https://api.perplexity.ai/v1/agent"
-    assert capturado["json"] == {"effort": "fast", "input": bib.montar_prompt_perplexity("BBAS3", "3T26")}
+    assert capturado["json"] == {"effort": bib.PERPLEXITY_EFFORT, "input": bib.montar_prompt_perplexity("BBAS3", "3T26")}
     assert capturado["headers"]["Authorization"] == "Bearer chave-de-teste"
     assert resultado["resposta"] == "LPA | 0,21 | 0,23 | RI, release 3T26, página 4 (SIMULADO)"
 

@@ -80,9 +80,15 @@ ARQ_BIBLIOTECA = RAIZ / "utils" / "biblioteca.json"
 DIAS_DESATUALIZADO = 120
 
 PERPLEXITY_URL = "https://api.perplexity.ai/v1/agent"
-# "sonar-pro" (Sonar Chat Completions, descontinuado) -> effort "fast" (Agent API) - mapeamento
-# explícito do guia oficial de migração (ver docstring do módulo).
-PERPLEXITY_EFFORT = "fast"
+# CORRIGIDO (27/11/2026, testado de verdade com BBAS3): o guia oficial de migração mapeia
+# "sonar-pro" -> effort "fast", mas "fast" é pra busca de fato único e não vasculhou o relatório de
+# desempenho oficial do BBAS3 a fundo o bastante pra achar a linha/página do LPA dentro do PDF -
+# achou que o documento existe, mas recusou completar por falta de página específica (correto, não
+# inventou nada, só não teve profundidade de busca). O guia recomenda "low" pra "multi-hop browsing
+# e agregação ampla em várias fontes", que é exatamente o caso de vasculhar um documento oficial -
+# testado e funcionou (ver CLAUDE.md). Fixado em "low" pra todo PROMPT_PADRAO deste módulo, já que
+# o uso dele é sempre esse tipo de busca em documento (nunca fato único rápido).
+PERPLEXITY_EFFORT = "low"
 PERPLEXITY_TIMEOUT = 60
 
 MODELO_CLAUDE = "claude-opus-5-5"
