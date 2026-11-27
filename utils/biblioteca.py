@@ -209,6 +209,18 @@ def pesquisar_via_perplexity(ticker: str, periodo: str, *, chamar=None) -> dict 
                     headers={"Authorization": f"Bearer {chave}", "Content-Type": "application/json"},
                     json={"model": PERPLEXITY_MODELO, "messages": [{"role": "user", "content": prompt_texto}]})
                 r.raise_for_status()
+            except requests.exceptions.HTTPError as e:
+                # loga o corpo da resposta de erro (nunca a chave, que só vai no header) - pra
+                # diagnosticar DE VERDADE um 401/403 (chave inválida/revogada/sem plano) em vez de
+                # só saber que "falhou", já que requests não inclui o corpo na mensagem da exceção.
+                corpo = ""
+                try:
+                    corpo = r.text[:500]
+                except Exception:  # noqa: BLE001
+                    pass
+                log.warning("biblioteca: Perplexity falhou (%s: %s) - corpo da resposta: %s",
+                           e.__class__.__name__, e, corpo)
+                return None
             except Exception as e:  # noqa: BLE001
                 log.warning("biblioteca: Perplexity falhou (%s: %s)", e.__class__.__name__, e)
                 return None
