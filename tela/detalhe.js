@@ -264,25 +264,46 @@ function montar(root, d) {
       // mínima de 12px das outras (de baixo pra cima), pra nunca uma cair bem em cima da outra
       // quando os valores são próximos (ex. Oportunidade 1 e 2) ou iguais (Neutro e Caro, que
       // descrevem o mesmo valor de dois lados)
-      // Faixa neutra e Faixa superior dividem o MESMO valor (zCara) - sempre foi 1 divisa só, nunca
-      // 2 valores diferentes. Desenhar 2 linhas nesse mesmo ponto (bug corrigido, auditoria 26/11/2026)
-      // empurrava a segunda 12px pra baixo (regra de afastar linhas próximas, logo abaixo), fazendo
-      // "Faixa superior" parecer visualmente ABAIXO de "Faixa neutra" - o contrário do que elas
-      // significam. Agora é 1 linha só, com o rótulo mostrando a faixa completa (não só o teto); se
-      // zOport e zCara derem o mesmo valor (zona neutra de largura zero), não repete o número 2x.
-      const divisaTxt = Math.abs(zOport - zCara) < 1e-9
-        ? `Faixa neutra / superior a partir de ${f(zCara)}`
-        : `Faixa neutra ${f(zOport)} a ${f(zCara)} · Faixa superior acima de ${f(zCara)}`;
+      // Bug original (auditoria 26/11/2026): "Faixa neutra até X" e "Faixa superior acima de X" eram
+      // 2 linhas DIFERENTES desenhadas na MESMA altura (y = Y(zCara), o mesmo valor) - a regra de
+      // afastar linhas próximas (abaixo) empurrava a segunda 12px pra baixo, fazendo "Faixa superior"
+      // parecer visualmente ABAIXO de "Faixa neutra", o contrário do que elas significam.
+      // Correção de verdade (não é só juntar o texto numa linha só): são 2 CONCEITOS diferentes,
+      // cada um na SUA PRÓPRIA linha, mas em ALTURAS diferentes - nunca na mesma posição:
+      // - "Faixa superior acima de X" fica na linha de zCara (é literalmente onde a zona superior
+      //   começa - um valor único, igual a qualquer outra linha do gráfico).
+      // - "Faixa neutra X a Y" (o INTERVALO inteiro, não só o teto) fica no MEIO da própria zona
+      //   neutra (ponto médio entre zOport e zCara) - ela não tem uma única "linha" de fronteira
+      //   própria (é delimitada por duas linhas que já existem: "Faixa inferior 1" embaixo e "Faixa
+      //   superior" em cima), então o texto fica solto no meio da faixa, não grudado numa fronteira -
+      //   isso também evita a confusão de antes (Faixa neutra aparecendo colada, ou implicando estar
+      //   só "acima" da Média 200d quando a MM200 está dentro da própria faixa neutra).
       const linhas = [
-        { y: Y(zCara), t: divisaTxt, v: '', c: '#f06a6a' },
+        { y: Y(zCara), t: 'Faixa superior acima de', v: f(zCara), c: '#f06a6a' },
+        { y: Y((zOport + zCara) / 2), t: 'Faixa neutra', v: `${f(zOport)} a ${f(zCara)}`, c: '#aab4c6' },
         ...(LPg ? [{ y: Y(LPg.bemAbaixoAte), t: 'Bem abaixo de', v: f(LPg.bemAbaixoAte), c: '#7aa2f7' }] : []),
         ...(tem(mm200Ref) ? [{ y: Y(mm200Ref), t: 'Média 200d', v: f(mm200Ref), c: '#f2994a' }] : []),
         { y: Y(zOport), t: 'Faixa inferior 1', v: f(zOport), c: '#2fbf8a' },
         ...(lim3aRef ? [{ y: Y(lim3aRef), t: 'Faixa inferior 2', v: f(lim3aRef), c: '#8fe3c4' }] : []),
         ...(lim5aRef ? [{ y: Y(lim5aRef), t: 'Faixa inferior 3', v: f(lim5aRef), c: '#1f9d72' }] : []),
       ];
+      // Folga mínima entre linhas (bug corrigido, 27/11/2026): 12px dava certo na conta mas não no
+      // texto de verdade - a fonte de 10.5px com textBaseline 'middle' ocupa ~13-14px de altura
+      // (ascendente a descendente), e em telas de celular (área do gráfico mais compacta, 280px de
+      // altura) 2 linhas próximas em valor (ex. Faixa inferior 2/3 da MU, 181,29 e 103,89) ficavam
+      // com só ~11px de distância real - a regra "passou" (>= 12px não disparava) mas o texto já
+      // sobrepunha visualmente. Testado com dados reais da MU (Playwright, viewport de celular):
+      // 16px e 20px ainda deixavam o texto colado; 24px foi o primeiro valor que separou de verdade.
+      const FOLGA_MIN_LINHA = 24;
       linhas.sort((a, b) => a.y - b.y);
-      linhas.forEach((r, k) => { if (k && r.y - linhas[k - 1].y < 12) r.y = linhas[k - 1].y + 12; });
+      linhas.forEach((r, k) => { if (k && r.y - linhas[k - 1].y < FOLGA_MIN_LINHA) r.y = linhas[k - 1].y + FOLGA_MIN_LINHA; });
+      // A cascata de afastar linhas só empurra pra baixo - com muitas linhas próximas (ex. PETR4:
+      // Faixa superior + Média 200d + Faixa neutra + Faixa inferior 1/2/3, 6 linhas competindo pelo
+      // mesmo espaço depois da Faixa neutra virar uma linha própria), a última podia passar do fundo
+      // da área visível (yPlot, onde o clip() abaixo corta) e sumir da tela sem aviso nenhum. Desloca
+      // TODAS as linhas pra cima juntas (mantém a distância entre elas) até a última caber.
+      const sobra = linhas.length ? linhas[linhas.length - 1].y - yPlot : 0;
+      if (sobra > 0) linhas.forEach(r => { r.y -= sobra; });
       ctx.textAlign = 'left'; ctx.font = '10.5px Inter, system-ui, sans-serif';
       linhas.forEach(r => {
         const texto = r.v ? `${r.t}    ${r.v}` : r.t;

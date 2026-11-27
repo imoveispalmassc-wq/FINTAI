@@ -439,14 +439,43 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   texto (nunca passa atrás dele, só do fim do texto até a borda direita) - cada uma na sua própria altura, com
   folga mínima de 12px das outras (de baixo pra cima), pra nunca uma cair bem em cima da outra quando os valores
   são próximos (ex. Oportunidade 1 e 2) ou iguais (Neutro e Caro, que descrevem o mesmo valor dos dois lados).
-  BUG CORRIGIDO (auditoria 26/11/2026): Neutro e Caro SEMPRE descrevem o mesmo valor (a mesma variável zCara) -
-  nunca 2 valores diferentes. Desenhar 2 linhas tracejadas nesse mesmo ponto ("Faixa neutra até X" e "Faixa
-  superior acima de X") fazia a regra de afastar linhas próximas (acima) empurrar a segunda 12px pra baixo,
-  deixando "Faixa superior" visualmente ABAIXO de "Faixa neutra" no gráfico - o contrário do que elas
-  significam, pra qualquer ticker (não só um caso específico). Agora é 1 linha só na divisa neutra/superior,
-  com o rótulo mostrando a faixa completa em vez de só o teto (ex. "Faixa neutra 29,87 a 55,48 · Faixa
-  superior acima de 55,48"); se a oportunidade e a divisa coincidirem no mesmo valor (zona neutra de largura
-  zero), o número não se repete ("Faixa neutra / superior a partir de X").
+  BUG CORRIGIDO (auditoria 26-27/11/2026, 3 rodadas até fechar de verdade): Neutro e Caro SEMPRE descrevem o
+  mesmo valor (a mesma variável zCara) - nunca 2 valores diferentes, mas eram 2 linhas tracejadas DIFERENTES
+  desenhadas na MESMA altura ("Faixa neutra até X" e "Faixa superior acima de X"), e a regra de afastar linhas
+  próximas empurrava a segunda pra baixo, fazendo "Faixa superior" parecer visualmente ABAIXO de "Faixa
+  neutra" - o contrário do que elas significam, pra qualquer ticker. CORREÇÃO FINAL (as 2 primeiras tentativas
+  foram rejeitadas - ver histórico abaixo): são 2 CONCEITOS, cada um na SUA PRÓPRIA linha, em ALTURAS
+  diferentes - nunca na mesma posição. "Faixa superior acima de X" fica na linha de zCara (vermelho, é
+  literalmente onde a zona superior começa). "Faixa neutra X a Y" (o INTERVALO completo, não só o teto) fica
+  no MEIO da própria zona neutra (ponto médio entre zOport e zCara, cinza `#aab4c6`) - ela não tem uma única
+  linha de fronteira própria (é delimitada por "Faixa inferior 1" embaixo e "Faixa superior" em cima, que já
+  existem), então o texto fica solto no meio da faixa, sem "/" juntando 2 conceitos na mesma linha.
+  HISTÓRICO DAS 2 TENTATIVAS REJEITADAS (documentado para não repetir o erro): 1ª tentativa mesclou as 2
+  linhas em 1 só com a faixa completa ("Faixa neutra Y a X · Faixa superior acima de X") na altura de zCara -
+  rejeitada porque, estando na altura do TETO, dava a impressão de que a Faixa neutra inteira ficava ACIMA da
+  Média 200d sempre que a MM200 estivesse DENTRO da própria faixa neutra (ex. MM200 776,48 dentro de
+  477,51-886,81). 2ª tentativa só trocou pra "Faixa neutra até / Faixa superior acima de X" (um "/" juntando
+  os 2 conceitos na mesma linha, só o teto) - rejeitada por ainda juntar 2 conceitos com "/" em vez de 2
+  linhas de verdade, e por não mostrar o intervalo completo da Faixa neutra como pedido originalmente.
+  3º BUG CORRIGIDO (mesma auditoria): adicionar "Faixa neutra" como uma linha própria (concorrendo por espaço
+  vertical com Faixa superior/Média 200d/Faixa inferior 1/2/3 - até 6 linhas no mesmo gráfico) podia empurrar
+  a última linha da cascata (ex. "Faixa inferior 3" do PETR4) pra baixo do limite visível do gráfico
+  (`yPlot`, onde o `ctx.clip()` corta) - ela sumia da tela sem nenhum aviso. Corrigido: depois de afastar as
+  linhas próximas, se a última ainda passar do limite visível, desloca TODAS pra cima juntas (mantém a
+  distância entre elas) até a última caber.
+  4º BUG CORRIGIDO (mesma auditoria): a folga mínima entre linhas (`FOLGA_MIN_LINHA`) era 12px, baseada só na
+  conta de distância entre os PONTOS das linhas - mas o texto de verdade (fonte 10.5px, `textBaseline:
+  'middle'`) ocupa mais altura que isso, e em celular (canvas de 280px, bem mais baixo que desktop) "Faixa
+  inferior 2" e "Faixa inferior 3" podem ficar a só ~11px uma da outra (ex.: limite3a/limite5a reais da MU,
+  181,29 e 103,89) - a regra "passou" (>= 12px não disparava o afastamento) mas o texto já aparecia colado/
+  ilegível. Testado com dados reais da MU e PETR4 (Playwright, viewport de celular, dados obtidos de
+  `calculos.calcular`+`tela.dados.montar` ao vivo, não um exemplo fixo): 16px e 20px ainda deixavam o texto
+  colado; 24px foi o primeiro valor testado que separa de verdade. `FOLGA_MIN_LINHA` subiu de 12 para 24.
+  NÃO É BUG (checado e descartado): um print de celular mostrou "103.89" com ponto em vez de vírgula - achado
+  que o texto de verdade desenhado no canvas (confirmado interceptando `fillText` via Playwright) É
+  "103,89", com vírgula; o "ponto" era só um artefato visual do ambiente de teste (a fonte Google "Inter" não
+  carrega sem rede, e a vírgula da fonte substituta fica difícil de distinguir de um ponto nesse tamanho de
+  fonte/zoom de print) - nunca existiu no código nem na tela de verdade.
   Sem a antiga linha
   "Média dos métodos ... não validado" (média do Conservador/P/L
   histórico/Bazin): tirada do gráfico por não ser validada e confundir com os cortes reais do valuation; os 3
