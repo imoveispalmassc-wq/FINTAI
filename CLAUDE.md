@@ -192,6 +192,32 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   travados em `test_periodo_atual_pede_o_trimestre_anterior_ao_calendario_de_hoje` (inclui a virada
   de ano, jan-mar -> 4º trimestre do ano anterior).
 
+  EFFORT "fast" NÃO VASCULHA DOCUMENTO O BASTANTE (27/11/2026, achado testando BBAS3 de verdade,
+  período já corrigido pra "3T26"): com `effort: "fast"` a Perplexity achou que o relatório de
+  desempenho do 3T26 existe, mas recusou completar o LPA porque a busca não trouxe a linha/página
+  específica dentro do documento - correto (não inventou nada), mas insuficiente. O guia oficial
+  recomenda `"fast"` pra "busca de fato único" e `"low"` pra "multi-hop browsing e agregação ampla
+  em várias fontes" - vasculhar um documento oficial atrás de uma linha específica é esse 2º caso.
+  `PERPLEXITY_EFFORT` mudado pra `"low"` (único uso deste módulo é o PROMPT_PADRAO, sempre esse
+  tipo de busca) - testado e achou o número certo (R$ 0,21 3T26 / R$ 0,53 3T25, batendo com o teste
+  manual anterior do usuário), com a fonte "Sumário do Resultado, p. 3".
+
+  FONTES: A AGENT API CITA MARCADOR, NÃO LINK (BUG CORRIGIDO, 27/11/2026, achado na mesma rodada):
+  mesmo achando o número certo com `effort: "low"`, a confirmação pela API do Claude continuava
+  recusando (`achou: false` vazio) - a Agent API cita fonte no TEXTO só como marcador ("[web:8]"),
+  não como link embutido (diferente do Sonar antigo) - a URL de verdade fica num item SEPARADO da
+  resposta (`output`, `type: "search_results"`, `results: [{"id", "url", "title", ...}]"), que
+  `pesquisar_via_perplexity` descartava por completo. Corrigido: `pesquisar_via_perplexity` agora
+  captura essa lista (`fontes_capturadas`) e devolve junto no dict (`resultado["fontes"]`);
+  `confirmar_com_claude` monta um bloco "FONTES (id -> título/URL de verdade)" e manda junto na
+  instrução, com a regra explícita de resolver o marcador "[web:N]"/"[N]" citado perto do número
+  numa URL REAL dessa lista - nunca inventar uma URL fora dela, nunca escrever o marcador cru no
+  campo `link`. A trava de link+página continua EXATAMENTE igual (não foi enfraquecida) - só passou
+  a receber o dado certo pra decidir. Testes travados em
+  `test_pesquisar_via_perplexity_payload_e_resposta_da_agent_api` (fontes capturadas do JSON cru),
+  `test_confirmar_com_claude_instrucao_inclui_as_fontes_pra_resolver_marcadores` e
+  `test_confirmar_com_claude_sem_fontes_capturadas_avisa_na_instrucao`.
+
 - `utils/divergencia.py` (Issue #48, item 9): quando um robô acha um número diferente do que já
   está salvo, ele mesmo abre uma Issue sozinho (`abrir_issue_divergencia`, API REST do GitHub com
   o `GITHUB_TOKEN` padrão do Actions - só precisa de "Issues: write" no mesmo repositório, nunca

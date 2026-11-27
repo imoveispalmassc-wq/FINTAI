@@ -215,10 +215,18 @@ def montar_prompt_perplexity(ticker: str, periodo: str) -> str:
 
 def pesquisar_via_perplexity(ticker: str, periodo: str, *, chamar=None) -> dict | None:
     """Pesquisa um dado fundamentalista pela Perplexity, com o PROMPT PADRÃO acima. Devolve
-    {"prompt": ..., "resposta": texto da tabela devolvida} ou None (sem PERPLEXITY_API_KEY, ou a
-    API falhou/não respondeu no formato esperado). Nunca inventa número: a resposta ainda precisa
-    passar por `confirmar_com_claude` antes de ser salva na biblioteca."""
+    {"prompt": ..., "resposta": texto da tabela devolvida, "fontes": [...]} ou None (sem
+    PERPLEXITY_API_KEY, ou a API falhou/não respondeu no formato esperado). Nunca inventa número:
+    a resposta ainda precisa passar por `confirmar_com_claude` antes de ser salva na biblioteca.
+
+    "fontes" (27/11/2026, achado testando BBAS3 de verdade): a Agent API cita fonte no TEXTO só
+    como marcador - "[web:8]", não o link de verdade - a URL real fica num item separado da
+    resposta, `output` com `type: "search_results"`, `results: [{"id", "url", "title", ...}]`. Sem
+    capturar essa lista e repassar pro Claude, ele não tem como resolver "[web:8]" numa URL de
+    verdade pra preencher `link` (ficava sempre achou:false, mesmo achando o número certo no
+    texto, porque não tinha como citar o link - ver CLAUDE.md)."""
     prompt = montar_prompt_perplexity(ticker, periodo)
+    fontes_capturadas: list[dict] = []
     if chamar is None:
         chave = os.environ.get("PERPLEXITY_API_KEY")
         if not chave:
@@ -249,6 +257,8 @@ def pesquisar_via_perplexity(ticker: str, periodo: str, *, chamar=None) -> dict 
                 log.warning("biblioteca: Perplexity falhou (%s: %s)", e.__class__.__name__, e)
                 return None
             try:
+                dados_resposta = r.json()
+                output = dados_resposta.get("output", [])
                 # Agent API: o texto vem no(s) item(ns) de "output" com type "message", em
                 # content[].text (type "output_text") - não existe mais choices[0].message.content
                 # (isso era só do Sonar Chat Completions, descontinuado - ver docstring do módulo).
@@ -256,7 +266,7 @@ def pesquisar_via_perplexity(ticker: str, periodo: str, *, chamar=None) -> dict 
                 # "response.output_text" conveniente do SDK oficial (não usamos o SDK, só `requests`).
                 partes = [
                     parte.get("text", "")
-                    for item in r.json().get("output", [])
+                    for item in output
                     if item.get("type") == "message"
                     for parte in item.get("content", [])
                     if parte.get("type") == "output_text"
@@ -265,11 +275,17 @@ def pesquisar_via_perplexity(ticker: str, periodo: str, *, chamar=None) -> dict 
                 if not texto:
                     log.warning("biblioteca: resposta da Perplexity sem texto de mensagem (output vazio ou sem 'message')")
                     return None
+                # captura as fontes de verdade (id -> url/título) pra resolver "[web:N]" do texto
+                # depois, na confirmação pela API do Claude - ver docstring da função.
+                fontes_capturadas.extend(
+                    {"id": res.get("id"), "url": res.get("url"), "title": res.get("title")}
+                    for item in output if item.get("type") == "search_results"
+                    for res in item.get("results", []))
                 # loga a resposta de verdade (truncada) - sem isso, um "não confirmado" da API do
                 # Claude não dá pra diagnosticar: não dá pra saber se a Perplexity não achou o dado,
                 # achou sem fonte oficial, ou achou certinho e foi a confirmação que travou à toa.
-                log.info("biblioteca: Perplexity respondeu (%d caracteres): %s",
-                        len(texto), texto[:800] + ("..." if len(texto) > 800 else ""))
+                log.info("biblioteca: Perplexity respondeu (%d caracteres, %d fontes): %s",
+                        len(texto), len(fontes_capturadas), texto[:800] + ("..." if len(texto) > 800 else ""))
                 return texto
             except (KeyError, IndexError, TypeError, ValueError, AttributeError):
                 log.warning("biblioteca: resposta da Perplexity fora do formato esperado")
@@ -277,7 +293,8 @@ def pesquisar_via_perplexity(ticker: str, periodo: str, *, chamar=None) -> dict 
     resposta = chamar(prompt)
     if not resposta:
         return None
-    return {"prompt": prompt, "resposta": resposta, "ticker": ticker, "periodo": periodo}
+    return {"prompt": prompt, "resposta": resposta, "ticker": ticker, "periodo": periodo,
+           "fontes": fontes_capturadas}
 
 
 ESQUEMA_CONFIRMACAO_CLAUDE = {
@@ -312,14 +329,22 @@ Regras:
   ajustado/non-GAAP, se o texto trouxer os dois separados; null se só trouxer um - NUNCA misture
   os dois no mesmo campo.
 - fonte: a fonte citada no texto (ex.: "RI, release 3T26").
-- link: a URL da fonte oficial citada no texto (ex.: "https://ri.bb.com.br/..."). Sem link na
-  resposta: achou = false.
-- pagina: a página/seção citada no texto (ex.: "página 4", "Exhibit 99.1"). Sem página na
-  resposta: achou = false.
+- link: a URL da fonte oficial. O texto costuma citar a fonte só como marcador, tipo "[web:8]" ou
+  "[8]" - esse número é o "id" na lista de FONTES abaixo (id -> título/URL de verdade). Ache, na
+  lista de FONTES, o id citado perto do número de {campo} que você está confirmando, e use a URL
+  DESSA fonte como `link` - NUNCA invente uma URL que não esteja na lista de FONTES, e nunca
+  escreva o marcador "[web:8]" no lugar da URL. Sem conseguir resolver o marcador numa URL da
+  lista (ou sem marcador nenhum no texto): achou = false.
+- pagina: a página/seção citada no texto (ex.: "página 4", "Sumário do Resultado, p. 3",
+  "Exhibit 99.1") - isso vem do PRÓPRIO TEXTO, não da lista de FONTES. Sem página na resposta:
+  achou = false.
 - trecho: copie EXATAMENTE a linha da tabela ou frase de onde tirou o número.
-- Sem um número de {campo} com fonte oficial + link + página no texto: achou = false e todos os
-  campos null/"" (nunca "Não divulgado" como se fosse um valor - isso é texto de exibição de quem
-  chama, não um dado desta função).
+- Sem um número de {campo} com fonte oficial + link (resolvido pela lista de FONTES) + página no
+  texto: achou = false e todos os campos null/"" (nunca "Não divulgado" como se fosse um valor -
+  isso é texto de exibição de quem chama, não um dado desta função).
+
+FONTES (id -> título/URL de verdade, pra resolver os marcadores "[web:N]"/"[N]" do texto):
+{fontes}
 
 Resposta da pesquisa:
 {resposta}"""
@@ -333,6 +358,9 @@ def confirmar_com_claude(resposta_perplexity: dict, ticker: str, campo: str, cha
     chave, API falhou, ou número sem fonte OFICIAL + link + página na resposta - REGRA TRAVADA
     27/11/2026: Perplexity só alimenta número com fonte oficial citada; sem isso, nunca salva)."""
     texto = (resposta_perplexity or {}).get("resposta", "")
+    fontes = (resposta_perplexity or {}).get("fontes") or []
+    fontes_texto = "\n".join(f"[{f.get('id')}] {f.get('title') or ''}: {f.get('url') or ''}" for f in fontes) \
+        if fontes else "(nenhuma fonte com URL capturada nesta pesquisa)"
     if chamar is None:
         if not os.environ.get("ANTHROPIC_API_KEY"):
             log.info("biblioteca: sem ANTHROPIC_API_KEY: confirmação pela API do Claude desligada")
@@ -355,7 +383,7 @@ def confirmar_com_claude(resposta_perplexity: dict, ticker: str, campo: str, cha
                 log.error("biblioteca: API do Claude não concluiu a confirmação (%s)", r.stop_reason)
                 return None
             return next((b.text for b in r.content if b.type == "text"), "")
-    bruto = chamar(INSTRUCAO_CONFIRMACAO_CLAUDE.format(ticker=ticker, campo=campo, resposta=texto))
+    bruto = chamar(INSTRUCAO_CONFIRMACAO_CLAUDE.format(ticker=ticker, campo=campo, resposta=texto, fontes=fontes_texto))
     if not bruto:
         return None
     try:

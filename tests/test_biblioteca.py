@@ -148,9 +148,12 @@ def test_pesquisar_via_perplexity_payload_e_resposta_da_agent_api(monkeypatch):
             return {
                 "id": "resp_teste", "object": "response", "status": "completed",
                 "output": [
-                    {"type": "search_results", "results": []},
+                    {"type": "search_results", "results": [
+                        {"id": 8, "url": "https://ri.bb.com.br/sumario-3t26", "title": "Sumário do Resultado 3T26"},
+                    ]},
                     {"id": "msg_teste", "type": "message", "role": "assistant", "status": "completed",
-                     "content": [{"type": "output_text", "text": "LPA | 0,21 | 0,23 | RI, release 3T26, página 4 (SIMULADO)",
+                     "content": [{"type": "output_text",
+                                 "text": "LPA | 0,21 | 0,23 | Sumário do Resultado, p. 3 [web:8] (SIMULADO)",
                                  "annotations": []}]},
                 ],
             }
@@ -165,7 +168,11 @@ def test_pesquisar_via_perplexity_payload_e_resposta_da_agent_api(monkeypatch):
     assert capturado["url"] == "https://api.perplexity.ai/v1/agent"
     assert capturado["json"] == {"effort": bib.PERPLEXITY_EFFORT, "input": bib.montar_prompt_perplexity("BBAS3", "3T26")}
     assert capturado["headers"]["Authorization"] == "Bearer chave-de-teste"
-    assert resultado["resposta"] == "LPA | 0,21 | 0,23 | RI, release 3T26, página 4 (SIMULADO)"
+    assert resultado["resposta"] == "LPA | 0,21 | 0,23 | Sumário do Resultado, p. 3 [web:8] (SIMULADO)"
+    # "fontes" (27/11/2026): a Agent API cita fonte no texto só como marcador ("[web:8]") - a URL de
+    # verdade vem num item separado ("search_results") que precisa ser capturado à parte, senão a
+    # confirmação pela API do Claude não tem como resolver o marcador numa URL real (ver CLAUDE.md).
+    assert resultado["fontes"] == [{"id": 8, "url": "https://ri.bb.com.br/sumario-3t26", "title": "Sumário do Resultado 3T26"}]
 
 
 def test_pesquisar_via_perplexity_erro_http_loga_corpo_e_devolve_none(monkeypatch, caplog):
@@ -242,6 +249,40 @@ def test_confirmar_com_claude_confirma_valor_com_trecho_na_resposta():
     confirmado = bib.confirmar_com_claude(resposta_perplexity, "BBAS3", "lpa_12m", chamar=lambda i: bruto)
     assert confirmado == {"valor": 0.21, "valor_ajustado": 0.23, "fonte": "RI, release 3T26, página 4",
                           "link": "https://ri.bb.com.br/release-3t26", "pagina": "página 4", "trecho": texto}
+
+
+def test_confirmar_com_claude_instrucao_inclui_as_fontes_pra_resolver_marcadores():
+    """27/11/2026: a Agent API cita fonte no texto só como marcador ("[web:8]") - a instrução
+    mandada pro Claude precisa incluir a lista de FONTES (id -> URL de verdade) capturada de
+    pesquisar_via_perplexity, senão ele não tem como resolver o marcador numa URL real."""
+    capturado = {}
+    resposta_perplexity = {
+        "resposta": "LPA | 0,21 | Sumário do Resultado, p. 3 [web:8]",
+        "fontes": [{"id": 8, "url": "https://ri.bb.com.br/sumario-3t26", "title": "Sumário do Resultado 3T26"}],
+    }
+    bruto = ('{"achou": true, "valor_contabil": 0.21, "valor_ajustado": null, "fonte": "RI", '
+            '"link": "https://ri.bb.com.br/sumario-3t26", "pagina": "página 3", '
+            '"trecho": "LPA | 0,21 | Sumário do Resultado, p. 3 [web:8]"}')
+
+    def chamar_mock(instrucao):
+        capturado["instrucao"] = instrucao
+        return bruto
+
+    confirmado = bib.confirmar_com_claude(resposta_perplexity, "BBAS3", "lpa_atual", chamar=chamar_mock)
+    assert "[8] Sumário do Resultado 3T26: https://ri.bb.com.br/sumario-3t26" in capturado["instrucao"]
+    assert confirmado["link"] == "https://ri.bb.com.br/sumario-3t26" and confirmado["pagina"] == "página 3"
+
+
+def test_confirmar_com_claude_sem_fontes_capturadas_avisa_na_instrucao():
+    capturado = {}
+    bruto = '{"achou": false, "valor_contabil": null, "valor_ajustado": null, "fonte": "", "link": "", "pagina": "", "trecho": ""}'
+
+    def chamar_mock(instrucao):
+        capturado["instrucao"] = instrucao
+        return bruto
+
+    bib.confirmar_com_claude({"resposta": "LPA [web:8]"}, "BBAS3", "lpa_atual", chamar=chamar_mock)
+    assert "(nenhuma fonte com URL capturada nesta pesquisa)" in capturado["instrucao"]
 
 
 def test_confirmar_com_claude_sem_link_nao_confirma():
