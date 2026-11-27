@@ -876,6 +876,14 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   execução, nunca derruba o app sem `.git` disponível) - mostra "Versão: branch@commit" no fim da
   página, pra comparar as 2 contas sem precisar dar acesso a ninguém. Branch antigo NÃO apagado:
   decisão do usuário, só depois de confirmar as 2 contas no mesmo commit do `main`.
+  ITEM 2 FECHADO (confirmado pelo usuário, não por esta sessão - sem acesso a nenhum painel
+  publicado): print do share.streamlit.io mostra só 1 app publicado (`fintai • main • app.py`) -
+  nenhum app em `refatora-sinais`, nenhum segundo deploy da conta antiga da imobiliária. Nunca
+  existiram "2 contas ativas" - só a conta certa (fintai.guidance@gmail.com) e um resquício de
+  configuração/lembrança da conta antiga, sem app publicado de verdade. A causa raiz real do
+  número errado que o usuário via era a combinação do branch `refatora-sinais` parado +
+  `yfinance` destravado (ambos corrigidos no PR #60) - não uma segunda implantação concorrente.
+  Nada foi apagado (branch `refatora-sinais` continua existindo, intacto).
 - **Ticker fixo no topo (item 3)**: `.topo` (nome + bolsa + preço, em `tela/detalhe.html`/`.css`/
   `.js`) agora é `position: sticky; top: 0` com fundo sólido e sombra/borda ao rolar (classe
   `.rolou`, alternada por um listener de `scroll` da própria janela) - o nome do ativo e o preço do
