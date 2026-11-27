@@ -96,25 +96,28 @@ def decidir_estado(percentil: float, minimo: float, maximo: float, *,
                    tendencia: str = "") -> Estado:
     """Decisão pela posição do preço na faixa de 52 semanas, igual para qualquer ativo.
 
-    - Preço <= Ponto de oportunidade (mínima + 30% da amplitude): COMPRAR - Oportunidade
-    - Preço entre o Ponto e o Fim da Neutra:                      AGUARDAR - Neutro
-    - Preço > Fim da Neutra (mínima + 70% da amplitude):          CARO - Evitar
+    - Preço <= Ponto de oportunidade (mínima + 30% da amplitude): COMPRAR, rótulo "Faixa inferior"
+    - Preço entre o Ponto e o Fim da Neutra:                      AGUARDAR, rótulo "Neutro"
+    - Preço > Fim da Neutra (mínima + 70% da amplitude):          CARO, rótulo "Faixa superior"
 
-    O texto é sempre o ponto de oportunidade calculado para o ativo. Os avisos (zona não
-    validada pelo histórico, fundamento quebrado) vão em `alerta` e não mudam o botão.
-    A posição numérica na faixa nunca aparece no texto.
+    `rotulo` nunca usa palavra de julgamento ("Oportunidade"/"Evitar") nem verbo de recomendação
+    ("AGUARDAR") - só o nome neutro da zona, pra nunca sugerir uma recomendação de compra/venda/
+    espera ao usuário (só `codigo`, interno, continua COMPRAR/AGUARDAR/CARO - usado pra cor/classe
+    CSS, nunca mostrado). O texto é sempre o limite da faixa inferior calculado para o ativo. Os
+    avisos (zona não validada pelo histórico, fundamento quebrado) vão em `alerta` e não mudam o
+    botão. A posição numérica na faixa nunca aparece no texto.
     """
     alvo = preco_no_percentil(minimo, maximo, P_OPORTUNIDADE)
-    texto = f"Ponto de oportunidade em {simbolo} {num(alvo)}"
+    texto = f"Faixa inferior até {simbolo} {num(alvo)}"
     avisos = [f"Atenção: {motivo_quebra}."] if quebrou and motivo_quebra else []
     if percentil <= P_OPORTUNIDADE:
         if not compra_validada:
             avisos.append("Comprar nessa zona não foi validado pelo histórico deste ativo.")
-        return Estado("COMPRAR", "COMPRAR - Oportunidade", texto, "Faixa inferior",
+        return Estado("COMPRAR", "Faixa inferior", texto, "Faixa inferior",
                       compra_validada, " ".join(avisos))
     if percentil > P_CARO:
-        return Estado("CARO", "CARO - Evitar", texto, "Faixa superior", False, " ".join(avisos))
-    return Estado("AGUARDAR", "AGUARDAR - Neutro", texto, "Zona neutra", False, " ".join(avisos))
+        return Estado("CARO", "Faixa superior", texto, "Faixa superior", False, " ".join(avisos))
+    return Estado("AGUARDAR", "Neutro", texto, "Zona neutra", False, " ".join(avisos))
 
 
 def decidir_estado_conservador(preco: float, teto: float, caro_acima: float | None = None, *,
@@ -122,22 +125,24 @@ def decidir_estado_conservador(preco: float, teto: float, caro_acima: float | No
     """Decisão do modo Conservador por valuation (Preço Teto = âncora de preço médio de 1 ano),
     não pela faixa de preço histórica de 52 semanas.
 
-    - Preço <= 70% da âncora (margem de segurança de 30%): COMPRAR - Oportunidade
+    - Preço <= 70% da âncora (margem de segurança de 30%): COMPRAR, rótulo "Faixa inferior"
     - Preço entre 70% da âncora e `caro_acima` (padrão: a própria âncora × 1,30 - zona
-      neutra alargada em 30% acima, pra não virar "Cara" só por passar um pouco do teto):
-      AGUARDAR - Neutro
-    - Preço > caro_acima:                                     CARO - Evitar
+      neutra alargada em 30% acima, pra não virar "Faixa superior" só por passar um pouco do teto):
+      AGUARDAR, rótulo "Neutro"
+    - Preço > caro_acima:                                     CARO, rótulo "Faixa superior"
 
-    Nunca validado por teste histórico (não existe backtest para este critério)."""
+    `rotulo` sem palavra de julgamento nem verbo de recomendação - mesma regra de `decidir_estado`
+    acima (`codigo` continua interno, só pra cor/classe CSS). Nunca validado por teste histórico
+    (não existe backtest para este critério)."""
     alvo = teto * 0.70
     caro_acima = teto * 1.30 if caro_acima is None else caro_acima
-    texto = f"Ponto de oportunidade em {simbolo} {num(alvo)}"
+    texto = f"Faixa inferior até {simbolo} {num(alvo)}"
     avisos = [f"Atenção: {motivo_quebra}."] if quebrou and motivo_quebra else []
     if preco <= alvo:
-        return Estado("COMPRAR", "COMPRAR - Oportunidade", texto, "Faixa inferior", False, " ".join(avisos))
+        return Estado("COMPRAR", "Faixa inferior", texto, "Faixa inferior", False, " ".join(avisos))
     if preco > caro_acima:
-        return Estado("CARO", "CARO - Evitar", texto, "Faixa superior", False, " ".join(avisos))
-    return Estado("AGUARDAR", "AGUARDAR - Neutro", texto, "Zona neutra", False, " ".join(avisos))
+        return Estado("CARO", "Faixa superior", texto, "Faixa superior", False, " ".join(avisos))
+    return Estado("AGUARDAR", "Neutro", texto, "Zona neutra", False, " ".join(avisos))
 
 
 # ------------------------------------------------------------ critérios de fundamentos
