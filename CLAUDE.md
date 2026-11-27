@@ -83,23 +83,29 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 
 ## Biblioteca própria (Perplexity) e divergência automática - Issue #48, itens 8 e 9
 
-- **DECISÃO TRAVADA (27/11/2026): Perplexity NÃO alimenta nenhum número da tela.** A chave
-  (`PERPLEXITY_API_KEY`) continua configurada nos Secrets do GitHub, mas o USO dela em cálculo foi
-  desligado por decisão do usuário - mesmo que `utils/biblioteca.py` (descrito abaixo) já exista e
-  tenha essa capacidade tecnicamente. Hoje ela já não alimenta nada mesmo na prática (confirmado em
-  27/11/2026 ao investigar um bug de "Sem dado" repetido no card "Lucro por ação" da B3: nenhuma
-  parte do app ou dos robôs que a tela lê chama `utils.biblioteca.obter()` - só o workflow
-  `biblioteca-perplexity.yml` grava um campo de exemplo, nunca lido de volta) - mas essa decisão
-  trava explicitamente que CONTINUE assim: nenhum número de LPA, Preço Teto, P/L ou qualquer
-  indicador mostrado na tela pode vir da Perplexity. Os números continuam SÓ Yahoo Finance (ou SEC/
-  CVM pros robôs de contábil/TTM) + `OVERRIDE` manual com fonte citada em `utils/override.py` - as
-  únicas fontes já documentadas no resto deste arquivo.
-  ÚNICO USO PERMITIDO da Perplexity (ainda não implementado - é trabalho futuro, não uma função já
-  existente): sugerir um LINK de fonte oficial (ex.: achar o release/Fato Relevante mais recente de
-  um ticker) pra um humano revisar e, se aprovar, cadastrar manualmente em `utils/override.py` -
-  nunca para preencher um número direto na tela ou em qualquer cache lido automaticamente. Ou seja,
-  a Perplexity pode no máximo virar uma FERRAMENTA DE BUSCA DE FONTE para quem mantém o `OVERRIDE`,
-  nunca uma fonte de dado ela mesma.
+- **REGRA TRAVADA (27/11/2026, revisada no mesmo dia): Perplexity só alimenta número com fonte
+  OFICIAL comprovada - nunca sem.** Decisão inicial do dia foi travar TOTALMENTE o uso da
+  Perplexity em cálculo; revisada horas depois porque a trava total jogava fora um caso que já
+  tinha sido testado manualmente e funcionou (BBAS3: LPA contábil 3T25 = 0,53 e 3T26 = 0,21, direto
+  do RI, com fonte). A regra final não é "nunca" nem "sempre" - é CONDICIONAL, e vale pra
+  `utils/biblioteca.py` (descrito abaixo) e pra qualquer uso futuro da Perplexity no projeto:
+  1. Só confirma um número vindo de fonte OFICIAL: RI da própria empresa, SEC EDGAR, CVM ou B3 -
+     nunca notícia, agregador de dados ou opinião de analista sem documento oficial por trás.
+  2. Sempre com LINK da fonte + PÁGINA/seção onde o número aparece - sem os dois, não confirma
+     (`confirmar_com_claude`/`ESQUEMA_CONFIRMACAO_CLAUDE` exigem `link` e `pagina` como campos
+     obrigatórios; achou=true sem eles é descartado, nunca salvo).
+  3. Contábil e Ajustado SEMPRE em colunas/campos separados (`valor`/`valor_ajustado`), nunca
+     misturados - REGRA 1 do TTM já documentada abaixo (contábil é sempre o principal).
+  4. Grava sempre com dado + fonte + link + data/hora (`salvar_na_biblioteca`). Sem fonte oficial
+     comprovada (link + página), NÃO salva e NÃO mostra número - quem lê a biblioteca mostra "Não
+     divulgado" (texto de exibição de quem chama; a função em si só devolve `None`, nunca inventa
+     um texto de erro como se fosse um dado).
+  Testes travados: `tests/test_biblioteca.py::test_confirmar_com_claude_sem_link_nao_confirma` e
+  `::test_confirmar_com_claude_sem_pagina_nao_confirma`.
+  A chave (`PERPLEXITY_API_KEY`) continua configurada nos Secrets do GitHub. Hoje (27/11/2026) a
+  biblioteca ainda não é lida por nenhuma parte da tela que o usuário vê (confirmado ao investigar
+  um bug de "Sem dado" repetido no card "Lucro por ação" da B3 - ver mais abaixo) - essa regra vale
+  pra quando ela passar a ser lida, e pro próprio workflow que já a alimenta.
 - `utils/biblioteca.py` é um cache novo e genérico para qualquer dado fundamentalista pesquisado
   (LPA, lucro, dividendo, ROE etc.) - `utils/biblioteca.json`, no MESMO padrão dos outros caches
   do projeto (`contabil_br.json`/`contabil_sec.json`: ticker -> campo -> registro com valor, fonte
@@ -131,18 +137,86 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   processado pelo workflow é só um exemplo (`lpa_atual`) - a função `obter`/`atualizar_tickers` é
   genérica para qualquer campo; cada indicador novo que passar a usar este módulo (app ou outro
   robô) só precisa chamar `obter(ticker, campo, periodo, hoje)` com o seu próprio `buscar_externo`.
+  `--ticker TICKER` (CLI) / input `ticker` (workflow_dispatch), acrescentado 27/11/2026: roda só
+  esse 1 ticker da lista, em vez de todos - usado pra testar um ticker isolado (ex.: "Run workflow"
+  manual com `ticker: BBAS3`) sem gastar chamada de API nos outros 18, e é a mesma peça que um
+  gatilho por Issue/fila (ainda NÃO implementado - fica pra outra mudança) vai precisar pra rodar
+  só o ticker daquela Issue, no mesmo padrão já usado em `fila-tickers.yml`/`processar_fila`.
 
-  LIMITAÇÃO CONHECIDA (ambiente de desenvolvimento desta issue): não foi possível testar a chamada
-  real à `api.perplexity.ai` neste ambiente - o proxy de rede do agente não libera esse host (só
-  os hosts explicitamente permitidos). A chave (`PERPLEXITY_API_KEY`, já salva nos Secrets do
-  GitHub) nunca aparece no código, só em `os.environ.get("PERPLEXITY_API_KEY")`; o endpoint
-  (`POST https://api.perplexity.ai/chat/completions`, corpo OpenAI-compatível com `model` +
-  `messages`, modelo `sonar-pro`) segue a documentação pública da Perplexity, mas a validação de
-  ponta a ponta (chave real, resposta real) só é possível em produção/Actions, com o Secret
-  configurado. Por isso os testes (`tests/test_biblioteca.py`) usam um `chamar`/`chamar_perplexity`/
-  `chamar_claude` injetável com respostas SIMULADAS, claramente marcadas como mock no próprio
-  teste (ex.: comentário "MOCK CLARAMENTE DOCUMENTADO", texto com "(SIMULADO)") - nenhuma chamada
-  de rede de verdade é feita nos testes, e nenhum dado simulado é tratado como se fosse real.
+  MIGRAÇÃO PARA A AGENT API (27/11/2026, REGRA TRAVADA): o endpoint antigo (`POST
+  /chat/completions`, corpo `{"model": "sonar-pro", "messages": [...]}`) foi DESCONTINUADO pela
+  Perplexity em 27/09/2026 ("Sonar Chat Completions support ended") - só descoberto rodando de
+  verdade em produção/Actions pra BBAS3 (403 `chat_completions_not_available`, pedindo a migração;
+  o corpo da resposta de erro só aparecia no log depois de um ajuste pra logar esse corpo, que não
+  existia antes). Lido o guia oficial de migração (nunca adivinhado -
+  https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview e .../how-to, liberados no
+  allowlist de rede desta sessão pra isso) e migrado pra: endpoint `POST
+  https://api.perplexity.ai/v1/agent` (o nome do método no SDK oficial é `responses.create()`, mas
+  o caminho REST de verdade, confirmado nos exemplos `curl` da própria doc, é `/v1/agent` - não
+  `/v1/responses`, que só aparecia na mensagem de erro porque é o nome do recurso lógico, não o
+  caminho); corpo `{"effort": "fast", "input": "<prompt>"}` em vez de `model`+`messages` - a doc
+  mapeia explicitamente `sonar-pro` → effort `"fast"`; resposta: array `output`, texto no(s)
+  item(ns) `"type": "message"` → `content[].text` (`type: "output_text"`), concatenados. A chave
+  (`PERPLEXITY_API_KEY`, nos Secrets do GitHub) nunca aparece no código, só em
+  `os.environ.get("PERPLEXITY_API_KEY")`. Nenhuma outra parte do módulo mudou com a migração
+  (prompt, confirmação pela API do Claude, regra de link+página): a citação de fonte/página
+  continua vindo de DENTRO do texto gerado (pedida no próprio PROMPT_PADRAO), não de um campo
+  estruturado da API. LIMITAÇÃO CONHECIDA (ambiente de desenvolvimento desta issue): a validação de
+  ponta a ponta da Agent API nova (chave real, resposta real pra um ticker) só é possível em
+  produção/Actions, com o Secret configurado - esta sandbox não bate em `api.perplexity.ai`. Por
+  isso os testes (`tests/test_biblioteca.py`) usam um `chamar`/`chamar_perplexity`/`chamar_claude`
+  injetável com respostas SIMULADAS, claramente marcadas como mock no próprio teste (ex.: comentário
+  "MOCK CLARAMENTE DOCUMENTADO", texto com "(SIMULADO)") - nenhuma chamada de rede de verdade é
+  feita nos testes, e nenhum dado simulado é tratado como se fosse real. 3 testes à parte
+  (`test_pesquisar_via_perplexity_payload_e_resposta_da_agent_api`,
+  `..._erro_http_loga_corpo_e_devolve_none`, `..._output_sem_mensagem_devolve_none`) testam a
+  função `chamar` REAL (não injetada) via `monkeypatch` de `requests.post` - confirmam o payload e
+  o parsing da resposta da Agent API sem bater na rede, já que os testes que usam `chamar=`
+  injetado não exercitam esse trecho do código.
+  LOG DETALHADO (27/11/2026): `pesquisar_via_perplexity` loga a resposta de verdade (truncada a 800
+  caracteres) e `confirmar_com_claude` loga o JSON completo da decisão quando não confirma (achou,
+  valor_contabil, fonte, link, pagina, trecho) - sem isso, um "não confirmado" só dizia o nome do
+  ticker/campo, sem dar pra saber SE o motivo foi a Perplexity não achar nada, achar sem fonte
+  oficial, ou a trava de link+página barrando à toa.
+  BUG CORRIGIDO - `_periodo_atual` pedia o trimestre ERRADO (27/11/2026, achado testando BBAS3 de
+  verdade pela primeira vez, já com crédito pago liberado na Perplexity): pedia o trimestre
+  CALENDÁRIO em que `hoje` cai (27/11/2026 -> "4T26") - mas o 4T26 do Banco do Brasil só sai em
+  10/02/2027, então a Perplexity corretamente respondia "Não divulgado" pra tudo e a API do Claude
+  corretamente recusava confirmar (`achou: false`) - nem chegava na trava de link+página, travava
+  antes. Corrigido pra sempre pedir o trimestre ANTERIOR ao calendário de hoje (27/11/2026 ->
+  "3T26") - sem inventar uma data de divulgação por empresa (não existe calendário de divulgação
+  genérico no projeto): um trimestre corrente nunca está divulgado assim que o calendário vira a
+  página (a divulgação leva semanas depois do fim do trimestre), então o trimestre ANTERIOR é o
+  único com chance real de já ter sido divulgado. Ainda pode vir "Não divulgado" pra empresas
+  atrasadas - a Perplexity/API do Claude continuam livres pra dizer isso, nunca inventam. Testes
+  travados em `test_periodo_atual_pede_o_trimestre_anterior_ao_calendario_de_hoje` (inclui a virada
+  de ano, jan-mar -> 4º trimestre do ano anterior).
+
+  EFFORT "fast" NÃO VASCULHA DOCUMENTO O BASTANTE (27/11/2026, achado testando BBAS3 de verdade,
+  período já corrigido pra "3T26"): com `effort: "fast"` a Perplexity achou que o relatório de
+  desempenho do 3T26 existe, mas recusou completar o LPA porque a busca não trouxe a linha/página
+  específica dentro do documento - correto (não inventou nada), mas insuficiente. O guia oficial
+  recomenda `"fast"` pra "busca de fato único" e `"low"` pra "multi-hop browsing e agregação ampla
+  em várias fontes" - vasculhar um documento oficial atrás de uma linha específica é esse 2º caso.
+  `PERPLEXITY_EFFORT` mudado pra `"low"` (único uso deste módulo é o PROMPT_PADRAO, sempre esse
+  tipo de busca) - testado e achou o número certo (R$ 0,21 3T26 / R$ 0,53 3T25, batendo com o teste
+  manual anterior do usuário), com a fonte "Sumário do Resultado, p. 3".
+
+  FONTES: A AGENT API CITA MARCADOR, NÃO LINK (BUG CORRIGIDO, 27/11/2026, achado na mesma rodada):
+  mesmo achando o número certo com `effort: "low"`, a confirmação pela API do Claude continuava
+  recusando (`achou: false` vazio) - a Agent API cita fonte no TEXTO só como marcador ("[web:8]"),
+  não como link embutido (diferente do Sonar antigo) - a URL de verdade fica num item SEPARADO da
+  resposta (`output`, `type: "search_results"`, `results: [{"id", "url", "title", ...}]"), que
+  `pesquisar_via_perplexity` descartava por completo. Corrigido: `pesquisar_via_perplexity` agora
+  captura essa lista (`fontes_capturadas`) e devolve junto no dict (`resultado["fontes"]`);
+  `confirmar_com_claude` monta um bloco "FONTES (id -> título/URL de verdade)" e manda junto na
+  instrução, com a regra explícita de resolver o marcador "[web:N]"/"[N]" citado perto do número
+  numa URL REAL dessa lista - nunca inventar uma URL fora dela, nunca escrever o marcador cru no
+  campo `link`. A trava de link+página continua EXATAMENTE igual (não foi enfraquecida) - só passou
+  a receber o dado certo pra decidir. Testes travados em
+  `test_pesquisar_via_perplexity_payload_e_resposta_da_agent_api` (fontes capturadas do JSON cru),
+  `test_confirmar_com_claude_instrucao_inclui_as_fontes_pra_resolver_marcadores` e
+  `test_confirmar_com_claude_sem_fontes_capturadas_avisa_na_instrucao`.
 
 - `utils/divergencia.py` (Issue #48, item 9): quando um robô acha um número diferente do que já
   está salvo, ele mesmo abre uma Issue sozinho (`abrir_issue_divergencia`, API REST do GitHub com

@@ -38,13 +38,29 @@ módulo) - sem travar a gravação na biblioteca se a Issue não puder ser abert
 GITHUB_TOKEN em execução local): o dado novo sempre é salvo, o aviso de divergência é só um
 "melhor esforço" por cima.
 
-LIMITAÇÃO CONHECIDA (ver PR da Issue #48): não foi possível testar a chamada real à
-api.perplexity.ai neste ambiente de desenvolvimento - o proxy de rede do agente não libera esse
-host (só hosts explicitamente permitidos). A chave (`PERPLEXITY_API_KEY`, já salva nos Secrets do
-GitHub) e o formato da chamada (`POST https://api.perplexity.ai/chat/completions`, corpo
-OpenAI-compatível com `model` + `messages`) seguem a documentação pública da Perplexity, mas a
-validação de ponta a ponta só é possível em produção/Actions, com o Secret configurado. Por isso
-os testes deste módulo usam um `chamar`/`sessao` injetável com respostas SIMULADAS, claramente
+MIGRAÇÃO PARA A AGENT API (27/11/2026): o endpoint antigo (`POST /chat/completions`, corpo
+`{"model": "sonar-pro", "messages": [...]}`) foi descontinuado pela Perplexity em 27/09/2026 (Sonar
+Chat Completions support ended) - testado em produção/Actions nesse dia, voltou 403
+`chat_completions_not_available` pedindo a migração. Lido o guia oficial de migração
+(https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview e .../how-to, nunca
+adivinhado): endpoint novo `POST https://api.perplexity.ai/v1/agent` (o nome do método no SDK
+oficial é `responses.create()`, mas o caminho REST de verdade, confirmado nos exemplos `curl` da
+própria doc, é `/v1/agent` - não `/v1/responses`); corpo `{"effort": "fast", "input": "<prompt>"}`
+em vez de `{"model": "sonar-pro", "messages": [...]}` - a doc mapeia explicitamente
+`sonar-pro` → effort `"fast"` ("Starting points we suggest"); busca na web já vem ligada por padrão
+nesse nível de esforço, sem precisar declarar `tools` explicitamente. Resposta: array `output`,
+texto no(s) item(ns) com `"type": "message"` → `content[].text` (com `type: "output_text"`) -
+concatenados, caso venha mais de um item de mensagem. `pesquisar_via_perplexity` devolve o texto
+concatenado, do mesmo jeito que devolvia `choices[0].message.content` antes - nenhuma outra parte
+do módulo (prompt, confirmação pela API do Claude, regra de link+página) precisou mudar, porque a
+citação de fonte/página continua vindo de DENTRO do texto gerado (pedida no próprio
+PROMPT_PADRAO), não de um campo estruturado da API.
+
+LIMITAÇÃO CONHECIDA (ambiente de desenvolvimento desta issue): esta sandbox não tinha
+`api.perplexity.ai` liberado até ser testado em produção/Actions (que tem rede irrestrita) - por
+isso o 403 acima só apareceu rodando de verdade no GitHub Actions, não aqui. A validação de ponta a
+ponta da Agent API nova (chave real, resposta real) também só é possível em produção/Actions. Por
+isso os testes deste módulo usam um `chamar`/`sessao` injetável com respostas SIMULADAS, claramente
 marcadas como mock no próprio teste - nenhuma chamada de rede de verdade é feita aqui, e nenhum
 dado "simulado" é tratado como se fosse um dado real.
 """
@@ -63,8 +79,16 @@ ARQ_BIBLIOTECA = RAIZ / "utils" / "biblioteca.json"
 # IDADE_MAXIMA_DIAS do guidance automático (utils/fetch_guidance.py), em vez de inventar um limite novo.
 DIAS_DESATUALIZADO = 120
 
-PERPLEXITY_URL = "https://api.perplexity.ai/chat/completions"
-PERPLEXITY_MODELO = "sonar-pro"
+PERPLEXITY_URL = "https://api.perplexity.ai/v1/agent"
+# CORRIGIDO (27/11/2026, testado de verdade com BBAS3): o guia oficial de migração mapeia
+# "sonar-pro" -> effort "fast", mas "fast" é pra busca de fato único e não vasculhou o relatório de
+# desempenho oficial do BBAS3 a fundo o bastante pra achar a linha/página do LPA dentro do PDF -
+# achou que o documento existe, mas recusou completar por falta de página específica (correto, não
+# inventou nada, só não teve profundidade de busca). O guia recomenda "low" pra "multi-hop browsing
+# e agregação ampla em várias fontes", que é exatamente o caso de vasculhar um documento oficial -
+# testado e funcionou (ver CLAUDE.md). Fixado em "low" pra todo PROMPT_PADRAO deste módulo, já que
+# o uso dele é sempre esse tipo de busca em documento (nunca fato único rápido).
+PERPLEXITY_EFFORT = "low"
 PERPLEXITY_TIMEOUT = 60
 
 MODELO_CLAUDE = "claude-opus-5-5"
@@ -118,6 +142,7 @@ def buscar_na_biblioteca(ticker: str, campo: str, hoje: dt.date | None = None, *
 
 def salvar_na_biblioteca(ticker: str, campo: str, valor, fonte: str, data_hora: str | None = None, *,
                          valor_ajustado=None, trimestre: str | None = None, link: str | None = None,
+                         pagina: str | None = None,
                          dados: dict | None = None, caminho: Path = ARQ_BIBLIOTECA, gravar=None,
                          avisar_divergencia: bool = True, abrir_issue=None) -> dict:
     """Grava `valor` (SEMPRE o contábil - REGRA TRAVADA) + fonte + data/hora na biblioteca, com
@@ -140,6 +165,8 @@ def salvar_na_biblioteca(ticker: str, campo: str, valor, fonte: str, data_hora: 
         registro["trimestre"] = trimestre
     if link:
         registro["link"] = link
+    if pagina:
+        registro["pagina"] = pagina
 
     anterior = (dados.get(ticker) or {}).get(campo)
     dados.setdefault(ticker, {})[campo] = registro
@@ -188,10 +215,18 @@ def montar_prompt_perplexity(ticker: str, periodo: str) -> str:
 
 def pesquisar_via_perplexity(ticker: str, periodo: str, *, chamar=None) -> dict | None:
     """Pesquisa um dado fundamentalista pela Perplexity, com o PROMPT PADRÃO acima. Devolve
-    {"prompt": ..., "resposta": texto da tabela devolvida} ou None (sem PERPLEXITY_API_KEY, ou a
-    API falhou/não respondeu no formato esperado). Nunca inventa número: a resposta ainda precisa
-    passar por `confirmar_com_claude` antes de ser salva na biblioteca."""
+    {"prompt": ..., "resposta": texto da tabela devolvida, "fontes": [...]} ou None (sem
+    PERPLEXITY_API_KEY, ou a API falhou/não respondeu no formato esperado). Nunca inventa número:
+    a resposta ainda precisa passar por `confirmar_com_claude` antes de ser salva na biblioteca.
+
+    "fontes" (27/11/2026, achado testando BBAS3 de verdade): a Agent API cita fonte no TEXTO só
+    como marcador - "[web:8]", não o link de verdade - a URL real fica num item separado da
+    resposta, `output` com `type: "search_results"`, `results: [{"id", "url", "title", ...}]`. Sem
+    capturar essa lista e repassar pro Claude, ele não tem como resolver "[web:8]" numa URL de
+    verdade pra preencher `link` (ficava sempre achou:false, mesmo achando o número certo no
+    texto, porque não tinha como citar o link - ver CLAUDE.md)."""
     prompt = montar_prompt_perplexity(ticker, periodo)
+    fontes_capturadas: list[dict] = []
     if chamar is None:
         chave = os.environ.get("PERPLEXITY_API_KEY")
         if not chave:
@@ -204,20 +239,62 @@ def pesquisar_via_perplexity(ticker: str, periodo: str, *, chamar=None) -> dict 
                 r = requests.post(
                     PERPLEXITY_URL, timeout=PERPLEXITY_TIMEOUT,
                     headers={"Authorization": f"Bearer {chave}", "Content-Type": "application/json"},
-                    json={"model": PERPLEXITY_MODELO, "messages": [{"role": "user", "content": prompt_texto}]})
+                    json={"effort": PERPLEXITY_EFFORT, "input": prompt_texto})
                 r.raise_for_status()
+            except requests.exceptions.HTTPError as e:
+                # loga o corpo da resposta de erro (nunca a chave, que só vai no header) - pra
+                # diagnosticar DE VERDADE um 401/403 (chave inválida/revogada/sem plano) em vez de
+                # só saber que "falhou", já que requests não inclui o corpo na mensagem da exceção.
+                corpo = ""
+                try:
+                    corpo = r.text[:500]
+                except Exception:  # noqa: BLE001
+                    pass
+                log.warning("biblioteca: Perplexity falhou (%s: %s) - corpo da resposta: %s",
+                           e.__class__.__name__, e, corpo)
+                return None
             except Exception as e:  # noqa: BLE001
                 log.warning("biblioteca: Perplexity falhou (%s: %s)", e.__class__.__name__, e)
                 return None
             try:
-                return r.json()["choices"][0]["message"]["content"]
-            except (KeyError, IndexError, TypeError, ValueError):
+                dados_resposta = r.json()
+                output = dados_resposta.get("output", [])
+                # Agent API: o texto vem no(s) item(ns) de "output" com type "message", em
+                # content[].text (type "output_text") - não existe mais choices[0].message.content
+                # (isso era só do Sonar Chat Completions, descontinuado - ver docstring do módulo).
+                # Concatena se vier mais de um item de mensagem/parte de texto, igual ao
+                # "response.output_text" conveniente do SDK oficial (não usamos o SDK, só `requests`).
+                partes = [
+                    parte.get("text", "")
+                    for item in output
+                    if item.get("type") == "message"
+                    for parte in item.get("content", [])
+                    if parte.get("type") == "output_text"
+                ]
+                texto = "".join(partes)
+                if not texto:
+                    log.warning("biblioteca: resposta da Perplexity sem texto de mensagem (output vazio ou sem 'message')")
+                    return None
+                # captura as fontes de verdade (id -> url/título) pra resolver "[web:N]" do texto
+                # depois, na confirmação pela API do Claude - ver docstring da função.
+                fontes_capturadas.extend(
+                    {"id": res.get("id"), "url": res.get("url"), "title": res.get("title")}
+                    for item in output if item.get("type") == "search_results"
+                    for res in item.get("results", []))
+                # loga a resposta de verdade (truncada) - sem isso, um "não confirmado" da API do
+                # Claude não dá pra diagnosticar: não dá pra saber se a Perplexity não achou o dado,
+                # achou sem fonte oficial, ou achou certinho e foi a confirmação que travou à toa.
+                log.info("biblioteca: Perplexity respondeu (%d caracteres, %d fontes): %s",
+                        len(texto), len(fontes_capturadas), texto[:800] + ("..." if len(texto) > 800 else ""))
+                return texto
+            except (KeyError, IndexError, TypeError, ValueError, AttributeError):
                 log.warning("biblioteca: resposta da Perplexity fora do formato esperado")
                 return None
     resposta = chamar(prompt)
     if not resposta:
         return None
-    return {"prompt": prompt, "resposta": resposta, "ticker": ticker, "periodo": periodo}
+    return {"prompt": prompt, "resposta": resposta, "ticker": ticker, "periodo": periodo,
+           "fontes": fontes_capturadas}
 
 
 ESQUEMA_CONFIRMACAO_CLAUDE = {
@@ -227,9 +304,11 @@ ESQUEMA_CONFIRMACAO_CLAUDE = {
         "valor_contabil": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "valor_ajustado": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "fonte": {"type": "string"},
+        "link": {"type": "string"},
+        "pagina": {"type": "string"},
         "trecho": {"type": "string"},
     },
-    "required": ["achou", "valor_contabil", "valor_ajustado", "fonte", "trecho"],
+    "required": ["achou", "valor_contabil", "valor_ajustado", "fonte", "link", "pagina", "trecho"],
     "additionalProperties": False,
 }
 
@@ -237,13 +316,35 @@ INSTRUCAO_CONFIRMACAO_CLAUDE = """Você recebe a resposta de uma pesquisa (Perpl
 Sua única tarefa é CONFIRMAR ou CORRIGIR o número de {campo} que já está nessa resposta - nunca
 invente ou calcule um número que não esteja escrito no texto.
 
+REGRA TRAVADA (27/11/2026): só confirma um número de FONTE OFICIAL - RI da própria empresa, SEC
+EDGAR, CVM ou B3. Sem fonte oficial (ex.: notícia de jornal, agregador de dados, opinião de
+analista sem documento oficial por trás), ou sem link + página dessa fonte: achou = false, mesmo
+que o texto tenha um número - nunca confirma um número sem conseguir apontar o link e a página de
+onde ele saiu.
+
 Regras:
-- achou = true só se o texto tiver um número de {campo} com fonte citada (RI, SEC, Earnings).
+- achou = true só se o texto tiver um número de {campo} com fonte OFICIAL citada (RI/SEC/CVM/B3),
+  E com link da fonte, E com a página/seção onde o número aparece.
 - valor_contabil: o número CONTÁBIL/GAAP (nunca o ajustado) de {campo}. valor_ajustado: o número
-  ajustado/non-GAAP, se o texto trouxer os dois separados; null se só trouxer um.
-- fonte: a fonte citada no texto (ex.: "RI, release 3T26, página 4").
+  ajustado/non-GAAP, se o texto trouxer os dois separados; null se só trouxer um - NUNCA misture
+  os dois no mesmo campo.
+- fonte: a fonte citada no texto (ex.: "RI, release 3T26").
+- link: a URL da fonte oficial. O texto costuma citar a fonte só como marcador, tipo "[web:8]" ou
+  "[8]" - esse número é o "id" na lista de FONTES abaixo (id -> título/URL de verdade). Ache, na
+  lista de FONTES, o id citado perto do número de {campo} que você está confirmando, e use a URL
+  DESSA fonte como `link` - NUNCA invente uma URL que não esteja na lista de FONTES, e nunca
+  escreva o marcador "[web:8]" no lugar da URL. Sem conseguir resolver o marcador numa URL da
+  lista (ou sem marcador nenhum no texto): achou = false.
+- pagina: a página/seção citada no texto (ex.: "página 4", "Sumário do Resultado, p. 3",
+  "Exhibit 99.1") - isso vem do PRÓPRIO TEXTO, não da lista de FONTES. Sem página na resposta:
+  achou = false.
 - trecho: copie EXATAMENTE a linha da tabela ou frase de onde tirou o número.
-- Sem um número de {campo} com fonte no texto: achou = false e todos os campos null/"".
+- Sem um número de {campo} com fonte oficial + link (resolvido pela lista de FONTES) + página no
+  texto: achou = false e todos os campos null/"" (nunca "Não divulgado" como se fosse um valor -
+  isso é texto de exibição de quem chama, não um dado desta função).
+
+FONTES (id -> título/URL de verdade, pra resolver os marcadores "[web:N]"/"[N]" do texto):
+{fontes}
 
 Resposta da pesquisa:
 {resposta}"""
@@ -253,9 +354,13 @@ def confirmar_com_claude(resposta_perplexity: dict, ticker: str, campo: str, cha
     """2ª camada (mesma regra de confiança baixa do guidance automático): a API do Claude só
     confirma/corrige o {campo} que a Perplexity já trouxe com fonte, dentro do próprio texto
     devolvido - nunca calcula ou estima um valor por conta própria. Devolve
-    {"valor", "valor_ajustado", "fonte", "trecho"} ou None (sem confiança, sem chave, API falhou,
-    ou número ausente / sem fonte na resposta)."""
+    {"valor", "valor_ajustado", "fonte", "link", "pagina", "trecho"} ou None (sem confiança, sem
+    chave, API falhou, ou número sem fonte OFICIAL + link + página na resposta - REGRA TRAVADA
+    27/11/2026: Perplexity só alimenta número com fonte oficial citada; sem isso, nunca salva)."""
     texto = (resposta_perplexity or {}).get("resposta", "")
+    fontes = (resposta_perplexity or {}).get("fontes") or []
+    fontes_texto = "\n".join(f"[{f.get('id')}] {f.get('title') or ''}: {f.get('url') or ''}" for f in fontes) \
+        if fontes else "(nenhuma fonte com URL capturada nesta pesquisa)"
     if chamar is None:
         if not os.environ.get("ANTHROPIC_API_KEY"):
             log.info("biblioteca: sem ANTHROPIC_API_KEY: confirmação pela API do Claude desligada")
@@ -278,7 +383,7 @@ def confirmar_com_claude(resposta_perplexity: dict, ticker: str, campo: str, cha
                 log.error("biblioteca: API do Claude não concluiu a confirmação (%s)", r.stop_reason)
                 return None
             return next((b.text for b in r.content if b.type == "text"), "")
-    bruto = chamar(INSTRUCAO_CONFIRMACAO_CLAUDE.format(ticker=ticker, campo=campo, resposta=texto))
+    bruto = chamar(INSTRUCAO_CONFIRMACAO_CLAUDE.format(ticker=ticker, campo=campo, resposta=texto, fontes=fontes_texto))
     if not bruto:
         return None
     try:
@@ -287,7 +392,18 @@ def confirmar_com_claude(resposta_perplexity: dict, ticker: str, campo: str, cha
         log.error("biblioteca: resposta da API do Claude fora do formato esperado")
         return None
     if not dados.get("achou") or dados.get("valor_contabil") is None:
-        log.info("biblioteca: API do Claude não confirmou um valor de %s para %s", campo, ticker)
+        # loga o JSON inteiro que a API do Claude devolveu - sem isso não dá pra saber SE o motivo
+        # foi "achou: false" (Perplexity não trouxe nada com fonte oficial) ou um valor nulo com
+        # achou:true (inconsistência da própria API).
+        log.info("biblioteca: API do Claude não confirmou um valor de %s para %s - resposta: %s",
+                campo, ticker, dados)
+        return None
+    # REGRA TRAVADA: sem link ou sem página da fonte oficial, não é dado confiável - nunca salva
+    link = (dados.get("link") or "").strip()
+    pagina = (dados.get("pagina") or "").strip()
+    if not link or not pagina:
+        log.info("biblioteca: %s de %s sem link+página de fonte oficial - não confirmado (fonte: %r, trecho: %r)",
+                campo, ticker, dados.get("fonte"), (dados.get("trecho") or "")[:200])
         return None
     # o trecho tem de existir mesmo na resposta da Perplexity - senão pode ter sido inventado
     trecho = (dados.get("trecho") or "").strip()
@@ -295,7 +411,8 @@ def confirmar_com_claude(resposta_perplexity: dict, ticker: str, campo: str, cha
         log.error("biblioteca: API do Claude devolveu um trecho que não está na resposta da Perplexity: descartado")
         return None
     return {"valor": dados["valor_contabil"], "valor_ajustado": dados.get("valor_ajustado"),
-           "fonte": dados.get("fonte") or "Perplexity (confirmado pela API do Claude)", "trecho": trecho}
+           "fonte": dados.get("fonte") or "Perplexity (confirmado pela API do Claude)",
+           "link": link, "pagina": pagina, "trecho": trecho}
 
 
 def obter(ticker: str, campo: str, periodo: str, hoje: dt.date | None = None, *,
@@ -336,16 +453,31 @@ def obter(ticker: str, campo: str, periodo: str, hoje: dt.date | None = None, *,
         return None
     salvar_na_biblioteca(ticker, campo, confirmado["valor"],
                          f"Perplexity, confirmado pela API do Claude ({confirmado['fonte']})",
-                         valor_ajustado=confirmado.get("valor_ajustado"), dados=dados, caminho=caminho)
+                         valor_ajustado=confirmado.get("valor_ajustado"), link=confirmado.get("link"),
+                         pagina=confirmado.get("pagina"), dados=dados, caminho=caminho)
     return buscar_na_biblioteca(ticker, campo, hoje, dados=dados)
 
 
 # ------------------------------------------------------------ workflow (.github/workflows/biblioteca-perplexity.yml)
 def _periodo_atual(hoje: dt.date) -> str:
-    """"3T26", no mesmo formato do resto do projeto (trimestre civil - aproximação razoável pro
-    PROMPT PADRÃO, que já pede pra Perplexity comparar com o trimestre anterior)."""
-    tri = (hoje.month - 1) // 3 + 1
-    return f"{tri}T{hoje:%y}"
+    """"3T26", no mesmo formato do resto do projeto (trimestre civil). BUG CORRIGIDO (27/11/2026,
+    achado pedindo BBAS3 de verdade pra Perplexity): antes pedia o trimestre CALENDÁRIO em que
+    `hoje` cai (ex.: 27/11/2026 -> "4T26") - mas o 4T26 de uma empresa quase nunca está divulgado
+    nessa data (BBAS3: previsto só pra 10/02/2027), então a Perplexity corretamente respondia "Não
+    divulgado" e a API do Claude corretamente recusava confirmar (não é falha da trava de fonte
+    oficial - a confirmação nem chegava lá, travava antes mesmo, em "achou: false"). Corrigido pra
+    pedir sempre o trimestre ANTERIOR ao calendário de hoje (27/11/2026 -> "3T26") - nunca inventa
+    uma data de divulgação por empresa (não existe calendário de divulgação genérico no projeto):
+    um trimestre só termina quando o calendário vira a página, e mesmo aí a divulgação leva
+    semanas - então o trimestre anterior ao atual é o único que tem alguma chance real de já ter
+    sido divulgado, sem precisar adivinhar a data de cada empresa. Ainda pode vir "Não divulgado"
+    (empresa atrasada) - a Perplexity/API do Claude continuam livres pra dizer isso, nunca inventam."""
+    tri_atual = (hoje.month - 1) // 3 + 1
+    ano = hoje.year
+    tri = tri_atual - 1
+    if tri == 0:   # janeiro-março: o trimestre anterior é o 4º do ano passado
+        tri, ano = 4, ano - 1
+    return f"{tri}T{ano % 100:02d}"
 
 
 def atualizar_tickers(tickers: list[str], campo: str = "lpa_atual", hoje: dt.date | None = None, *,
@@ -381,9 +513,19 @@ def main(argv: list[str] | None = None) -> int:
     pa = sub.add_parser("atualizar", help="biblioteca -> Perplexity -> confirmação da API do Claude, por ticker")
     pa.add_argument("--tickers", required=True, help="arquivo JSON com a lista de tickers (ex.: utils/guidance_tickers.json)")
     pa.add_argument("--campo", default="lpa_atual")
+    pa.add_argument("--ticker", default=None,
+                    help="processa só este ticker (tem de estar no arquivo de --tickers) - pra testar um "
+                         "ticker isolado (ex.: Run workflow manual) ou pro gatilho por Issue/fila de um só ticker, "
+                         "sem gastar chamada de API nos outros")
     args = p.parse_args(argv)
     if args.cmd == "atualizar":
         tickers = json.loads(Path(args.tickers).read_text(encoding="utf-8"))
+        if args.ticker:
+            alvo = args.ticker.upper()
+            tickers = [t for t in tickers if t.upper() == alvo]
+            if not tickers:
+                log.error("biblioteca: %s não está em %s", alvo, args.tickers)
+                return 1
         resultados = atualizar_tickers(tickers, args.campo)
         achados = sum(r["achado"] for r in resultados)
         log.info("biblioteca: %d ticker(s) processado(s), %d com dado novo/confirmado", len(resultados), achados)
