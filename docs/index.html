@@ -55,7 +55,7 @@ button:focus-visible, summary:focus-visible { outline: 2px solid var(--azul); ou
 /* Ao rolar (.rolou): esconde nome completo/bolsa/preço, mostra só o ticker - pedido explícito de
    não repetir preço no cabeçalho fixo (já aparece no cartão de decisão logo abaixo). */
 .topo .ticker-topo { display: none; font-family: var(--display); font-size: 19px; font-weight: 700; }
-.topo.rolou .meio, .topo.rolou .preco-topo { display: none; }
+.topo.rolou .meio { display: none; }
 .topo.rolou .ticker-topo { display: block; }
 svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -374,8 +374,8 @@ body { margin: 0; background: var(--bg); font-family: var(--corpo); }
       <div class="nome" id="t-nome"></div>
       <div class="bolsa" id="t-bolsa"></div>
     </div>
-    <div class="preco-topo num" id="t-preco"></div>
     <div class="ticker-topo" id="t-ticker"></div>
+    <div class="preco-topo num" id="t-preco"></div>
   </header>
   <div class="modo-linha">
     <h2 class="visao-t">Visão geral</h2>
@@ -527,9 +527,8 @@ function montar(root, d) {
   $('t-nome').textContent = d.nome;
   $('t-bolsa').textContent = d.bolsa ? `${d.bolsa} (${d.ticker})` : d.ticker;
   // cabeçalho fixo (sticky, CSS): nome completo + bolsa + preço no topo da página. Ao rolar (classe
-  // .rolou, abaixo), esconde tudo isso e mostra SÓ o ticker (ex. "MU") - achado após a 1ª versão
-  // mostrar nome/preço também ao rolar: o pedido original era só manter o TICKER visível, pra saber
-  // qual ativo está aberto, sem repetir preço (que já está no cartão de decisão logo abaixo).
+  // .rolou, abaixo), esconde nome completo/bolsa e mostra só o ticker + a cotação (ex. "MU · US$
+  // 601,25", a pedido do usuário) - a cor da variação do dia é a mesma de baixo.
   $('t-preco').textContent = din(d.preco);
   $('t-preco').style.color = tem(d.varDia) ? cor(d.varDia) : '';
   $('t-ticker').textContent = d.ticker;

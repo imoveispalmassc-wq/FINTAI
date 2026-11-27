@@ -910,11 +910,18 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 - **Ticker fixo no topo (item 3)**: `.topo` (em `tela/detalhe.html`/`.css`/`.js`), fundo sólido e
   sombra/borda ao rolar (classe `.rolou`). ESTADO NORMAL (topo da página, `.rolou` ausente): mostra
   nome completo + bolsa + preço, como o resto da tela. ESTADO FIXO (rolando, `.rolou` presente):
-  mostra SÓ O TICKER (ex. "MU"), escondendo nome completo/bolsa/preço - CORRIGIDO (27/11/2026): a
-  1ª versão mantinha nome e preço visíveis também ao rolar, repetindo o preço que já aparece no
-  cartão de decisão logo abaixo; o pedido era só manter o ticker identificável, sem repetir mais
-  nada. `#t-ticker` (`ticker-topo`) é um elemento à parte, escondido por padrão e mostrado só com
-  `.topo.rolou .ticker-topo`, enquanto `.topo.rolou .meio`/`.preco-topo` escondem o resto.
+  mostra SÓ O TICKER + A COTAÇÃO (ex. "MU · US$ 601,25"), escondendo nome completo/bolsa -
+  CORRIGIDO (27/11/2026): a 1ª versão mantinha nome e preço visíveis também ao rolar, repetindo o
+  preço que já aparece no cartão de decisão logo abaixo; o pedido era só manter o ticker
+  identificável, sem repetir mais nada - por isso `.topo.rolou .preco-topo` também era escondido.
+  REVERTIDO DEPOIS (mesma data, a pedido do usuário: "Poderíamos travar essa cotação na Barra junto
+  com o ticker?") - a cotação volta a aparecer ao lado do ticker no cabeçalho fixo, com a cor da
+  variação do dia preservada (`$('t-preco').style.color`, já calculada antes). `#t-ticker`
+  (`ticker-topo`) é um elemento à parte, escondido por padrão e mostrado só com
+  `.topo.rolou .ticker-topo`; só `.topo.rolou .meio` (nome completo + bolsa) esconde o resto. No
+  HTML, `#t-ticker` vem ANTES de `#t-preco` (mesma ordem em que aparecem lado a lado: "MU · US\$
+  601,25", não o contrário) - a ordem no DOM só importa pro estado rolado, já que no estado normal
+  `#t-ticker` fica com `display: none` independente da posição.
   2º BUG, CORRIGIDO ERRADO NA 1ª TENTATIVA (27/11/2026, PRs #61/#62 - registrado aqui com
   honestidade, porque gastou 2 ciclos de PR do usuário num diagnóstico errado antes de achar a causa
   real): a 1ª tentativa supôs que a tela roda dentro de um IFRAME do componente do Streamlit, que
