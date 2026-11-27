@@ -912,19 +912,27 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Nada foi apagado (branch `refatora-sinais` continua existindo, intacto).
 - **Ticker fixo no topo (item 3)**: `.topo` (em `tela/detalhe.html`/`.css`/`.js`), fundo sólido e
   sombra/borda ao rolar (classe `.rolou`). ESTADO NORMAL (topo da página, `.rolou` ausente): mostra
-  nome completo + bolsa + preço, como o resto da tela. ESTADO FIXO (rolando, `.rolou` presente):
-  mostra SÓ O TICKER + A COTAÇÃO (ex. "MU · US$ 601,25"), escondendo nome completo/bolsa -
-  CORRIGIDO (27/11/2026): a 1ª versão mantinha nome e preço visíveis também ao rolar, repetindo o
-  preço que já aparece no cartão de decisão logo abaixo; o pedido era só manter o ticker
-  identificável, sem repetir mais nada - por isso `.topo.rolou .preco-topo` também era escondido.
-  REVERTIDO DEPOIS (mesma data, a pedido do usuário: "Poderíamos travar essa cotação na Barra junto
-  com o ticker?") - a cotação volta a aparecer ao lado do ticker no cabeçalho fixo, com a cor da
-  variação do dia preservada (`$('t-preco').style.color`, já calculada antes). `#t-ticker`
-  (`ticker-topo`) é um elemento à parte, escondido por padrão e mostrado só com
+  só nome completo + bolsa (`.meio`) - sem preço nem variação, que ficariam duplicados com o cartão
+  de decisão logo abaixo (REGRA ATUAL, corrigida depois de ida e volta, ver histórico abaixo).
+  ESTADO FIXO (rolando, `.rolou` presente): mostra SÓ O TICKER + A COTAÇÃO + A VARIAÇÃO DO DIA (ex.
+  "MU  US$ 601,25  ▼ -4,53%"), escondendo nome completo/bolsa.
+  HISTÓRICO (27/11/2026, 3 idas e voltas, todas a pedido do usuário - documentado pra não repetir
+  o ciclo): 1ª versão escondia nome E preço ao rolar, mostrando só o ticker ("o pedido era só manter
+  o ticker identificável, sem repetir mais nada" - preço já aparecia no cartão de decisão). 2ª volta
+  ("Poderíamos travar essa cotação na Barra junto com o ticker?"): preço passou a aparecer de novo,
+  mas só no estado ROLADO, ao lado do ticker - no estado normal (topo da página) o preço continuava
+  escondido nessa versão. 3ª mudança (pedido de afastar o preço do ticker e acrescentar a variação):
+  nesse momento o preço/variação passaram a aparecer SEMPRE (normal e rolado), já que ainda não
+  existiam no estado normal - e aí sim ficou duplicado com o cartão de decisão, que o usuário notou e
+  pediu pra tirar. REGRA FINAL: preço e variação (`.preco-topo`/`.var-topo`) só aparecem no estado
+  ROLADO (`.topo.rolou .preco-topo, .topo.rolou .var-topo { display: block; }`), nunca no normal.
+  `#t-ticker` (`ticker-topo`) é um elemento à parte, escondido por padrão e mostrado só com
   `.topo.rolou .ticker-topo`; só `.topo.rolou .meio` (nome completo + bolsa) esconde o resto. No
-  HTML, `#t-ticker` vem ANTES de `#t-preco` (mesma ordem em que aparecem lado a lado: "MU · US\$
-  601,25", não o contrário) - a ordem no DOM só importa pro estado rolado, já que no estado normal
-  `#t-ticker` fica com `display: none` independente da posição.
+  HTML, a ordem é `#t-ticker` → `#t-preco` → `#t-var` (mesma ordem em que aparecem lado a lado: "MU
+  US\$ 601,25 ▼ -4,53%") - a ordem no DOM só importa pro estado rolado, já que no estado normal os 3
+  ficam com `display: none` independente da posição. Gap de 18px (em vez dos 10px padrão) só em
+  `.topo.rolou`, pra afastar mais o ticker da cotação/variação - pedido explícito do usuário depois
+  de ver os dois colados.
   2º BUG, CORRIGIDO ERRADO NA 1ª TENTATIVA (27/11/2026, PRs #61/#62 - registrado aqui com
   honestidade, porque gastou 2 ciclos de PR do usuário num diagnóstico errado antes de achar a causa
   real): a 1ª tentativa supôs que a tela roda dentro de um IFRAME do componente do Streamlit, que
