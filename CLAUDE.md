@@ -143,17 +143,36 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   gatilho por Issue/fila (ainda NÃO implementado - fica pra outra mudança) vai precisar pra rodar
   só o ticker daquela Issue, no mesmo padrão já usado em `fila-tickers.yml`/`processar_fila`.
 
-  LIMITAÇÃO CONHECIDA (ambiente de desenvolvimento desta issue): não foi possível testar a chamada
-  real à `api.perplexity.ai` neste ambiente - o proxy de rede do agente não libera esse host (só
-  os hosts explicitamente permitidos). A chave (`PERPLEXITY_API_KEY`, já salva nos Secrets do
-  GitHub) nunca aparece no código, só em `os.environ.get("PERPLEXITY_API_KEY")`; o endpoint
-  (`POST https://api.perplexity.ai/chat/completions`, corpo OpenAI-compatível com `model` +
-  `messages`, modelo `sonar-pro`) segue a documentação pública da Perplexity, mas a validação de
-  ponta a ponta (chave real, resposta real) só é possível em produção/Actions, com o Secret
-  configurado. Por isso os testes (`tests/test_biblioteca.py`) usam um `chamar`/`chamar_perplexity`/
-  `chamar_claude` injetável com respostas SIMULADAS, claramente marcadas como mock no próprio
-  teste (ex.: comentário "MOCK CLARAMENTE DOCUMENTADO", texto com "(SIMULADO)") - nenhuma chamada
-  de rede de verdade é feita nos testes, e nenhum dado simulado é tratado como se fosse real.
+  MIGRAÇÃO PARA A AGENT API (27/11/2026, REGRA TRAVADA): o endpoint antigo (`POST
+  /chat/completions`, corpo `{"model": "sonar-pro", "messages": [...]}`) foi DESCONTINUADO pela
+  Perplexity em 27/09/2026 ("Sonar Chat Completions support ended") - só descoberto rodando de
+  verdade em produção/Actions pra BBAS3 (403 `chat_completions_not_available`, pedindo a migração;
+  o corpo da resposta de erro só aparecia no log depois de um ajuste pra logar esse corpo, que não
+  existia antes). Lido o guia oficial de migração (nunca adivinhado -
+  https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview e .../how-to, liberados no
+  allowlist de rede desta sessão pra isso) e migrado pra: endpoint `POST
+  https://api.perplexity.ai/v1/agent` (o nome do método no SDK oficial é `responses.create()`, mas
+  o caminho REST de verdade, confirmado nos exemplos `curl` da própria doc, é `/v1/agent` - não
+  `/v1/responses`, que só aparecia na mensagem de erro porque é o nome do recurso lógico, não o
+  caminho); corpo `{"effort": "fast", "input": "<prompt>"}` em vez de `model`+`messages` - a doc
+  mapeia explicitamente `sonar-pro` → effort `"fast"`; resposta: array `output`, texto no(s)
+  item(ns) `"type": "message"` → `content[].text` (`type: "output_text"`), concatenados. A chave
+  (`PERPLEXITY_API_KEY`, nos Secrets do GitHub) nunca aparece no código, só em
+  `os.environ.get("PERPLEXITY_API_KEY")`. Nenhuma outra parte do módulo mudou com a migração
+  (prompt, confirmação pela API do Claude, regra de link+página): a citação de fonte/página
+  continua vindo de DENTRO do texto gerado (pedida no próprio PROMPT_PADRAO), não de um campo
+  estruturado da API. LIMITAÇÃO CONHECIDA (ambiente de desenvolvimento desta issue): a validação de
+  ponta a ponta da Agent API nova (chave real, resposta real pra um ticker) só é possível em
+  produção/Actions, com o Secret configurado - esta sandbox não bate em `api.perplexity.ai`. Por
+  isso os testes (`tests/test_biblioteca.py`) usam um `chamar`/`chamar_perplexity`/`chamar_claude`
+  injetável com respostas SIMULADAS, claramente marcadas como mock no próprio teste (ex.: comentário
+  "MOCK CLARAMENTE DOCUMENTADO", texto com "(SIMULADO)") - nenhuma chamada de rede de verdade é
+  feita nos testes, e nenhum dado simulado é tratado como se fosse real. 3 testes à parte
+  (`test_pesquisar_via_perplexity_payload_e_resposta_da_agent_api`,
+  `..._erro_http_loga_corpo_e_devolve_none`, `..._output_sem_mensagem_devolve_none`) testam a
+  função `chamar` REAL (não injetada) via `monkeypatch` de `requests.post` - confirmam o payload e
+  o parsing da resposta da Agent API sem bater na rede, já que os testes que usam `chamar=`
+  injetado não exercitam esse trecho do código.
 
 - `utils/divergencia.py` (Issue #48, item 9): quando um robô acha um número diferente do que já
   está salvo, ele mesmo abre uma Issue sozinho (`abrir_issue_divergencia`, API REST do GitHub com

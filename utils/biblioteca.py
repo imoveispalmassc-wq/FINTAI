@@ -38,13 +38,29 @@ módulo) - sem travar a gravação na biblioteca se a Issue não puder ser abert
 GITHUB_TOKEN em execução local): o dado novo sempre é salvo, o aviso de divergência é só um
 "melhor esforço" por cima.
 
-LIMITAÇÃO CONHECIDA (ver PR da Issue #48): não foi possível testar a chamada real à
-api.perplexity.ai neste ambiente de desenvolvimento - o proxy de rede do agente não libera esse
-host (só hosts explicitamente permitidos). A chave (`PERPLEXITY_API_KEY`, já salva nos Secrets do
-GitHub) e o formato da chamada (`POST https://api.perplexity.ai/chat/completions`, corpo
-OpenAI-compatível com `model` + `messages`) seguem a documentação pública da Perplexity, mas a
-validação de ponta a ponta só é possível em produção/Actions, com o Secret configurado. Por isso
-os testes deste módulo usam um `chamar`/`sessao` injetável com respostas SIMULADAS, claramente
+MIGRAÇÃO PARA A AGENT API (27/11/2026): o endpoint antigo (`POST /chat/completions`, corpo
+`{"model": "sonar-pro", "messages": [...]}`) foi descontinuado pela Perplexity em 27/09/2026 (Sonar
+Chat Completions support ended) - testado em produção/Actions nesse dia, voltou 403
+`chat_completions_not_available` pedindo a migração. Lido o guia oficial de migração
+(https://docs.perplexity.ai/docs/agent-api/migrate-from-sonar/overview e .../how-to, nunca
+adivinhado): endpoint novo `POST https://api.perplexity.ai/v1/agent` (o nome do método no SDK
+oficial é `responses.create()`, mas o caminho REST de verdade, confirmado nos exemplos `curl` da
+própria doc, é `/v1/agent` - não `/v1/responses`); corpo `{"effort": "fast", "input": "<prompt>"}`
+em vez de `{"model": "sonar-pro", "messages": [...]}` - a doc mapeia explicitamente
+`sonar-pro` → effort `"fast"` ("Starting points we suggest"); busca na web já vem ligada por padrão
+nesse nível de esforço, sem precisar declarar `tools` explicitamente. Resposta: array `output`,
+texto no(s) item(ns) com `"type": "message"` → `content[].text` (com `type: "output_text"`) -
+concatenados, caso venha mais de um item de mensagem. `pesquisar_via_perplexity` devolve o texto
+concatenado, do mesmo jeito que devolvia `choices[0].message.content` antes - nenhuma outra parte
+do módulo (prompt, confirmação pela API do Claude, regra de link+página) precisou mudar, porque a
+citação de fonte/página continua vindo de DENTRO do texto gerado (pedida no próprio
+PROMPT_PADRAO), não de um campo estruturado da API.
+
+LIMITAÇÃO CONHECIDA (ambiente de desenvolvimento desta issue): esta sandbox não tinha
+`api.perplexity.ai` liberado até ser testado em produção/Actions (que tem rede irrestrita) - por
+isso o 403 acima só apareceu rodando de verdade no GitHub Actions, não aqui. A validação de ponta a
+ponta da Agent API nova (chave real, resposta real) também só é possível em produção/Actions. Por
+isso os testes deste módulo usam um `chamar`/`sessao` injetável com respostas SIMULADAS, claramente
 marcadas como mock no próprio teste - nenhuma chamada de rede de verdade é feita aqui, e nenhum
 dado "simulado" é tratado como se fosse um dado real.
 """
@@ -63,8 +79,10 @@ ARQ_BIBLIOTECA = RAIZ / "utils" / "biblioteca.json"
 # IDADE_MAXIMA_DIAS do guidance automático (utils/fetch_guidance.py), em vez de inventar um limite novo.
 DIAS_DESATUALIZADO = 120
 
-PERPLEXITY_URL = "https://api.perplexity.ai/chat/completions"
-PERPLEXITY_MODELO = "sonar-pro"
+PERPLEXITY_URL = "https://api.perplexity.ai/v1/agent"
+# "sonar-pro" (Sonar Chat Completions, descontinuado) -> effort "fast" (Agent API) - mapeamento
+# explícito do guia oficial de migração (ver docstring do módulo).
+PERPLEXITY_EFFORT = "fast"
 PERPLEXITY_TIMEOUT = 60
 
 MODELO_CLAUDE = "claude-opus-5-5"
@@ -207,7 +225,7 @@ def pesquisar_via_perplexity(ticker: str, periodo: str, *, chamar=None) -> dict 
                 r = requests.post(
                     PERPLEXITY_URL, timeout=PERPLEXITY_TIMEOUT,
                     headers={"Authorization": f"Bearer {chave}", "Content-Type": "application/json"},
-                    json={"model": PERPLEXITY_MODELO, "messages": [{"role": "user", "content": prompt_texto}]})
+                    json={"effort": PERPLEXITY_EFFORT, "input": prompt_texto})
                 r.raise_for_status()
             except requests.exceptions.HTTPError as e:
                 # loga o corpo da resposta de erro (nunca a chave, que só vai no header) - pra
@@ -225,8 +243,24 @@ def pesquisar_via_perplexity(ticker: str, periodo: str, *, chamar=None) -> dict 
                 log.warning("biblioteca: Perplexity falhou (%s: %s)", e.__class__.__name__, e)
                 return None
             try:
-                return r.json()["choices"][0]["message"]["content"]
-            except (KeyError, IndexError, TypeError, ValueError):
+                # Agent API: o texto vem no(s) item(ns) de "output" com type "message", em
+                # content[].text (type "output_text") - não existe mais choices[0].message.content
+                # (isso era só do Sonar Chat Completions, descontinuado - ver docstring do módulo).
+                # Concatena se vier mais de um item de mensagem/parte de texto, igual ao
+                # "response.output_text" conveniente do SDK oficial (não usamos o SDK, só `requests`).
+                partes = [
+                    parte.get("text", "")
+                    for item in r.json().get("output", [])
+                    if item.get("type") == "message"
+                    for parte in item.get("content", [])
+                    if parte.get("type") == "output_text"
+                ]
+                texto = "".join(partes)
+                if not texto:
+                    log.warning("biblioteca: resposta da Perplexity sem texto de mensagem (output vazio ou sem 'message')")
+                    return None
+                return texto
+            except (KeyError, IndexError, TypeError, ValueError, AttributeError):
                 log.warning("biblioteca: resposta da Perplexity fora do formato esperado")
                 return None
     resposta = chamar(prompt)

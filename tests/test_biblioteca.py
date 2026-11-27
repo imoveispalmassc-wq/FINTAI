@@ -129,6 +129,81 @@ def test_pesquisar_via_perplexity_sem_chave_nao_chama_rede(monkeypatch):
     assert bib.pesquisar_via_perplexity("BBAS3", "3T26") is None
 
 
+def test_pesquisar_via_perplexity_payload_e_resposta_da_agent_api(monkeypatch):
+    """MOCK CLARAMENTE DOCUMENTADO: testa a função `chamar` REAL (não via chamar= injetado) -
+    monkeypatcha requests.post, nunca bate na rede de verdade - pra confirmar que o payload da
+    Agent API ({"effort": "fast", "input": ...}, endpoint /v1/agent) e o parsing da resposta nova
+    (output -> item type "message" -> content[].text) estão certos (27/11/2026, migração do Sonar
+    Chat Completions descontinuado)."""
+    import requests
+
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "chave-de-teste")
+    capturado = {}
+
+    class RespostaFake:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {
+                "id": "resp_teste", "object": "response", "status": "completed",
+                "output": [
+                    {"type": "search_results", "results": []},
+                    {"id": "msg_teste", "type": "message", "role": "assistant", "status": "completed",
+                     "content": [{"type": "output_text", "text": "LPA | 0,21 | 0,23 | RI, release 3T26, página 4 (SIMULADO)",
+                                 "annotations": []}]},
+                ],
+            }
+
+    def post_fake(url, timeout=None, headers=None, json=None):
+        capturado.update(url=url, headers=headers, json=json)
+        return RespostaFake()
+
+    monkeypatch.setattr(requests, "post", post_fake)
+    resultado = bib.pesquisar_via_perplexity("BBAS3", "3T26")
+
+    assert capturado["url"] == "https://api.perplexity.ai/v1/agent"
+    assert capturado["json"] == {"effort": "fast", "input": bib.montar_prompt_perplexity("BBAS3", "3T26")}
+    assert capturado["headers"]["Authorization"] == "Bearer chave-de-teste"
+    assert resultado["resposta"] == "LPA | 0,21 | 0,23 | RI, release 3T26, página 4 (SIMULADO)"
+
+
+def test_pesquisar_via_perplexity_erro_http_loga_corpo_e_devolve_none(monkeypatch, caplog):
+    """O 403 real descoberto em produção (chat_completions_not_available) só apareceu porque o
+    corpo da resposta de erro é logado - confere que isso continua acontecendo."""
+    import requests
+
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "chave-de-teste")
+
+    class RespostaErro:
+        status_code = 403
+        text = '{"error":{"message":"Sonar is now the Agent API.","code":403}}'
+
+        def raise_for_status(self):
+            raise requests.exceptions.HTTPError("403 Client Error: Forbidden", response=self)
+
+    monkeypatch.setattr(requests, "post", lambda *a, **kw: RespostaErro())
+    with caplog.at_level("WARNING"):
+        assert bib.pesquisar_via_perplexity("BBAS3", "3T26") is None
+    assert "Sonar is now the Agent API" in caplog.text
+
+
+def test_pesquisar_via_perplexity_output_sem_mensagem_devolve_none(monkeypatch):
+    import requests
+
+    monkeypatch.setenv("PERPLEXITY_API_KEY", "chave-de-teste")
+
+    class RespostaSemTexto:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"id": "resp_teste", "output": [{"type": "search_results", "results": []}]}
+
+    monkeypatch.setattr(requests, "post", lambda *a, **kw: RespostaSemTexto())
+    assert bib.pesquisar_via_perplexity("BBAS3", "3T26") is None
+
+
 def test_pesquisar_via_perplexity_usa_o_prompt_padrao_mock():
     """MOCK CLARAMENTE DOCUMENTADO: simula a resposta da Perplexity sem chamar a rede de verdade
     (api.perplexity.ai não é alcançável neste ambiente de desenvolvimento - ver utils/biblioteca.py)."""
