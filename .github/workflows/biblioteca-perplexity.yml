@@ -15,7 +15,12 @@ name: Biblioteca própria (Perplexity)
 on:
   schedule:
     - cron: "30 11 * * *"   # todo dia, depois do guidance automático (8h de Brasília = 11h UTC)
-  workflow_dispatch: {}      # botão "Run workflow" para rodar na hora
+  workflow_dispatch:         # botão "Run workflow" para rodar na hora
+    inputs:
+      ticker:
+        description: "Rodar só pra este ticker (ex.: BBAS3) - vazio roda a lista toda de utils/guidance_tickers.json"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -47,7 +52,13 @@ jobs:
         env:
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python -m utils.biblioteca atualizar --tickers utils/guidance_tickers.json --campo lpa_atual
+          TICKER_UNICO: ${{ github.event.inputs.ticker }}
+        run: |
+          if [ -n "$TICKER_UNICO" ]; then
+            python -m utils.biblioteca atualizar --tickers utils/guidance_tickers.json --campo lpa_atual --ticker "$TICKER_UNICO"
+          else
+            python -m utils.biblioteca atualizar --tickers utils/guidance_tickers.json --campo lpa_atual
+          fi
 
       - name: Abrir/atualizar pull request da biblioteca
         if: success()

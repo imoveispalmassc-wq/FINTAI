@@ -118,6 +118,7 @@ def buscar_na_biblioteca(ticker: str, campo: str, hoje: dt.date | None = None, *
 
 def salvar_na_biblioteca(ticker: str, campo: str, valor, fonte: str, data_hora: str | None = None, *,
                          valor_ajustado=None, trimestre: str | None = None, link: str | None = None,
+                         pagina: str | None = None,
                          dados: dict | None = None, caminho: Path = ARQ_BIBLIOTECA, gravar=None,
                          avisar_divergencia: bool = True, abrir_issue=None) -> dict:
     """Grava `valor` (SEMPRE o contábil - REGRA TRAVADA) + fonte + data/hora na biblioteca, com
@@ -140,6 +141,8 @@ def salvar_na_biblioteca(ticker: str, campo: str, valor, fonte: str, data_hora: 
         registro["trimestre"] = trimestre
     if link:
         registro["link"] = link
+    if pagina:
+        registro["pagina"] = pagina
 
     anterior = (dados.get(ticker) or {}).get(campo)
     dados.setdefault(ticker, {})[campo] = registro
@@ -227,9 +230,11 @@ ESQUEMA_CONFIRMACAO_CLAUDE = {
         "valor_contabil": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "valor_ajustado": {"anyOf": [{"type": "number"}, {"type": "null"}]},
         "fonte": {"type": "string"},
+        "link": {"type": "string"},
+        "pagina": {"type": "string"},
         "trecho": {"type": "string"},
     },
-    "required": ["achou", "valor_contabil", "valor_ajustado", "fonte", "trecho"],
+    "required": ["achou", "valor_contabil", "valor_ajustado", "fonte", "link", "pagina", "trecho"],
     "additionalProperties": False,
 }
 
@@ -237,13 +242,27 @@ INSTRUCAO_CONFIRMACAO_CLAUDE = """Você recebe a resposta de uma pesquisa (Perpl
 Sua única tarefa é CONFIRMAR ou CORRIGIR o número de {campo} que já está nessa resposta - nunca
 invente ou calcule um número que não esteja escrito no texto.
 
+REGRA TRAVADA (27/11/2026): só confirma um número de FONTE OFICIAL - RI da própria empresa, SEC
+EDGAR, CVM ou B3. Sem fonte oficial (ex.: notícia de jornal, agregador de dados, opinião de
+analista sem documento oficial por trás), ou sem link + página dessa fonte: achou = false, mesmo
+que o texto tenha um número - nunca confirma um número sem conseguir apontar o link e a página de
+onde ele saiu.
+
 Regras:
-- achou = true só se o texto tiver um número de {campo} com fonte citada (RI, SEC, Earnings).
+- achou = true só se o texto tiver um número de {campo} com fonte OFICIAL citada (RI/SEC/CVM/B3),
+  E com link da fonte, E com a página/seção onde o número aparece.
 - valor_contabil: o número CONTÁBIL/GAAP (nunca o ajustado) de {campo}. valor_ajustado: o número
-  ajustado/non-GAAP, se o texto trouxer os dois separados; null se só trouxer um.
-- fonte: a fonte citada no texto (ex.: "RI, release 3T26, página 4").
+  ajustado/non-GAAP, se o texto trouxer os dois separados; null se só trouxer um - NUNCA misture
+  os dois no mesmo campo.
+- fonte: a fonte citada no texto (ex.: "RI, release 3T26").
+- link: a URL da fonte oficial citada no texto (ex.: "https://ri.bb.com.br/..."). Sem link na
+  resposta: achou = false.
+- pagina: a página/seção citada no texto (ex.: "página 4", "Exhibit 99.1"). Sem página na
+  resposta: achou = false.
 - trecho: copie EXATAMENTE a linha da tabela ou frase de onde tirou o número.
-- Sem um número de {campo} com fonte no texto: achou = false e todos os campos null/"".
+- Sem um número de {campo} com fonte oficial + link + página no texto: achou = false e todos os
+  campos null/"" (nunca "Não divulgado" como se fosse um valor - isso é texto de exibição de quem
+  chama, não um dado desta função).
 
 Resposta da pesquisa:
 {resposta}"""
@@ -253,8 +272,9 @@ def confirmar_com_claude(resposta_perplexity: dict, ticker: str, campo: str, cha
     """2ª camada (mesma regra de confiança baixa do guidance automático): a API do Claude só
     confirma/corrige o {campo} que a Perplexity já trouxe com fonte, dentro do próprio texto
     devolvido - nunca calcula ou estima um valor por conta própria. Devolve
-    {"valor", "valor_ajustado", "fonte", "trecho"} ou None (sem confiança, sem chave, API falhou,
-    ou número ausente / sem fonte na resposta)."""
+    {"valor", "valor_ajustado", "fonte", "link", "pagina", "trecho"} ou None (sem confiança, sem
+    chave, API falhou, ou número sem fonte OFICIAL + link + página na resposta - REGRA TRAVADA
+    27/11/2026: Perplexity só alimenta número com fonte oficial citada; sem isso, nunca salva)."""
     texto = (resposta_perplexity or {}).get("resposta", "")
     if chamar is None:
         if not os.environ.get("ANTHROPIC_API_KEY"):
@@ -289,13 +309,20 @@ def confirmar_com_claude(resposta_perplexity: dict, ticker: str, campo: str, cha
     if not dados.get("achou") or dados.get("valor_contabil") is None:
         log.info("biblioteca: API do Claude não confirmou um valor de %s para %s", campo, ticker)
         return None
+    # REGRA TRAVADA: sem link ou sem página da fonte oficial, não é dado confiável - nunca salva
+    link = (dados.get("link") or "").strip()
+    pagina = (dados.get("pagina") or "").strip()
+    if not link or not pagina:
+        log.info("biblioteca: %s de %s sem link+página de fonte oficial - não confirmado", campo, ticker)
+        return None
     # o trecho tem de existir mesmo na resposta da Perplexity - senão pode ter sido inventado
     trecho = (dados.get("trecho") or "").strip()
     if len(trecho) >= 10 and trecho not in texto:
         log.error("biblioteca: API do Claude devolveu um trecho que não está na resposta da Perplexity: descartado")
         return None
     return {"valor": dados["valor_contabil"], "valor_ajustado": dados.get("valor_ajustado"),
-           "fonte": dados.get("fonte") or "Perplexity (confirmado pela API do Claude)", "trecho": trecho}
+           "fonte": dados.get("fonte") or "Perplexity (confirmado pela API do Claude)",
+           "link": link, "pagina": pagina, "trecho": trecho}
 
 
 def obter(ticker: str, campo: str, periodo: str, hoje: dt.date | None = None, *,
@@ -336,7 +363,8 @@ def obter(ticker: str, campo: str, periodo: str, hoje: dt.date | None = None, *,
         return None
     salvar_na_biblioteca(ticker, campo, confirmado["valor"],
                          f"Perplexity, confirmado pela API do Claude ({confirmado['fonte']})",
-                         valor_ajustado=confirmado.get("valor_ajustado"), dados=dados, caminho=caminho)
+                         valor_ajustado=confirmado.get("valor_ajustado"), link=confirmado.get("link"),
+                         pagina=confirmado.get("pagina"), dados=dados, caminho=caminho)
     return buscar_na_biblioteca(ticker, campo, hoje, dados=dados)
 
 
@@ -381,9 +409,19 @@ def main(argv: list[str] | None = None) -> int:
     pa = sub.add_parser("atualizar", help="biblioteca -> Perplexity -> confirmação da API do Claude, por ticker")
     pa.add_argument("--tickers", required=True, help="arquivo JSON com a lista de tickers (ex.: utils/guidance_tickers.json)")
     pa.add_argument("--campo", default="lpa_atual")
+    pa.add_argument("--ticker", default=None,
+                    help="processa só este ticker (tem de estar no arquivo de --tickers) - pra testar um "
+                         "ticker isolado (ex.: Run workflow manual) ou pro gatilho por Issue/fila de um só ticker, "
+                         "sem gastar chamada de API nos outros")
     args = p.parse_args(argv)
     if args.cmd == "atualizar":
         tickers = json.loads(Path(args.tickers).read_text(encoding="utf-8"))
+        if args.ticker:
+            alvo = args.ticker.upper()
+            tickers = [t for t in tickers if t.upper() == alvo]
+            if not tickers:
+                log.error("biblioteca: %s não está em %s", alvo, args.tickers)
+                return 1
         resultados = atualizar_tickers(tickers, args.campo)
         achados = sum(r["achado"] for r in resultados)
         log.info("biblioteca: %d ticker(s) processado(s), %d com dado novo/confirmado", len(resultados), achados)

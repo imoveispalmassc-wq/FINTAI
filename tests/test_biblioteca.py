@@ -162,10 +162,27 @@ def test_confirmar_com_claude_confirma_valor_com_trecho_na_resposta():
     texto = "LPA | 0,21 | 0,23 | RI, release 3T26, página 4"
     resposta_perplexity = {"resposta": texto}
     bruto = ('{"achou": true, "valor_contabil": 0.21, "valor_ajustado": 0.23, '
-            '"fonte": "RI, release 3T26, página 4", "trecho": "LPA | 0,21 | 0,23 | RI, release 3T26, página 4"}')
+            '"fonte": "RI, release 3T26, página 4", "link": "https://ri.bb.com.br/release-3t26", '
+            '"pagina": "página 4", "trecho": "LPA | 0,21 | 0,23 | RI, release 3T26, página 4"}')
     confirmado = bib.confirmar_com_claude(resposta_perplexity, "BBAS3", "lpa_12m", chamar=lambda i: bruto)
-    assert confirmado == {"valor": 0.21, "valor_ajustado": 0.23,
-                          "fonte": "RI, release 3T26, página 4", "trecho": texto}
+    assert confirmado == {"valor": 0.21, "valor_ajustado": 0.23, "fonte": "RI, release 3T26, página 4",
+                          "link": "https://ri.bb.com.br/release-3t26", "pagina": "página 4", "trecho": texto}
+
+
+def test_confirmar_com_claude_sem_link_nao_confirma():
+    # REGRA TRAVADA (27/11/2026): sem link da fonte oficial, nunca confirma - mesmo com achou=true
+    # e um valor_contabil presente (número sem link não é confiável o bastante pra salvar).
+    bruto = ('{"achou": true, "valor_contabil": 0.21, "valor_ajustado": null, "fonte": "RI", '
+            '"link": "", "pagina": "página 4", "trecho": "LPA 0,21 (RI, página 4)"}')
+    assert bib.confirmar_com_claude({"resposta": "LPA 0,21 (RI, página 4)"}, "BBAS3", "lpa_12m",
+                                    chamar=lambda i: bruto) is None
+
+
+def test_confirmar_com_claude_sem_pagina_nao_confirma():
+    bruto = ('{"achou": true, "valor_contabil": 0.21, "valor_ajustado": null, "fonte": "RI", '
+            '"link": "https://ri.bb.com.br/release", "pagina": "", "trecho": "LPA 0,21 (RI)"}')
+    assert bib.confirmar_com_claude({"resposta": "LPA 0,21 (RI)"}, "BBAS3", "lpa_12m",
+                                    chamar=lambda i: bruto) is None
 
 
 def test_confirmar_com_claude_nao_confirmado_devolve_none():
@@ -220,12 +237,14 @@ def test_obter_fallback_para_perplexity_quando_busca_externa_falha_igual_yahoo_q
 
     chamar_perplexity = lambda p: "LPA | 0,21 | 0,23 | RI, release 3T26, página 4 (SIMULADO)"
     chamar_claude = lambda i: ('{"achou": true, "valor_contabil": 0.21, "valor_ajustado": 0.23, '
-                              '"fonte": "RI, release 3T26, página 4", '
+                              '"fonte": "RI, release 3T26, página 4", "link": "https://ri.bb.com.br/release-3t26", '
+                              '"pagina": "página 4", '
                               '"trecho": "LPA | 0,21 | 0,23 | RI, release 3T26, página 4 (SIMULADO)"}')
     resultado = bib.obter("BBAS3", "lpa_12m", "3T26", HOJE, caminho=caminho,
                          buscar_externo=buscar_externo_quebrado,
                          chamar_perplexity=chamar_perplexity, chamar_claude=chamar_claude)
     assert resultado["valor"] == 0.21 and resultado["valor_ajustado"] == 0.23
+    assert resultado["link"] == "https://ri.bb.com.br/release-3t26" and resultado["pagina"] == "página 4"
 
 
 def test_obter_sem_nada_disponivel_devolve_none_nunca_inventa(tmp_path):
@@ -245,7 +264,8 @@ def test_atualizar_tickers_processa_cada_ticker_e_registra_resultado(tmp_path):
     caminho = tmp_path / "biblioteca.json"
     chamar_perplexity = lambda p: "LPA | 0,21 | 0,23 | RI, release 3T26, página 4 (SIMULADO)"
     chamar_claude = lambda i: ('{"achou": true, "valor_contabil": 0.21, "valor_ajustado": 0.23, '
-                              '"fonte": "RI, release 3T26, página 4", '
+                              '"fonte": "RI, release 3T26, página 4", "link": "https://ri.bb.com.br/release-3t26", '
+                              '"pagina": "página 4", '
                               '"trecho": "LPA | 0,21 | 0,23 | RI, release 3T26, página 4 (SIMULADO)"}')
     resultados = bib.atualizar_tickers(["BBAS3", "VALE3"], "lpa_atual", HOJE, caminho=caminho,
                                        chamar_perplexity=chamar_perplexity, chamar_claude=chamar_claude)
