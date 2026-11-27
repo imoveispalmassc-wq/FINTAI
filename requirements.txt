@@ -1,6 +1,14 @@
-streamlit>=1.67
-yfinance>=0.2.40
+# yfinance/pandas/numpy/streamlit TRAVADOS em versão exata (não >=): item do usuário sobre "2 contas,
+# mesmo repositório, Faixa de preço da MU diferente" - com >=, 2 implantações feitas em momentos
+# diferentes podem instalar versões diferentes dessas libs, e cada uma pode calcular o histórico de
+# preço/ajuste de split de um jeito levemente diferente, mudando a média de 1/3/5 anos usada na Faixa
+# de preço. Versão travada = a que está resolvida/testada neste ambiente agora; atualizar exige mudar
+# aqui de propósito (nunca deixar solto de novo). plotly/lxml/requests continuam soltos: não influenciam
+# o cálculo de preço (gráfico, parsing de HTML/PDF e chamadas HTTP da fila, respectivamente).
+streamlit==1.67.0
+yfinance==1.8.0
 plotly>=5.18
-pandas>=2.0
+pandas==3.0.5
+numpy==2.5.3
 lxml>=5.0
 requests>=2.31   # fila pública de tickers novos (utils/fila_github.py)

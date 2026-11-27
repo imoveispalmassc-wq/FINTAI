@@ -856,6 +856,26 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   sem saber que são métodos diferentes, pode parecer que um dos dois "está errado". Documentado aqui
   pra esclarecer: nenhum dos dois é bug, são métricas diferentes mostradas em modos diferentes da
   tela (Conservador usa valuation; SIMONS usa a faixa histórica de 52 semanas).
+  "SEGUNDA CONTA" de verdade (esclarecido depois, 27/11/2026): não era uma segunda conferência - é
+  uma segunda implantação do MESMO repositório (outra conta no Streamlit Cloud/GitHub), que mostrava
+  a Faixa de preço da MU diferente da conta principal. 2 causas reais encontradas no repositório
+  (nunca confirmadas ao vivo, porque esta sessão não tem acesso a nenhuma implantação publicada, só
+  ao código): (1) `requirements.txt`/`requirements-guidance.txt` usavam `yfinance>=0.2.40`,
+  `pandas>=2.0`, `streamlit>=1.67` (mínimos, não travados) - 2 implantações feitas em momentos
+  diferentes podem instalar versões diferentes dessas libs, e o jeito de ajustar preço/split pode
+  mudar entre versões do yfinance, afetando a média de 1/3/5 anos da Faixa de preço; travadas em
+  versão exata (`==`), incluindo `numpy` (antes nem citado, dependência transitiva do pandas) -
+  plotly/lxml/requests continuam soltos, não influenciam cálculo de preço. (2) existe um branch
+  `refatora-sinais` no repositório, 215 commits atrás do `main` (parado em 14/11/2026, antes até da
+  Faixa de preço por valuation existir - só tinha a faixa clássica de 52 semanas) - se a segunda
+  conta estiver apontando pra esse branch (ou pra um commit antigo do próprio `main`), ela calcula
+  a Faixa de preço por um MÉTODO inteiro diferente, não um arredondamento; os números batem: a faixa
+  de 52 semanas clássica pra MU (mínimo 192,59/máximo 1.255,00, mesmo exemplo de validação já citado
+  no topo deste arquivo) dá 511,31/936,28 - bem diferente dos 477,51/886,81 atuais. Rodapé de
+  diagnóstico adicionado em `app.py` (`_versao_deploy()`, `git rev-parse` do branch+commit em
+  execução, nunca derruba o app sem `.git` disponível) - mostra "Versão: branch@commit" no fim da
+  página, pra comparar as 2 contas sem precisar dar acesso a ninguém. Branch antigo NÃO apagado:
+  decisão do usuário, só depois de confirmar as 2 contas no mesmo commit do `main`.
 - **Ticker fixo no topo (item 3)**: `.topo` (nome + bolsa + preço, em `tela/detalhe.html`/`.css`/
   `.js`) agora é `position: sticky; top: 0` com fundo sólido e sombra/borda ao rolar (classe
   `.rolou`, alternada por um listener de `scroll` da própria janela) - o nome do ativo e o preço do

@@ -10,6 +10,7 @@ import datetime as dt
 import hashlib
 import importlib
 import json
+import subprocess
 import time
 from pathlib import Path
 from urllib.parse import quote
@@ -55,6 +56,24 @@ st.set_page_config(page_title="FINTAI", page_icon=str(LOGO), layout="wide")
 # configuração oficial do Streamlit; não foi possível confirmar o preview real do WhatsApp daqui).
 utils.seo.aplicar_meta_og()
 
+def _versao_deploy() -> str:
+    """Branch e commit curto da implantação em execução, só para diagnóstico (comparar 2
+    implantações do MESMO repositório que podem divergir por estarem em branches/commits
+    diferentes - ver CLAUDE.md, 'segunda conta' da Lista de Quinta). Nunca derruba o app: sem
+    git/.git disponível no ambiente de deploy (alguns provedores não copiam o histórico), devolve
+    'desconhecido' em vez de erro."""
+    try:
+        raiz = Path(__file__).parent
+        sha = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=raiz, capture_output=True,
+                             text=True, timeout=3).stdout.strip()
+        branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=raiz,
+                                capture_output=True, text=True, timeout=3).stdout.strip()
+        return f"{branch}@{sha}" if sha else "desconhecido"
+    except Exception:  # noqa: BLE001
+        return "desconhecido"
+
+
+VERSAO_DEPLOY = _versao_deploy()
 MAX_TICKERS = 20          # limite de ações no comparativo, para manter a busca rápida
 COTACOES_TTL = 60         # segundos de cache da cotação em lote (session_state)
 
@@ -617,5 +636,5 @@ for aba, t in zip(abas, tickers):
         except Exception as e:
             st.error(f"{t}: {e}")
 
-st.markdown("<div class='rodape'>Ferramenta de estudo, não é recomendação de investimento.</div>",
-            unsafe_allow_html=True)
+st.markdown(f"<div class='rodape'>Ferramenta de estudo, não é recomendação de investimento."
+            f"<br><small>Versão: {VERSAO_DEPLOY}</small></div>", unsafe_allow_html=True)
