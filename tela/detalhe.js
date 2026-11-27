@@ -938,50 +938,22 @@ function montar(root, d) {
         <div class="card">
           <strong>Dividendos</strong>
           ${linhasDiv.length ? `<div class="lista-v num" style="margin-top:8px">${linhasDiv.map(([r, v]) => `<div>${r}<b>${v}</b></div>`).join('')}</div>` : `<div class="nota" style="margin-top:8px">${INDISP}</div>`}
-          ${linhasDiv.length ? `<div class="nota" style="margin-top:6px">Pago nos últimos 365 dias corridos (Yahoo Finance). Diferente do card "Dados fixos" abaixo, que soma os 4 últimos trimestres DECLARADOS na CVM - as 2 datas não coincidem exatamente.</div>` : ''}
+          ${linhasDiv.length ? `<div class="nota" style="margin-top:6px">Pago nos últimos 365 dias corridos (Yahoo Finance).${d.dadosFixos && d.dadosFixos.status === 'ok' && tem(d.dadosFixos.dividendo12m) ? ` Diferente do valor declarado pela empresa na CVM (card "Indicadores" abaixo, "Dividendo anual"): ${din(d.dadosFixos.dividendo12m)} por ação nos últimos 4 trimestres - pagamento e declaração não coincidem exatamente.` : ''}</div>` : ''}
           ${fraseDiv ? `<p class="nota" style="margin-top:8px">${fraseDiv}</p>` : ''}
         </div>
       </div>`;
   })($('fundamentos'));
 
-  /* ---------------- dados fixos (fonte oficial) - Issue #29, utils/dados_fixos.py
-     Ações, LPA, P/L, P/L médio 12m, dividendo e DY calculados SÓ com dado da fonte oficial
-     (release/ITR/DFP na CVM ou SEC EDGAR - nunca Yahoo); a cotação do dia é a única coisa que
-     muda todo dia aqui. Cada indicador mostra a conta embaixo (d.dadosFixos.contas). */
-  (function DadosFixos(el) {
-    const DF = d.dadosFixos;
-    if (!DF) { el.innerHTML = ''; return; }
-    if (DF.status !== 'ok') {
-      el.innerHTML = `<h2>Dados fixos <small>fonte oficial</small></h2>
-        <div class="card"><div class="destaque">${DF.mensagem}</div></div>`;
-      return;
-    }
-    const C = DF.contas || {};
-    const avisoHtml = DF.avisoBalancoNovo ? `<div class="aviso" style="margin-bottom:10px">${DF.avisoBalancoNovo}</div>` : '';
-    const temAdr = tem(DF.fatorAdr) && DF.fatorAdr !== 1;
-    const adrHtml = temAdr ? `<div class="lista-v num" style="margin-top:10px">
-        <div>LPA (ADR, fator ${f(DF.fatorAdr, 0)})<b>${tem(DF.lpaAdr) ? f(DF.lpaAdr, 4) : 'Sem dado'}</b></div>
-        <div>Dividendo (ADR, fator ${f(DF.fatorAdr, 0)})<b>${tem(DF.dividendoAdr) ? f(DF.dividendoAdr, 4) : 'Sem dado'}</b></div>
-      </div>` : '';
-    el.innerHTML = `<h2>Dados fixos <small>fonte oficial${DF.moedaResultado ? ` · ${DF.moedaResultado}` : ''}</small></h2>
-      ${avisoHtml}
-      <div class="card">
-        <div class="lista-v num">
-          <div>Ações<b>${tem(DF.acoesTotal) ? `${f(DF.acoesTotal / 1e9, 2)} bi` : 'Sem dado'}</b></div>
-          <div>LPA<b>${tem(DF.lpa) ? f(DF.lpa, 4) : 'Sem dado'}</b></div>
-          <div>P/L Atual<b>${tem(DF.pl) ? f(DF.pl, 2) : 'Sem dado'}</b></div>
-          <div>P/L Médio 12m<b>${tem(DF.plMedio12m) ? f(DF.plMedio12m, 2) : 'Sem dado'}</b></div>
-          <div>Dividendo Anual (declarado, 4 tri)<b>${tem(DF.dividendo12m) ? f(DF.dividendo12m, 4) : 'Sem dado'}</b></div>
-          <div>DY<b>${tem(DF.dy) ? `${f(DF.dy * 100, 2)}%` : 'Sem dado'}</b></div>
-          <div>P/VP<b>${tem(DF.pvp) ? f(DF.pvp, 2) : 'Sem dado'}</b></div>
-          <div>Payout<b>${tem(DF.payout) ? `${f(DF.payout * 100, 1)}%` : 'Sem dado'}</b></div>
-          <div>ROE<b>${tem(DF.roe) ? `${f(DF.roe * 100, 1)}%` : 'Sem dado'}</b></div>
-        </div>
-        ${adrHtml}
-        <div class="nota" style="margin-top:10px">${[C.acoes, C.lpa, C.pl, C.dividendo, C.dy, C.pvp, C.payout, C.roe].filter(Boolean).join('<br>')}</div>
-        <div class="nota" style="margin-top:6px">Fonte: ${DF.fonteOficial || '—'} · balanço de ${DF.dataUltimoBalanco || '—'}.${DF.dividendoMotivo ? ` Dividendo: ${DF.dividendoMotivo}.` : ''}${DF.patrimonioMotivo ? ` Patrimônio líquido: ${DF.patrimonioMotivo}.` : ''} Ações, LPA, dividendo e patrimônio líquido só mudam com balanço novo - a cotação atualiza todo dia. Dividendo Anual aqui é a soma dos 4 últimos trimestres DECLARADOS na CVM - diferente do "Dividendo anual" do card Indicadores (Yahoo), que é o PAGO nos últimos 365 dias; as 2 datas não coincidem exatamente. P/VP, Payout e ROE não têm selo de favorável/desfavorável: não existe, hoje, uma média de 12 meses desses 3 indicadores no projeto (precisaria de histórico trimestral de patrimônio líquido, fora do escopo desta issue) - mostramos só o número.</div>
-      </div>`;
-  })($('dados-fixos'));
+  /* ---------------- "Dados fixos" REMOVIDO como bloco visual próprio (unificação pedida em
+     27/11/2026): divergia do bloco "Lucro e Preço vs Lucro"/"Indicadores" pro mesmo indicador
+     (bug já corrigido - ver CLAUDE.md), e os 2 blocos mostrando números parecidos confundia.
+     utils/dados_fixos.py (`buscar_fixos_br`) continua existindo como camada de dados interna -
+     `d.dadosFixos` (tela/dados.dados_fixos_tela) ainda é calculado em tela/dados.montar(), só não
+     vira mais a própria seção da tela: os campos que só existiam aqui (Ações em circulação, Lucro
+     líquido do período, fonte CVM, data de encerramento) migraram pro card "Indicadores" abaixo -
+     ver a seção Indicators. P/VP/Payout/ROE/ADR (Issue #35) eram exclusivos deste bloco e não
+     tinham equivalente em Indicadores - ficam só no `d.dadosFixos` (não descartados do cálculo,
+     só sem card próprio por enquanto; retomar se for pedido). */
 
   /* ---------------- preço justo: SEÇÃO REMOVIDA (issue #47, item 15). "Preço justo" era um
      preço-alvo (Bazin/Conservador/P/L histórico) e virava responsabilidade do app, como o
@@ -993,18 +965,43 @@ function montar(root, d) {
     const difPL = tem(d.pl) && tem(d.plMedio12) && d.plMedio12 > 0 ? (d.pl / d.plMedio12 - 1) * 100 : null;
     const q = qtd(d.acoes);
     const medioSub = { trimestral: 'com o LPA de cada trimestre', contabil: 'com o lucro contábil de cada balanço', simplificado: 'preço médio do ano ÷ LPA atual' }[d.plMetodo] || '';
+    // Campos que só existiam no bloco "Dados fixos" (removido, unificação de 27/11/2026) -
+    // utils.dados_fixos.buscar_fixos_br continua a camada de dados interna (contabil_br.json /
+    // contabil_br_config.json), só não tem mais seção própria: Ações em circulação, Lucro líquido
+    // do período, fonte CVM e data de encerramento migraram pra cá.
+    const DF = d.dadosFixos;
+    const temDF = DF && DF.status === 'ok';
+    const fonteDF = temDF ? `${DF.fonteOficial || 'CVM'} · balanço de ${DF.dataUltimoBalanco || '—'}.` : '';
+    const avisoHtml = (temDF && DF.avisoBalancoNovo) ? `<div class="aviso" style="margin-bottom:10px">${DF.avisoBalancoNovo}</div>` : '';
     const c = (rot, v, sub, dica) => [rot, v, sub, dica];
     const cartoes = [
       c('P/L atual', tem(d.pl) ? f(d.pl) : null, tem(difPL) ? `${sinal(difPL)} vs. média de 12m` : '', `Você paga ${din(d.pl)} para cada ${d.moeda} 1 de lucro. Conta: ${f(d.preco)} / ${f(d.lpa)} = ${f(d.pl)}`),
       c('P/L médio 12 meses', tem(d.plMedio12) ? f(d.plMedio12) : null, medioSub, d.plMetodo === 'simplificado' ? 'Estimativa: preço médio do ano dividido pelo LPA atual, porque o Yahoo não traz o lucro de cada trimestre.' : d.plMetodo === 'contabil' ? `Média do P/L de cada pregão desde ${d.mediaDesde}, com o lucro contábil em vigor em cada data.` : 'Média do P/L de cada pregão do último ano, com o lucro já divulgado em cada data.'),
       c('LPA básico', tem(d.lpa) ? din(d.lpa) : null, 'últimos 12 meses', `Lucro por ação. Cada ação ganhou ${din(d.lpa)} em 12 meses.${q ? ` Conta: Lucro / ${q} de ações` : ''}`),
-      c('Dividendo anual', tem(d.dividendo) ? din(d.dividendo) : null, 'pago nos últimos 365 dias', `O que pingou na sua conta por ação nos últimos 365 dias corridos (Yahoo Finance, data de pagamento) - diferente do card "Dados fixos" (CVM), que soma os 4 últimos trimestres DECLARADOS; as 2 datas não coincidem exatamente.`),
+      c('Dividendo anual', tem(d.dividendo) ? din(d.dividendo) : null,
+        temDF && tem(DF.dividendo12m) ? `pago 365 dias · declarado ${din(DF.dividendo12m)} (CVM)` : 'pago nos últimos 365 dias',
+        `O que pingou na sua conta por ação nos últimos 365 dias corridos (Yahoo Finance, data de pagamento).${temDF && tem(DF.dividendo12m) ? ` Diferente do valor DECLARADO pela empresa na CVM nos últimos 4 trimestres (${fonteDF.replace(/\.$/, '')}): ${din(DF.dividendo12m)} por ação - pagamento e declaração não coincidem exatamente.` : ''}`),
       c('Dividend yield', tem(dy) ? `${f(dy)}%` : null, tem(dy) ? `${f(d.dividendo)} / ${f(d.preco)}` : '', `Quanto o dividendo representa sobre o preço. ${f(d.dividendo)} / ${f(d.preco)} = ${f(dy)}%.${naoPagadora ? ` É baixo porque a ${d.ticker} reinveste o lucro, não porque está com problema.` : ''}`),
-      c('Ações em circulação', q, 'quantos pedaços a empresa foi dividida', `A ${d.ticker} foi fatiada em ${q} de ações.`),
+      c('Ações em circulação', q, 'quantos pedaços a empresa foi dividida', `A ${d.ticker} foi fatiada em ${q} de ações.${temDF ? ` Fonte: ${fonteDF}` : ''}`),
+      c('Lucro líquido (12 meses)', temDF && tem(DF.lucro12m) ? `${f(DF.lucro12m / 1e9, 2)} bi` : null, 'declarado na CVM', `Lucro líquido total da empresa nos últimos 4 trimestres declarados na CVM. Fonte: ${fonteDF}`),
     ];
+    // P/VP, Payout, ROE (Issue #35) - só existiam no bloco "Dados fixos" removido; reusam o
+    // MESMO cálculo já feito em utils.dados_fixos.calcular_indicadores (d.dadosFixos.pvp/payout/
+    // roe), nenhuma conta nova aqui. Ao contrário dos cartões acima, um card sem dado aqui SOME
+    // (não mostra "Dados indisponíveis") - são indicadores extra, opcionais, não o núcleo da tela.
+    const cartoesExtra = [
+      temDF && tem(DF.pvp) ? c('P/VP', f(DF.pvp, 2), 'Preço / Valor Patrimonial por Ação',
+        `P/VP = Preço ÷ VPA.${tem(DF.vpa) ? ` Conta: ${f(d.preco)} ÷ ${f(DF.vpa, 2)} = ${f(DF.pvp, 2)}.` : ''} Fonte: ${fonteDF}`) : null,
+      temDF && tem(DF.payout) ? c('Payout', `${f(DF.payout * 100, 1)}%`, 'dividendo declarado ÷ LPA',
+        `Payout = Dividendo declarado na CVM ÷ LPA.${tem(DF.dividendo12m) && tem(d.lpa) ? ` Conta: ${din(DF.dividendo12m)} ÷ ${din(d.lpa)} = ${f(DF.payout * 100, 1)}%.` : ''} Fonte: ${fonteDF}`) : null,
+      temDF && tem(DF.roe) ? c('ROE', `${f(DF.roe * 100, 1)}%`, 'lucro líquido ÷ patrimônio líquido',
+        `ROE = Lucro líquido (12 meses) ÷ Patrimônio líquido.${tem(DF.lucro12m) && tem(DF.patrimonioLiquido) ? ` Conta: ${f(DF.lucro12m / 1e9, 2)} bi ÷ ${f(DF.patrimonioLiquido / 1e9, 2)} bi = ${f(DF.roe * 100, 1)}%.` : ''} Fonte: ${fonteDF}`) : null,
+    ].filter(Boolean);
+    const todosCartoes = [...cartoes, ...cartoesExtra];
     el.innerHTML = `<h2>Indicadores</h2>
       <div class="sub">Dados de ${d.data} · Fonte: ${d.fonte} · <button class="link" data-folha="ind">Ver como calculamos</button></div>
-      <div class="grade2">${cartoes.map(([r, v, s, dica]) => v === null
+      ${avisoHtml}
+      <div class="grade2">${todosCartoes.map(([r, v, s, dica]) => v === null
         ? `<div class="ind"><span class="rot">${r}</span><span class="s" style="margin-top:8px">${INDISP}</span></div>`
         : `<button class="ind" aria-expanded="false"><span class="rot">${r}</span><span class="v num">${v}</span><span class="s num">${s}</span><span class="dica">${dica}</span></button>`).join('')}</div>`;
     el.querySelectorAll('button.ind').forEach(b => { b.onclick = () => {

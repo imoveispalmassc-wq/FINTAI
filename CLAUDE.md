@@ -978,12 +978,57 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   só os 2 bugs acima.
   **DIVIDENDO: 2 métodos diferentes, não um bug** - continuam separados de propósito: "Indicadores"
   (card Dividendo anual, Yahoo) soma os dividendos efetivamente PAGOS nos últimos 365 dias corridos
-  (por data de pagamento); "Dados fixos" (CVM) soma os 4 últimos trimestres DECLARADOS na tabela do
-  release. As datas de declaração e pagamento não coincidem exatamente (BBAS3: R$0,66 pago vs
-  R$0,61 declarado, ~8% de diferença, dentro do esperado) - a tela agora deixa isso explícito nos 2
-  lugares ("Dividendo anual" nos Indicadores diz "pago nos últimos 365 dias"; "Dividendo Anual
-  (declarado, 4 tri)" nos Dados fixos; nota cruzada nos 2 cards explicando a diferença), em vez de
-  dar a entender que é a mesma conta com resultados diferentes.
+  (por data de pagamento); o valor DECLARADO na CVM (4 últimos trimestres da tabela do release, via
+  `buscar_fixos_br`) é mostrado junto, no mesmo card. As datas de declaração e pagamento não
+  coincidem exatamente (BBAS3: R$0,66 pago vs R$0,61 declarado, ~8% de diferença, dentro do
+  esperado) - a tela deixa isso explícito (sub-texto "pago 365 dias · declarado R$X (CVM)" e nota
+  cruzada no card "Dividendos" do bloco único), em vez de dar a entender que é a mesma conta com
+  resultados diferentes.
+
+- **"Dados fixos" REMOVIDO como bloco visual próprio, unificado em "Indicadores" (27/11/2026)**:
+  os 2 blocos mostravam números parecidos pro MESMO indicador (Ações, LPA, P/L) em cards
+  separados, o que já tinha causado confusão e um bug real (ver acima) - decisão: só "Indicadores"
+  mostra esses números pra qualquer ticker, nunca mais 2 blocos concorrentes. `utils/dados_fixos.py`
+  (`buscar_fixos_br`) **não foi tocado nem deletado** - continua a mesma camada de dados interna,
+  reusando `contabil_br.json`/`contabil_br_config.json` (ver correção acima); `tela/dados.montar()`
+  continua chamando `dados_fixos_tela()` e gravando o resultado em `d.dadosFixos` (a cotação do dia
+  só recalcula ali, nunca no módulo) - só que agora NADA renderiza a seção própria "Dados fixos":
+  `tela/detalhe.js` não tem mais a IIFE `DadosFixos`, e `tela/detalhe.html` não tem mais a
+  `<section id="dados-fixos">`. Os campos que só existiam lá e não tinham equivalente em
+  "Indicadores" migraram pra dentro do mesmo card (`tela/detalhe.js`, IIFE `Indicators`):
+  - "Ações em circulação" já existia em Indicadores (vinha de `acoes_oficiais()`/`contabil_12m()`,
+    um caminho PRÓPRIO que também já lê `contabil_br.json` - por isso os números já batiam antes
+    desta mudança, ver correção acima) - só ganhou a fonte CVM + data do balanço na dica.
+  - "Lucro líquido (12 meses)" é um card NOVO em Indicadores (não existia fora de "Dados fixos") -
+    `d.dadosFixos.lucro12m`, com "declarado na CVM" e a fonte+data completas na dica.
+  - Dividendo anual (Yahoo, pago) ganhou o valor declarado (CVM, `d.dadosFixos.dividendo12m`) como
+    sub-texto e nota cruzada na dica - ver "DIVIDENDO" acima.
+  - O aviso "Balanço novo detectado" (quando a CVM tem um balanço mais recente que o salvo) migrou
+    pro topo de "Indicadores" (antes ficava só em "Dados fixos").
+  **P/VP, Payout e ROE migrados depois (mesmo dia)**: 3 cards novos em Indicadores, reusando
+  EXATAMENTE `d.dadosFixos.pvp`/`.payout`/`.roe` (já calculados por `utils.dados_fixos.
+  calcular_indicadores`, nenhuma conta nova) - Payout usa o dividendo DECLARADO (CVM), não o pago
+  (Yahoo); ROE usa o mesmo "Lucro líquido (12 meses)" já mostrado no card ao lado. Diferente dos
+  cards do núcleo da tela (P/L, LPA etc.), que mostram "Dados indisponíveis" quando falta o dado,
+  esses 3 são indicadores extra/opcionais: sem dado, o card SOME (não aparece vazio).
+  **ADR em USD - NÃO implementado, por quê**: pedido inicialmente como "Preço do ADR em USD,
+  convertido com a mesma regra de câmbio EUR→USD que o projeto já usa" - RECUSADO, porque mistura
+  2 mecanismos sem relação: `fator_adr` (já existente em `dados_fixos.py`) é só um multiplicador de
+  proporção (quantas ações compõem 1 ADR) - `LPA_ADR = LPA × fator_adr` fica na MESMA moeda do
+  ativo (R$ pra BBAS3), nunca converte pra dólar; `taxa_cambio_historica_eur_usd` converte EUR→USD,
+  só pra empresas que arquivam na SEC em euro (ex. ASML) - BBAS3 é precificada em R$, sem nenhuma
+  relação com euro. Aplicar a taxa EUR→USD num preço em R$ trataria reais como se fossem euros - um
+  número inventado e errado por construção, exatamente o tipo de número que o projeto proíbe (não
+  existe conversão BRL→USD implementada, ver Issue #47 item 16). Um ADR de verdade (ex. BDORY, o
+  ADR real do Banco do Brasil) tem cotação PRÓPRIA no mercado americano - não é derivado
+  matematicamente do preço em R$ via taxa de câmbio. DECISÃO: nenhum card de "ADR em USD" por
+  enquanto - só volta a existir se for a cotação REAL do ticker do ADR buscada no Yahoo Finance
+  (ex. `yf.Ticker("BDORY")`), nunca por conversão matemática a partir do preço local; exigiria
+  mapear o ticker B3 pro ticker do ADR correspondente, hoje inexistente no projeto.
+  Testado ao vivo (BBAS3): "Indicadores" mostra Ações 5,71 bi, LPA 2,18, P/L 7,70-7,74 (varia com a
+  cotação do momento), Lucro líquido 12,45 bi, Dividendo 0,66 pago / 0,61 declarado, P/VP, Payout e
+  ROE - tudo num card só, "Dados fixos" não aparece em lugar nenhum da tela (`document.body.innerText`
+  sem a string).
 
 ## Issue #47 (26/11/2026): zonas sem julgamento, selo de fundamentos, bloco único LPA+P/L, remoção de backtest e preço justo, retorno sem misturar moeda
 
