@@ -1177,41 +1177,44 @@ function montar(root, d) {
         !G.porLpa && tem(G.lucroMin) && tem(G.lucroMax) ? `Lucro esperado: ${din(G.lucroMin / 1e9, 1)} a ${din(G.lucroMax / 1e9, 1)} bi` : null,
         tem(G.lpaMin) && tem(G.lpaMax) ? `LPA projetado: ${din(G.lpaMin)} a ${din(G.lpaMax)} (média ${din(G.lpa)})${tem(varProj) ? ` · ${sinal(varProj, 0)} vs ${anos.length ? anos[anos.length - 1].ano : ''}` : ''}` : null,
       ].filter(Boolean) : [];
-      // ITEM 4 (27/11/2026, versão definitiva do mesmo dia): mini gráfico de barras, só com valores
-      // já mostrados na tela (os `anos`, o TTM contábil já exibido no card "Lucro e Preço vs Lucro" e
-      // a projeção/guidance do ano seguinte) - nenhuma fonte ou cálculo novo. O ano de projeção tem 2
-      // barras (TTM real sólida + guidance/projeção tracejada), pra não misturar resultado já
-      // apurado com estimativa na mesma barra. Uma 6ª barra, bicolor empilhada, mostra a estimativa
-      // do INÍCIO do ano (`d.guidanceInicial.lpa`, o mesmo valor que já aparecia como linha
-      // pontilhada num follow-up anterior - aqui virou barra de verdade, a pedido do usuário):
-      // a parte de baixo (azul, "Realizado") é o próprio TTM já confirmado (`d.lpa`); a de cima
-      // (vermelha/hachurada, "Perdido") é a diferença entre a estimativa inicial e o TTM - os 2
-      // SOMADOS batem com a estimativa inicial (nenhum número novo, só a mesma conta de subtração).
+      // ITEM 4 (27/11/2026, versão definitiva do mesmo dia): mini gráfico de 5 barras, só com
+      // valores já mostrados na tela (os `anos`, o TTM contábil já exibido no card "Lucro e Preço
+      // vs Lucro" e a projeção/guidance do ano seguinte) - nenhuma fonte ou cálculo novo. Ordem
+      // fixa: anos históricos -> barra bicolor da estimativa inicial -> guidance/projeção (última).
+      // Sem barra solta "2026 Atual (TTM)" no meio - o TTM (`d.lpa`) só aparece DENTRO da barra
+      // bicolor, como segmento "Atual". A barra bicolor mostra a estimativa do INÍCIO do ano
+      // (`d.guidanceInicial.lpa`, mesma fonte que já alimentava a nota de texto removida num
+      // follow-up anterior): a parte de baixo (azul, "Atual") é o próprio TTM já confirmado; a de
+      // cima (vermelha/hachurada, "Perdido") é a diferença entre a estimativa inicial e o TTM - os
+      // 2 somados batem com a estimativa inicial (nenhum número novo, só subtração dos mesmos 2
+      // valores que já apareciam em outro lugar da tela).
       const GIb = d.guidanceInicial || {};
       const lpaIniBarra = tem(GIb.lpa) ? GIb.lpa : null;
       const temBarraInicial = temTTM && tem(lpaIniBarra) && lpaIniBarra > d.lpa;
       const perdidoInicial = temBarraInicial ? lpaIniBarra - d.lpa : null;
-      const pontosBarras = [
-        ...anos.map(a => ({ v: a.lpa, rot: a.ano })),
-        temTTM ? { v: d.lpa, rot: `${anoProj} Atual (TTM)` } : null,
-        anoProj ? { v: proj, rot: `${anoProj}E ${G ? 'Guidance' : 'Projeção'}`, proj: true } : null,
-      ].filter(Boolean);
-      const maxBarras = Math.max(...pontosBarras.map(p => Math.abs(p.v)).filter(tem), temBarraInicial ? lpaIniBarra : 0, 1e-9);
+      const barrasAnos = anos.map(a => ({ v: a.lpa, rot: a.ano }));
+      const barraGuidancePonto = anoProj ? { v: proj, rot: `${anoProj}E ${G ? 'Guidance' : 'Projeção'}`, proj: true } : null;
+      const maxBarras = Math.max(
+        ...barrasAnos.map(p => Math.abs(p.v)).filter(tem),
+        barraGuidancePonto && tem(barraGuidancePonto.v) ? Math.abs(barraGuidancePonto.v) : 0,
+        temBarraInicial ? lpaIniBarra : 0, 1e-9);
       const alturaBarra = v => Math.max(4, Math.round(Math.abs(v) / maxBarras * 54));
-      const barrasSimples = pontosBarras.map(p => {
+      const barraSimples = p => {
         const vazio = !tem(p.v);
         const h = vazio ? 0 : alturaBarra(p.v);
         return `<div class="mini-barra"><span class="mb-val">${vazio ? '—' : din(p.v)}</span>
           <div class="mb-col"><div class="mb-cheia${p.proj ? ' proj' : ''}${!vazio && p.v < 0 ? ' neg' : ''}" style="height:${h}px"></div></div>
           <span class="mb-rot">${p.rot}</span></div>`;
-      }).join('');
-      const barraInicial = temBarraInicial ? `<div class="mini-barra mini-barra-larga"><span class="mb-val">${din(lpaIniBarra)}</span>
+      };
+      const barrasAnosHtml = barrasAnos.map(barraSimples).join('');
+      const barraInicial = temBarraInicial ? `<div class="mini-barra mini-barra-larga"><span class="mb-val">Estimativa jan/${String(anoProj).slice(-2)}: ${din(lpaIniBarra)}</span>
         <div class="mb-col"><div class="mb-stack" style="height:${alturaBarra(d.lpa) + alturaBarra(perdidoInicial)}px">
           <div class="mb-seg mb-seg-perdido" style="height:${alturaBarra(perdidoInicial)}px" title="Perdido: ${din(perdidoInicial)}"><span class="mb-seg-l1">Perdido</span><span class="mb-seg-l2">-${f(perdidoInicial)}</span></div>
-          <div class="mb-seg mb-seg-real" style="height:${alturaBarra(d.lpa)}px" title="Realizado: ${din(d.lpa)}"><span class="mb-seg-l1">Realizado</span><span class="mb-seg-l2">${f(d.lpa)}</span></div>
+          <div class="mb-seg mb-seg-real" style="height:${alturaBarra(d.lpa)}px" title="Atual: ${din(d.lpa)}"><span class="mb-seg-l1">Atual</span><span class="mb-seg-l2">${f(d.lpa)}</span></div>
         </div></div>
         <span class="mb-rot">${anoProj} Inicial jan/${String(anoProj).slice(-2)}</span></div>` : '';
-      const graficoLpa = `<div class="mini-barras">${barrasSimples}${barraInicial}</div>`;
+      const barraGuidanceHtml = barraGuidancePonto ? barraSimples(barraGuidancePonto) : '';
+      const graficoLpa = `<div class="mini-barras">${barrasAnosHtml}${barraInicial}${barraGuidanceHtml}</div>`;
       // médias mais longas (mesma fonte anual do Yahoo; "Sem dado" quando ele não tem os anos pedidos)
       // e, só no Conservador, o P/L e o preço teto sobre a média de 10 anos - regra: nunca mostra
       // "Sem dado" repetido (4 linhas vazias confundem); SÓ mostra a linha se tiver valor, e quando

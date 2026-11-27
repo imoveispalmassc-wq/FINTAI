@@ -1429,6 +1429,19 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   renderização do card (`pontosBarras`/`barrasSimples`/`barraInicial`/`graficoLpa`), já que a barra
   bicolor precisa dividir a MESMA escala (`maxBarras`) das outras 5, o que a função genérica não
   previa.
+- **5º follow-up (mesmo dia) - versão DEFINITIVA de verdade: reordenar pra 5 barras, sem a barra
+  solta do TTM**: a versão anterior (6 barras) ainda tinha "2026 Atual (TTM)" como barra própria,
+  separada da barra bicolor - o usuário pediu pra tirar essa duplicação: o TTM (`d.lpa`) só aparece
+  DENTRO da barra bicolor, como segmento "Atual". Ordem final, fixa: 2023 → 2024 → 2025 → barra
+  bicolor "2026 Inicial jan/26" (4ª posição) → barra de guidance/projeção (5ª, por último, antes
+  era intercalada). Mudanças de texto na própria barra bicolor: rótulo do segmento azul virou
+  "Atual" (era "Realizado"); o rótulo no topo da barra (antes só "R$ 4,20") virou "Estimativa
+  jan/26: R$ 4,20", mais explícito. A barra de guidance ganhou um estilo mais visível - hachura AZUL
+  clara com opacidade (era cinza/`--ardosia`, pouco destacada) - "visível mas claramente projeção",
+  não cinza neutro. Nenhum número novo: é a mesma subtração de sempre (TTM e estimativa inicial),
+  só reordenada e com os rótulos ajustados. Testado ao vivo com BBAS3: 2023 (5,23) → 2024 (4,62) →
+  2025 (2,40) → bicolor (Perdido 2,02 em cima / Atual 2,18 embaixo, "Estimativa jan/26: R$ 4,20" no
+  topo) → guidance (R$ 1,75, hachura azul clara) - sem nenhuma barra duplicada do TTM.
 
 ## Textos
 

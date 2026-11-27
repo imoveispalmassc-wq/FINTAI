@@ -157,10 +157,10 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .mb-val { font-size: 11px; color: var(--texto); font-weight: 600; margin-bottom: 4px; white-space: nowrap; }
 .mb-col { display: flex; align-items: flex-end; height: 58px; }
 .mb-cheia { width: 20px; border-radius: 4px 4px 0 0; background: var(--azul); }
-.mb-cheia.proj { background: repeating-linear-gradient(45deg, var(--ardosia), var(--ardosia) 3px, transparent 3px, transparent 6px); border: 1px dashed var(--suave); }
+.mb-cheia.proj { background: repeating-linear-gradient(45deg, var(--azul), var(--azul) 3px, transparent 3px, transparent 6px); opacity: .55; border: 1px dashed var(--azul); }
 .mb-cheia.neg { background: var(--vermelho); }
 .mb-rot { font-size: 10px; line-height: 1.25; color: var(--suave); margin-top: 4px; text-align: center; }
-/* barra bicolor da estimativa inicial (item 4, follow-up 27/11/2026): empilhada, Realizado (azul)
+/* barra bicolor da estimativa inicial (item 4, follow-up 27/11/2026): empilhada, Atual (azul)
    embaixo + Perdido (vermelho hachurado) em cima - mesma escala das outras barras do gráfico. Coluna
    um pouco mais larga (mini-barra-larga) pra caber os 2 rótulos dentro dos segmentos. */
 .mini-barra-larga { flex: 1.7 1 0; }
