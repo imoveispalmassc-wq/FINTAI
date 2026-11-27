@@ -1381,6 +1381,23 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   duplicados. (3) texto "Dados de 5 e 10 anos indisponíveis... Nenhum ano de prejuízo..." encurtado
   pra "Sem histórico de 5/10 anos para este ticker." + "Sem prejuízo nos últimos 3 anos." (2 linhas
   curtas sucessivas, mesmo sentido, bem mais curto que o parágrafo de antes).
+- **3º follow-up no mesmo dia - coluna/gráfico de Receita FECHADO, sem implementar**: pedido de
+  novo (com valores pra COLAR da Perplexity) - mas o usuário mandou a mensagem com os 4 valores
+  ainda como `[COLAR]` (placeholder, nunca preenchido). Perguntado, o usuário respondeu que decidiu
+  FECHAR o pedido sem implementar: o Investing mostra 3 definições diferentes de receita pra mesma
+  empresa/período (~163 bi / ~102 bi / ~342 bi) e, sem certeza de qual bate com a fonte oficial da
+  BBAS3, preferiu não gravar nada em `utils/dados_fixos.py` a arriscar um número errado (mesma regra
+  de "nunca inventar" - aqui o risco não era inventar do zero, mas gravar um número real porém da
+  definição ERRADA, o que seria igualmente enganoso). DECISÃO FINAL: sem coluna de receita, sem
+  gráfico combinado - `utils/dados_fixos.py` continua sem nenhum campo de receita. Só um micro-ajuste
+  pedido junto: a linha pontilhada que ficava "solta" em cima da barra "2026 Atual (TTM)" (o traço
+  visual de `.mb-fantasma`/`hFant` em `miniBarras()`) foi REMOVIDA - a informação em si (estimativa
+  inicial de jan/26, R$ 4,20, revisada) continua, só que exclusivamente como texto (`notaFantasma`,
+  a legenda minúscula e apagada já existente abaixo do gráfico) - nunca mais desenhada sobre a barra.
+  `miniBarras()` voltou a não receber nenhum parâmetro `fantasma`/`fantasmaTitulo` (código morto
+  removido, junto com a classe CSS `.mb-fantasma`). Testado ao vivo com BBAS3: as 5 barras (2023/
+  2024/2025/2026 Atual TTM/2026E Guidance) ficam limpas, sem nenhum traço sobre elas; a nota de texto
+  continua aparecendo normalmente logo abaixo.
 
 ## Textos
 

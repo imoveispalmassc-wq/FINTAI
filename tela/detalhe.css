@@ -155,11 +155,10 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .mini-barras { display: flex; align-items: flex-end; gap: 10px; margin: 10px 0 14px; padding-top: 4px; }
 .mini-barra { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; min-width: 0; }
 .mb-val { font-size: 11px; color: var(--texto); font-weight: 600; margin-bottom: 4px; white-space: nowrap; }
-.mb-col { position: relative; display: flex; align-items: flex-end; height: 58px; }
+.mb-col { display: flex; align-items: flex-end; height: 58px; }
 .mb-cheia { width: 20px; border-radius: 4px 4px 0 0; background: var(--azul); }
 .mb-cheia.proj { background: repeating-linear-gradient(45deg, var(--ardosia), var(--ardosia) 3px, transparent 3px, transparent 6px); border: 1px dashed var(--suave); }
 .mb-cheia.neg { background: var(--vermelho); }
-.mb-fantasma { position: absolute; left: -3px; right: -3px; border-top: 1px dashed var(--suave); opacity: .55; }
 .mb-rot { font-size: 10px; line-height: 1.25; color: var(--suave); margin-top: 4px; text-align: center; }
 .crit p { margin: 0 0 10px; color: var(--suave); font-size: 13px; line-height: 1.5; }
 

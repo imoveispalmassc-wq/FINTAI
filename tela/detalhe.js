@@ -75,20 +75,18 @@ function montar(root, d) {
   // mini gráfico de barras (item 4, 27/11/2026) - reaproveita valores já mostrados na tela (nunca
   // busca/calcula nada novo); pontos sem valor (ex.: ano sem dado) viram uma barra vazia, nunca
   // inventam um número. `proj` marca a barra de projeção/guidance com um estilo diferente (tracejado).
-  // `fantasma` (opcional, 27/11/2026): valor antigo de referência (ex. guidance do início do ano,
-  // já revisado) marcado como uma linha pontilhada fina sobre a própria barra - entra na escala
-  // (pro traço nunca estourar a altura do gráfico) mas nunca vira uma barra própria, pra não ter o
-  // mesmo peso visual dos números atuais.
+  // Follow-up (27/11/2026): a linha pontilhada solta em cima da barra (marcando a estimativa inicial
+  // do início do ano) foi removida a pedido do usuário - ficava com cara de "traço solto" sem
+  // contexto. A informação em si continua, só que como texto (notaFantasma, abaixo do gráfico).
   const miniBarras = (pontos, formatar) => {
-    const vals = pontos.flatMap(p => [p.v, p.fantasma]).filter(tem);
+    const vals = pontos.map(p => p.v).filter(tem);
     if (!vals.length) return '';
     const max = Math.max(...vals.map(Math.abs), 1e-9);
     return `<div class="mini-barras">${pontos.map(p => {
       const vazio = !tem(p.v);
       const h = vazio ? 0 : Math.max(4, Math.round(Math.abs(p.v) / max * 54));
-      const hFant = tem(p.fantasma) ? Math.max(4, Math.round(Math.abs(p.fantasma) / max * 54)) : null;
       return `<div class="mini-barra"><span class="mb-val">${vazio ? '—' : formatar(p.v)}</span>
-        <div class="mb-col">${hFant != null ? `<div class="mb-fantasma" style="bottom:${hFant}px" title="${p.fantasmaTitulo || ''}"></div>` : ''}<div class="mb-cheia${p.proj ? ' proj' : ''}${!vazio && p.v < 0 ? ' neg' : ''}" style="height:${h}px"></div></div>
+        <div class="mb-col"><div class="mb-cheia${p.proj ? ' proj' : ''}${!vazio && p.v < 0 ? ' neg' : ''}" style="height:${h}px"></div></div>
         <span class="mb-rot">${p.rot}</span></div>`;
     }).join('')}</div>`;
   };
@@ -1207,13 +1205,13 @@ function montar(root, d) {
       // seguinte) - nenhuma fonte ou cálculo novo. 2ª mudança no mesmo dia: o ano de projeção virou
       // 2 barras (TTM real sólida + guidance/projeção tracejada) em vez de 1 só, pra não misturar
       // resultado já apurado com estimativa na mesma barra. GI.lpa (guidance do início do ano,
-      // congelado) vira só uma linha pontilhada fina sobre a barra do TTM - contexto de revisão, não
-      // uma barra própria (nunca com o mesmo peso visual dos números atuais).
+      // congelado) vira só a nota de texto `notaFantasma` abaixo do gráfico (contexto de revisão) -
+      // o traço pontilhado em cima da própria barra foi removido num follow-up (ficava "solto").
       const GIb = d.guidanceInicial || {};
       const lpaIniBarra = tem(GIb.lpa) ? GIb.lpa : null;
       const graficoLpa = miniBarras([
         ...anos.map(a => ({ v: a.lpa, rot: a.ano })),
-        temTTM ? { v: d.lpa, rot: `${anoProj} Atual (TTM)`, fantasma: lpaIniBarra, fantasmaTitulo: tem(lpaIniBarra) ? `Estimativa inicial jan/${String(anoProj).slice(-2)}: ${din(lpaIniBarra)} - revisada` : '' } : null,
+        temTTM ? { v: d.lpa, rot: `${anoProj} Atual (TTM)` } : null,
         anoProj ? { v: proj, rot: `${anoProj}E ${G ? 'Guidance' : 'Projeção'}`, proj: true } : null,
       ].filter(Boolean), v => din(v));
       const notaFantasma = temTTM && tem(lpaIniBarra) ? `<div class="nota" style="margin-top:2px;opacity:.65;font-size:10.5px">╌╌╌ Estimativa inicial jan/${String(anoProj).slice(-2)}: ${din(lpaIniBarra)} - revisada</div>` : '';
