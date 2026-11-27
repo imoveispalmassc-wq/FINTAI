@@ -150,6 +150,16 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .lista-v div { display: flex; justify-content: space-between; gap: 10px; color: var(--suave); font-size: 13px; }
 .lista-v b { color: var(--texto); }
 .exemplo { background: var(--card2); border-radius: 10px; padding: 10px 12px; font-weight: 600; margin-bottom: 10px; }
+
+/* mini gráfico de barras (item 4, 27/11/2026) - só reaproveita valores já mostrados na tela */
+.mini-barras { display: flex; align-items: flex-end; gap: 10px; margin: 10px 0 14px; padding-top: 4px; }
+.mini-barra { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.mb-val { font-size: 11px; color: var(--texto); font-weight: 600; margin-bottom: 4px; white-space: nowrap; }
+.mb-col { display: flex; align-items: flex-end; height: 58px; }
+.mb-cheia { width: 20px; border-radius: 4px 4px 0 0; background: var(--azul); }
+.mb-cheia.proj { background: repeating-linear-gradient(45deg, var(--ardosia), var(--ardosia) 3px, transparent 3px, transparent 6px); border: 1px dashed var(--suave); }
+.mb-cheia.neg { background: var(--vermelho); }
+.mb-rot { font-size: 10.5px; color: var(--suave); margin-top: 4px; white-space: nowrap; }
 .crit p { margin: 0 0 10px; color: var(--suave); font-size: 13px; line-height: 1.5; }
 
 /* indicadores */

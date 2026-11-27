@@ -233,12 +233,18 @@ def test_contabil_volta_para_o_yahoo_se_a_sec_estiver_incompleta():
 
 
 def test_card_pl_na_ordem_inicio_contabil_previsao():
-    # issue #47 (item 12): bloco único "Lucro e Preço vs Lucro" - a "Visão do ano" mantém a ordem
-    # cronológica Início do ano -> Contábil 12 meses (TTM) -> Previsão atual.
+    # issue #47 (item 12): bloco único "Lucro e Preço vs Lucro" - ordem cronológica Início do ano
+    # -> Contábil 12 meses (TTM) -> Previsão atual. HIERARQUIA DO LPA (27/11/2026): o TTM é o único
+    # LPA que entra no cálculo (REGRA TRAVADA) - por isso ele renderiza PRIMEIRO, em destaque, na
+    # própria linha "Cotação ÷ LPA contábil TTM = P/L"; início do ano e previsão viram contexto
+    # (menor, cinza) logo abaixo, na MESMA ordem cronológica de antes.
     import pathlib
     js = pathlib.Path(__file__).resolve().parent.parent.joinpath("tela", "detalhe.js").read_text(encoding="utf-8")
-    bloco = js[js.index("const linhasVisao"):js.index("const linhasMedias")]
-    assert bloco.index("Início do ano") < bloco.index("Contábil 12 meses") < bloco.index("Previsão atual")
+    tpl_ini = js.index("el.innerHTML = `<h2>Lucro e Preço vs Lucro")
+    tpl = js[tpl_ini:tpl_ini + 2500]
+    assert tpl.index("LPA contábil TTM") < tpl.index("contexto")   # TTM renderiza antes do contexto
+    ctx = js[js.index("const contexto ="):js.index("const linhasMedias")]
+    assert ctx.index("Início do ano") < ctx.index("Previsão atual")
     assert "Lucro e Preço vs Lucro" in js
 
 

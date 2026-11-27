@@ -172,6 +172,16 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .lista-v div { display: flex; justify-content: space-between; gap: 10px; color: var(--suave); font-size: 13px; }
 .lista-v b { color: var(--texto); }
 .exemplo { background: var(--card2); border-radius: 10px; padding: 10px 12px; font-weight: 600; margin-bottom: 10px; }
+
+/* mini gráfico de barras (item 4, 27/11/2026) - só reaproveita valores já mostrados na tela */
+.mini-barras { display: flex; align-items: flex-end; gap: 10px; margin: 10px 0 14px; padding-top: 4px; }
+.mini-barra { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.mb-val { font-size: 11px; color: var(--texto); font-weight: 600; margin-bottom: 4px; white-space: nowrap; }
+.mb-col { display: flex; align-items: flex-end; height: 58px; }
+.mb-cheia { width: 20px; border-radius: 4px 4px 0 0; background: var(--azul); }
+.mb-cheia.proj { background: repeating-linear-gradient(45deg, var(--ardosia), var(--ardosia) 3px, transparent 3px, transparent 6px); border: 1px dashed var(--suave); }
+.mb-cheia.neg { background: var(--vermelho); }
+.mb-rot { font-size: 10.5px; color: var(--suave); margin-top: 4px; white-space: nowrap; }
 .crit p { margin: 0 0 10px; color: var(--suave); font-size: 13px; line-height: 1.5; }
 
 /* indicadores */
@@ -486,6 +496,21 @@ function montar(root, d) {
   };
   const limpar = [];
   const ex = chave => (d.exemplos && d.exemplos[chave] ? ' <span class="tag-proto">EXEMPLO</span>' : '');
+  // mini gráfico de barras (item 4, 27/11/2026) - reaproveita valores já mostrados na tela (nunca
+  // busca/calcula nada novo); pontos sem valor (ex.: ano sem dado) viram uma barra vazia, nunca
+  // inventam um número. `proj` marca a barra de projeção/guidance com um estilo diferente (tracejado).
+  const miniBarras = (pontos, formatar) => {
+    const vals = pontos.map(p => p.v).filter(tem);
+    if (!vals.length) return '';
+    const max = Math.max(...vals.map(Math.abs), 1e-9);
+    return `<div class="mini-barras">${pontos.map(p => {
+      const vazio = !tem(p.v);
+      const h = vazio ? 0 : Math.max(4, Math.round(Math.abs(p.v) / max * 54));
+      return `<div class="mini-barra"><span class="mb-val">${vazio ? '—' : formatar(p.v)}</span>
+        <div class="mb-col"><div class="mb-cheia${p.proj ? ' proj' : ''}${!vazio && p.v < 0 ? ' neg' : ''}" style="height:${h}px"></div></div>
+        <span class="mb-rot">${p.rot}</span></div>`;
+    }).join('')}</div>`;
+  };
   const FOLHAS = {};
   const fonte = `<p><b>Fonte:</b> ${d.fonte} · atualizado em ${d.atualizado}.</p>`;
   // Selo de Fundamentos (issue #47, item 11): fato de fundamento, nunca recomendação - fica
@@ -1308,11 +1333,15 @@ function montar(root, d) {
       if (S && S.trimestres && S.trimestres.length) return `Fonte: ${d.lpaFonte || 'Yahoo Finance'} · release XTXX · ${d.balanco && d.balanco.data ? d.balanco.data : ''}`;
       return d.lpaFonte ? `Fonte: ${d.lpaFonte}` : ''; })();
 
-    // Lucro no ano: lucro contábil até o momento (TTM) e lucro do ano anterior, para a Visão do ano
-    const linhasVisao = [
-      lpaIni ? ['Início do ano', `${din(lpaIni)}${GI.ano ? ` (${GI.ano})` : ''}`] : null,
-      !prejuizo && tem(d.lpa) ? ['Contábil 12 meses (TTM)', din(d.lpa)] : null,
-      tem(lpaPrev) ? ['Previsão atual' + (anoPrev ? ` (${anoPrev})` : ''), `${din(lpaPrev)}${lpaGuia ? ' · GUIDANCE OFICIAL' : tem(Fp.analistas) && Fp.analistas < 3 ? ' · consenso, pouco confiável' : lpaCons ? ' · consenso' : ''}`] : null,
+    // HIERARQUIA DO LPA (27/11/2026, a pedido do usuário): TTM é o único LPA que entra no cálculo
+    // de P/L (REGRA TRAVADA acima) - os outros 3 valores (início do ano, previsão atual, ajustado)
+    // são só referência/contexto, nunca o LPA usado. Por isso TTM fica em destaque na própria linha
+    // do cálculo (acima), e os outros 3 viram 1 única linha pequena/cinza, sem o peso visual de
+    // linhas separadas em negrito - "Início do ano" é o guidance CONGELADO no começo do ano fiscal
+    // (não muda); "Contábil 12 meses (TTM)" acima é o que realmente atualiza a cada balanço.
+    const contexto = [
+      lpaIni ? `Início do ano ${din(lpaIni)}${GI.ano ? ` (${GI.ano})` : ''}` : null,
+      tem(lpaPrev) ? `Previsão atual${anoPrev ? ` (${anoPrev})` : ''} ${din(lpaPrev)}${lpaGuia ? ' · guidance' : lpaCons ? ' · consenso' : ''}` : null,
     ].filter(Boolean);
     const linhasMedias = [
       tem(d.lpaMedio3a) ? `3 anos ${din(d.lpaMedio3a)}` : null,
@@ -1320,20 +1349,30 @@ function montar(root, d) {
       tem(d.lpaMedia10a) ? `10 anos ${din(d.lpaMedia10a)}` : null,
     ].filter(Boolean);
 
-    // Dividendos (item 14): só fato, sem selo "Favorável"/"Desfavorável" - DY que sobe porque o
-    // preço caiu não é favorável. "Dividendo reduzido" entra como frase de fato (conta para o
-    // Selo de Fundamentos do item 11, não aqui).
+    // Dividendos (item 14, unificado 27/11/2026): ANTES o mesmo dividendo aparecia em 3 lugares
+    // com 3 valores diferentes (pago/declarado/projetado) sem dizer qual era qual - parecia erro.
+    // Agora as 3 linhas ficam juntas, nomeadas, só aqui - "Indicadores" não repete mais o valor
+    // bruto do dividendo (só o Dividend Yield, uma conta diferente). DF = utils.dados_fixos (CVM,
+    // declarado); d.dividendo = Yahoo (pago); d.guidance.dividendo = projeção da empresa.
+    const DF = d.dadosFixos, temDF = DF && DF.status === 'ok';
     const cortou = tem(d.dividendo12Atras) && d.dividendo12Atras > 0 && d.dividendo < d.dividendo12Atras * 0.95;
     const linhasDiv = [
-      tem(d.dividendo) ? ['Dividendo por ação / ano', din(d.dividendo)] : null,
-      tem(dy) ? ['DY atual', `${f(dy)}%`] : null,
+      tem(d.dividendo) ? ['Pago (365 dias)', din(d.dividendo)] : null,
+      temDF && tem(DF.dividendo12m) ? ['Declarado (CVM)', din(DF.dividendo12m)] : null,
+      d.guidance && tem(d.guidance.dividendo) ? [`Projetado${anoPrev ? ` ${anoPrev}` : ''}`, `${din(d.guidance.dividendo)} · DY ${f(d.guidance.dividendo / d.preco * 100, 1)}%`] : null,
+      tem(dy) ? ['DY atual (sobre o pago)', `${f(dy)}%`] : null,
       tem(d.dyMedio12) ? ['DY média 12m', `${f(d.dyMedio12)}%`] : null,
-      d.guidance && tem(d.guidance.dividendo) ? ['Projetado [Projeção]', `${din(d.guidance.dividendo)} · ${f(d.guidance.dividendo / d.preco * 100, 1)}%`] : null,
     ].filter(Boolean);
     const fraseDiv = !tem(dy) ? ''
       : naoPagadora ? (d.dividendo > 0 ? `A ${d.ticker} quase não paga dividendo; reinveste quase todo o lucro na própria empresa. É o perfil da empresa, para quem busca crescimento, não renda.`
           : `A ${d.ticker} não pagou dividendo nos últimos 12 meses. É o perfil de quem reinveste o lucro, não necessariamente um problema.`)
       : cortou ? `Dividendo reduzido vs 12 meses atrás: de ${din(d.dividendo12Atras)} para ${din(d.dividendo)} por ação.` : '';
+    // UMA única nota explicando os 3 métodos do dividendo (antes repetida, com texto diferente,
+    // em 3 cards - unificado 27/11/2026 a pedido do usuário).
+    const notaDiv = 'Pago = dinheiro que caiu na sua conta nos últimos 365 dias corridos (Yahoo Finance). '
+      + 'Declarado = valor aprovado pela empresa, somado dos últimos 4 trimestres na CVM.'
+      + (d.guidance && tem(d.guidance.dividendo) ? ' Projetado = estimativa da empresa pro ano em curso, ainda não paga nem declarada.' : '')
+      + ' Pago e declarado quase nunca batem exatamente - são 2 datas diferentes (pagamento x aprovação), não um erro.';
 
     el.innerHTML = `<h2>Lucro e Preço vs Lucro</h2>
       <div class="pilha">
@@ -1341,18 +1380,17 @@ function montar(root, d) {
           ${bolaAtualizacao(d.atualizacao)}
           ${prejuizo ? `<div class="destaque" style="color:var(--vermelho)">A empresa teve prejuízo nos últimos 12 meses: a relação preço/lucro não se aplica.</div>` : !tem(d.pl) ? `<div class="nota">${INDISP}</div>` : `
           <div class="duas"><span class="rot">Cotação ÷ LPA contábil TTM = P/L</span></div>
-          <div class="nota num" style="margin-top:2px">${f(d.preco)} ÷ ${f(d.lpa)} = <b style="color:var(--texto)">P/L ${f(d.pl)}</b></div>
-          ${tem(lpaAjustado) ? `<div class="nota num" style="margin-top:2px;color:var(--suave)">LPA [Ajustado]: ${f(lpaAjustado)}${tem(plAjustado) ? ` · P/L ajustado ${f(plAjustado)}` : ''}</div>` : ''}
-          ${linhasVisao.length ? `<div class="lista-v num" style="margin-top:10px">${linhasVisao.map(([r, v]) => `<div>${r}<b>${v}</b></div>`).join('')}</div>` : ''}
+          <div class="nota num" style="margin-top:2px;font-size:15px">${f(d.preco)} ÷ <b style="color:var(--texto);font-size:17px">${f(d.lpa)}</b> = <b style="color:var(--texto);font-size:17px">P/L ${f(d.pl)}</b></div>
+          ${contexto.length || tem(lpaAjustado) ? `<div class="nota" style="margin-top:6px;opacity:.85">${[...contexto, tem(lpaAjustado) ? `[Ajustado] ${din(lpaAjustado)}${tem(plAjustado) ? ` · P/L ${f(plAjustado)}` : ''}` : null].filter(Boolean).join(' · ')}</div>` : ''}
           ${linhasMedias.length ? `<div class="nota num" style="margin-top:8px">Média: ${linhasMedias.join(' • ')}</div>` : ''}
-          ${tem(d.plMedio12) ? `<div class="nota num" style="margin-top:4px">P/L médio 12m: ${f(d.plMedio12)}</div>` : ''}
+          ${tem(d.plMedio12) ? `<div class="nota num" style="margin-top:4px">P/L médio 12m: ${f(d.plMedio12)}${tem(d.pl) ? ` (vs. P/L atual ${f(d.pl)})` : ''}</div>` : ''}
           `}
           ${fonteLinha ? `<div class="nota" style="margin-top:10px">${fonteLinha}</div>` : ''}
         </div>
         <div class="card">
           <strong>Dividendos</strong>
           ${linhasDiv.length ? `<div class="lista-v num" style="margin-top:8px">${linhasDiv.map(([r, v]) => `<div>${r}<b>${v}</b></div>`).join('')}</div>` : `<div class="nota" style="margin-top:8px">${INDISP}</div>`}
-          ${linhasDiv.length ? `<div class="nota" style="margin-top:6px">Pago nos últimos 365 dias corridos (Yahoo Finance).${d.dadosFixos && d.dadosFixos.status === 'ok' && tem(d.dadosFixos.dividendo12m) ? ` Diferente do valor declarado pela empresa na CVM (card "Indicadores" abaixo, "Dividendo anual"): ${din(d.dadosFixos.dividendo12m)} por ação nos últimos 4 trimestres - pagamento e declaração não coincidem exatamente.` : ''}</div>` : ''}
+          ${linhasDiv.length ? `<div class="nota" style="margin-top:6px">${notaDiv}</div>` : ''}
           ${fraseDiv ? `<p class="nota" style="margin-top:8px">${fraseDiv}</p>` : ''}
         </div>
       </div>`;
@@ -1392,9 +1430,9 @@ function montar(root, d) {
       c('P/L atual', tem(d.pl) ? f(d.pl) : null, tem(difPL) ? `${sinal(difPL)} vs. média de 12m` : '', `Você paga ${din(d.pl)} para cada ${d.moeda} 1 de lucro. Conta: ${f(d.preco)} / ${f(d.lpa)} = ${f(d.pl)}`),
       c('P/L médio 12 meses', tem(d.plMedio12) ? f(d.plMedio12) : null, medioSub, d.plMetodo === 'simplificado' ? 'Estimativa: preço médio do ano dividido pelo LPA atual, porque o Yahoo não traz o lucro de cada trimestre.' : d.plMetodo === 'contabil' ? `Média do P/L de cada pregão desde ${d.mediaDesde}, com o lucro contábil em vigor em cada data.` : 'Média do P/L de cada pregão do último ano, com o lucro já divulgado em cada data.'),
       c('LPA básico', tem(d.lpa) ? din(d.lpa) : null, 'últimos 12 meses', `Lucro por ação. Cada ação ganhou ${din(d.lpa)} em 12 meses.${q ? ` Conta: Lucro / ${q} de ações` : ''}`),
-      c('Dividendo anual', tem(d.dividendo) ? din(d.dividendo) : null,
-        temDF && tem(DF.dividendo12m) ? `pago 365 dias · declarado ${din(DF.dividendo12m)} (CVM)` : 'pago nos últimos 365 dias',
-        `O que pingou na sua conta por ação nos últimos 365 dias corridos (Yahoo Finance, data de pagamento).${temDF && tem(DF.dividendo12m) ? ` Diferente do valor DECLARADO pela empresa na CVM nos últimos 4 trimestres (${fonteDF.replace(/\.$/, '')}): ${din(DF.dividendo12m)} por ação - pagamento e declaração não coincidem exatamente.` : ''}`),
+      // Dividendo anual (pago/declarado/projetado) unificado no card "Dividendos" (bloco "Lucro e
+      // Preço vs Lucro" acima, 27/11/2026) - aqui só o Dividend Yield, uma conta diferente (não
+      // duplica o valor bruto do dividendo).
       c('Dividend yield', tem(dy) ? `${f(dy)}%` : null, tem(dy) ? `${f(d.dividendo)} / ${f(d.preco)}` : '', `Quanto o dividendo representa sobre o preço. ${f(d.dividendo)} / ${f(d.preco)} = ${f(dy)}%.${naoPagadora ? ` É baixo porque a ${d.ticker} reinveste o lucro, não porque está com problema.` : ''}`),
       c('Ações em circulação', q, 'quantos pedaços a empresa foi dividida', `A ${d.ticker} foi fatiada em ${q} de ações.${temDF ? ` Fonte: ${fonteDF}` : ''}`),
       c('Lucro líquido (12 meses)', temDF && tem(DF.lucro12m) ? `${f(DF.lucro12m / 1e9, 2)} bi` : null, 'declarado na CVM', `Lucro líquido total da empresa nos últimos 4 trimestres declarados na CVM. Fonte: ${fonteDF}`),
@@ -1426,7 +1464,7 @@ function montar(root, d) {
       <p><b>P/L atual</b></p>${tem(d.pl) ? `<code>${f(d.preco)} ÷ ${f(d.lpa)} = ${f(d.pl)}</code>` : `<p>${INDISP}.</p>`}
       <p><b>Dividend yield</b></p>${tem(dy) ? `<code>${f(d.dividendo)} ÷ ${f(d.preco)} = ${f(dy)}%</code>` : `<p>${INDISP}.</p>`}
       <p><b>LPA básico:</b> lucro líquido dos últimos 12 meses dividido pelo número de ações.</p>
-      <p><b>Dividendo anual:</b> soma dos proventos pagos nos últimos 12 meses.</p>
+      <p>Dividendo pago/declarado/projetado: card "Dividendos", no bloco "Lucro e Preço vs Lucro" acima.</p>
       <p>Toque em um cartão para ver a explicação dele.</p>${fonte}`];
   })($('indicadores'));
 
@@ -1566,6 +1604,16 @@ function montar(root, d) {
       const divG = G && tem(G.dividendo) ? (G.dividendoFonte === 'empresa' ? ` Dividendo anual divulgado pela empresa: ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`
         : ` Dividendo projetado: ${din(G.lpa)} × payout ${f(G.payout * 100, 0)}% = ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`) : '';
       const linhaProj = anoProj ? `<div class="proj"><span>${anoProj} <span class="tag-proj">${G ? 'guidance' : 'projeção'}</span>${ex('lpaEsteAno')}</span><b>${tem(proj) ? din(proj) : 'Sem estimativa'}</b></div>` : '';
+      // ITEM 3 (27/11/2026): guidance encurtado pra 2-3 linhas visíveis; o parágrafo completo
+      // (consenso/variação/base recalculada/dividendo) vai pra "Ver metodologia" (FOLHAS.guidance) -
+      // texto IDÊNTICO ao de antes, só reposicionado, nenhuma informação removida.
+      const resumoGuidance = G ? [
+        !G.porLpa && tem(G.lucroMin) && tem(G.lucroMax) ? `Lucro esperado: ${din(G.lucroMin / 1e9, 1)} a ${din(G.lucroMax / 1e9, 1)} bi` : null,
+        tem(G.lpaMin) && tem(G.lpaMax) ? `LPA projetado: ${din(G.lpaMin)} a ${din(G.lpaMax)} (média ${din(G.lpa)})${tem(varProj) ? ` · ${sinal(varProj, 0)} vs ${anos.length ? anos[anos.length - 1].ano : ''}` : ''}` : null,
+      ].filter(Boolean) : [];
+      // ITEM 4 (27/11/2026): mini gráfico de barras, só com valores já mostrados na tela (os `anos`
+      // + a projeção/guidance do ano seguinte) - nenhuma fonte ou cálculo novo.
+      const graficoLpa = miniBarras([...anos.map(a => ({ v: a.lpa, rot: a.ano })), anoProj ? { v: proj, rot: `${anoProj}E`, proj: true } : null].filter(Boolean), v => din(v));
       // médias mais longas (mesma fonte anual do Yahoo; "Sem dado" quando ele não tem os anos pedidos)
       // e, só no Conservador, o P/L e o preço teto sobre a média de 10 anos - regra: nunca mostra
       // "Sem dado" repetido (4 linhas vazias confundem); SÓ mostra a linha se tiver valor, e quando
@@ -1585,16 +1633,30 @@ function montar(root, d) {
         : !grupoConservador.length ? 'P/L Conservador e Preço teto conservador indisponíveis para este ticker (dependem da média de 10 anos).'
         : '';
       const avisoAnualHtml = d.avisoGuidanceAnual ? `<div class="aviso" style="margin-bottom:10px">${d.avisoGuidanceAnual}</div>` : '';
+      // texto completo da projeção (consenso/variação/base recalculada/dividendo) - igual ao de
+      // antes, palavra por palavra; só mudou de lugar (visível direto -> "Ver metodologia" quando
+      // há guidance oficial, ver resumoGuidance acima).
+      const textoProjecaoCompleto = anoProj ? `${tem(proj) ? `Projeção ${anoProj}: ${consenso}${tem(varProj) ? `; ${sinal(varProj, 0)} sobre ${anos.length ? anos[anos.length - 1].ano : ''}${G && G.porLpa ? ' (o guidance é LPA ajustado; o ano anterior é o LPA contábil do Yahoo, bases diferentes)' : ''}` : ''}.${divG}${baseG} Não entra na média.${G ? ' O guidance oficial substitui o consenso dos analistas do Yahoo.' : ''}` : `Sem estimativa no Yahoo para ${anoProj}.`}` : '';
       el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>
         ${avisoAnualHtml}
-        <div class="card">${G ? `<div style="margin-bottom:10px"><span class="selo ok">GUIDANCE OFICIAL · ${G.data}</span>
-          <div class="nota" style="margin-top:6px">Fonte: ${G.url ? `<a class="link" href="${G.url}" target="_blank" rel="noopener" id="g-fonte"></a>` : '<span id="g-fonte"></span>'}</div></div>` : ''}${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}${linhaProj}</div>` : ''}
+        <div class="card">${G ? `<div style="margin-bottom:10px">
+          <span class="selo ok">GUIDANCE OFICIAL · ${G.data}</span>
+          ${resumoGuidance.length ? `<div class="nota num" style="margin-top:6px">${resumoGuidance.join('<br>')}</div>` : ''}
+          <button class="link" data-folha="guidance" style="margin-top:6px">Ver metodologia</button>
+          </div>` : ''}
+          ${graficoLpa}
+          ${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}${linhaProj}</div>` : ''}
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
           ${linhasLongas ? `<div class="lista-v num" style="margin-top:10px">${linhasLongas}</div>` : ''}
           ${notaIndisponivel ? `<div class="nota" style="margin-top:10px">${notaIndisponivel}</div>` : ''}
-          <div class="nota" id="g-nota"></div></div>${outlookHtml}`;
-      if (G) { const fz = el.querySelector('#g-fonte'); if (fz) fz.textContent = G.fonte; }
-      el.querySelector('#g-nota').textContent = `${nota}${anoProj ? ` ${tem(proj) ? `Projeção ${anoProj}: ${consenso}${tem(varProj) ? `; ${sinal(varProj, 0)} sobre ${anos[anos.length - 1].ano}${G && G.porLpa ? ' (o guidance é LPA ajustado; o ano anterior é o LPA contábil do Yahoo, bases diferentes)' : ''}` : ''}.${divG}${baseG} Não entra na média.${G ? ' O guidance oficial substitui o consenso dos analistas do Yahoo.' : ''}` : `Sem estimativa no Yahoo para ${anoProj}.`}` : ''}`;
+          <div class="nota" id="g-nota"></div>${!G ? `<div class="nota" id="g-nota-proj" style="margin-top:4px"></div>` : ''}</div>${outlookHtml}`;
+      el.querySelector('#g-nota').textContent = nota;
+      if (!G) { const gp = el.querySelector('#g-nota-proj'); if (gp) gp.textContent = textoProjecaoCompleto; }
+      if (G) {
+        FOLHAS.guidance = () => ['Metodologia do guidance', `
+          <p>${textoProjecaoCompleto}</p>
+          <p><b>Fonte:</b> ${G.url ? `<a class="link" href="${G.url}" target="_blank" rel="noopener">${G.fonte}</a>` : G.fonte}</p>`];
+      }
     } else if (modo === 'lynch') {
       const L = d.lynch, v = L.veredito, F = L.futuro, pc = x => tem(x) ? `${sinal(x, 1)} ao ano` : 'Sem dado';
       // crescimento acima de 100% ao ano vem de base quase zero: mostra quantas vezes multiplicou

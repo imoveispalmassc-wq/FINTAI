@@ -1299,6 +1299,50 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   de ocultar o rótulo quando a coluna é estreita demais continua a mesma, só o texto exibido mudou
   (ver Issue #47 acima).
 
+## Melhoria visual nos cards de LPA/Lucro/Dividendo (27/11/2026) - sem mudar nenhum cálculo
+
+- Pedido do usuário (BBAS3): o mesmo dividendo aparecia 3x com 3 valores diferentes (parecia erro),
+  o LPA tinha 4 números com o mesmo peso visual (ninguém sabia qual o app realmente usa) e o bloco
+  de guidance tinha um parágrafo de 8 linhas. Mudança só de APRESENTAÇÃO - nenhuma fórmula, fonte ou
+  valor novo; só reorganiza o que `d.dadosFixos`/`d.guidance`/`d.lpa` etc. já calculavam.
+  1. **Dividendo unificado**: card "Dividendos" (dentro de "Lucro e Preço vs Lucro") passou a ter 5
+     linhas na mesma lista - Pago (365 dias, Yahoo), Declarado (CVM), Projetado (guidance, com o DY
+     dele do lado), DY atual (sobre o pago) e DY média 12m - com 1 nota só explicando os 3 conceitos
+     (antes eram várias notas repetidas dizendo a mesma coisa). O card "Dividendo anual" que existia
+     solto em "Indicadores" foi removido (só "Dividend yield" continua lá) - era o mesmo número do
+     "Pago" do card novo, duplicado.
+  2. **Hierarquia do LPA**: no card "Lucro e Preço vs Lucro", o LPA contábil TTM (o único que entra
+     no P/L, REGRA TRAVADA) ficou em destaque, na própria linha "Cotação ÷ LPA contábil TTM = P/L",
+     com fonte maior; Início do ano/Previsão atual/[Ajustado] viraram 1 linha de contexto, menor e
+     cinza, logo abaixo - são números diferentes de propósito (guidance congelado do início do ano
+     vs. resultado real acumulado vs. projeção pro resto do ano), não "o mesmo número corrigido".
+  3. **Guidance encurtado**: o card "Lucro por ação" (modo Conservador) mostra agora só 2-3 linhas
+     (Lucro esperado, LPA projetado com a variação vs. o ano anterior) com um botão "Ver metodologia"
+     que abre o texto completo de sempre (cálculo, fonte, data) no painel lateral já usado em outros
+     pontos da tela (`FOLHAS`/`data-folha` - mesmo mecanismo de "Ver como calculamos" já existente,
+     reaproveitado, não um componente novo). Sem guidance oficial (só consenso do Yahoo), o texto
+     completo de sempre continua visível direto no card (nunca escondido atrás de um botão quando
+     não há nada "longo" a esconder).
+  4. **Mini gráfico de LPA**: barras simples (`miniBarras()`, `tela/detalhe.js`) no card "Lucro por
+     ação", usando só os valores dos últimos 3 anos + projeção que a tela já mostra na tabela logo
+     abaixo (nenhuma busca/cálculo novo) - barra do ano de guidance com textura tracejada, pra marcar
+     visualmente que é projeção, não resultado fechado.
+  5. **P/L médio 12m com contexto**: "P/L médio 12m: 9,47" passou a mostrar "(vs. P/L atual 7,66)" do
+     lado, pra o usuário comparar sem precisar rolar até outro card.
+  **2 itens pedidos que, checados contra a lógica já existente e documentada, NÃO eram bugs - não
+  alterados**:
+  - "'Contábil 12m até 3T26 (set/26)' está errado, deveria ser 3T25": não está errado. Hoje
+    (27/11/2026) o último trimestre fechado e já divulgado da BBAS3 é mesmo o 3T26 (encerrado
+    30/09/2026) - "3T26 (set/26)" é a etiqueta correta pela própria convenção de trimestre do
+    projeto (ano civil do fechamento, não o ano anterior). Nenhuma mudança feita.
+  - "Trocar a bolinha vermelha em 'Atualizado em 22/11'... parece erro": não é erro, é o indicador de
+    idade do dado já documentado acima em "Card de P/L" (🟢 <2h, 🟡 <24h, 🔴 ≥24h desde a última
+    atualização do robô) - 22/11 está a 5 dias de hoje (27/11/2026), então vermelho é o resultado
+    correto e esperado da própria regra, não uma falha de cor. Nenhuma mudança feita.
+  Nada em `tela/dados.py` nem `utils/dados_fixos.py` foi tocado - só `tela/detalhe.js`/`.css` (e o
+  teste de ordem do card, `tests/test_dados.py`, ajustado pra continuar verificando a mesma ordem
+  cronológica Início do ano -> TTM -> Previsão atual, só que no novo formato visual).
+
 ## Textos
 
 - Nunca mostrar "percentil" nem a sigla IFR como título. Título do card "Força - RSI" (em inglês, não "IFR"),
