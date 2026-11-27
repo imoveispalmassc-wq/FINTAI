@@ -884,13 +884,17 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   número errado que o usuário via era a combinação do branch `refatora-sinais` parado +
   `yfinance` destravado (ambos corrigidos no PR #60) - não uma segunda implantação concorrente.
   Nada foi apagado (branch `refatora-sinais` continua existindo, intacto).
-- **Ticker fixo no topo (item 3)**: `.topo` (nome + bolsa + preço, em `tela/detalhe.html`/`.css`/
-  `.js`) agora é `position: sticky; top: 0` com fundo sólido e sombra/borda ao rolar (classe
-  `.rolou`, alternada por um listener de `scroll` da própria janela) - o nome do ativo e o preço do
-  dia (igual ao do cartão de decisão, só repetido no cabeçalho) ficam sempre visíveis, mesmo rolando
-  a tela pra baixo. Testado visualmente com Playwright (`chromium`, sem precisar `playwright
-  install`): renderizando `docs/index.html` e rolando a página, o `.topo` continua com
-  `getBoundingClientRect().top === 0`, mostrando nome, bolsa e preço.
+- **Ticker fixo no topo (item 3)**: `.topo` (em `tela/detalhe.html`/`.css`/`.js`) é
+  `position: sticky; top: 0`, com fundo sólido e sombra/borda ao rolar (classe `.rolou`, alternada
+  por um listener de `scroll` da própria janela). ESTADO NORMAL (topo da página, `.rolou` ausente):
+  mostra nome completo + bolsa + preço, como o resto da tela. ESTADO FIXO (rolando, `.rolou`
+  presente): mostra SÓ O TICKER (ex. "MU"), escondendo nome completo/bolsa/preço - CORRIGIDO
+  (27/11/2026): a 1ª versão mantinha nome e preço visíveis também ao rolar, repetindo o preço que
+  já aparece no cartão de decisão logo abaixo; o pedido era só manter o ticker identificável, sem
+  repetir mais nada. `#t-ticker` (`ticker-topo`) é um elemento à parte, escondido por padrão e
+  mostrado só com `.topo.rolou .ticker-topo`, enquanto `.topo.rolou .meio`/`.preco-topo` escondem o
+  resto. Testado visualmente com Playwright (`chromium`, dados reais da MU): antes de rolar mostra
+  "Micron / NASDAQ (MU) / 778,31"; rolando, mostra só "MU".
 - **CBRS sem Oportunidade 2/3 (item 6)**: investigado com dados reais do Yahoo Finance em
   26/11/2026 - NÃO é bug. CBRS tem só ~6 meses e meio de histórico de preço (IPO recente), então
   `media_fech_3a`/`media_fech_5a` ficam `None` (sem 3/5 anos de histórico - ver
