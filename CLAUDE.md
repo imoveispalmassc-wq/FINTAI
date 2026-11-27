@@ -912,6 +912,34 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   lista do card, com a conta embaixo (ex. "Payout: 4,0000 / 10,8922 = 36,7%", "ROE: 140,40 bi /
   505,63 bi = 27,8%", "P/VP: 42,67 / (505,63 bi / 12,89 bi)") e uma nota explicando a ausência do
   selo de média 12m.
+  BUG CORRIGIDO - `dados_fixos.json` não estava versionado (27/11/2026, achado pelo usuário: card
+  "Dados fixos" mostrava "Ticker não encontrado" pra BBAS3, que calcula certo em todo o resto da
+  tela): diferente dos outros caches do mesmo padrão (`contabil_br.json`, `contabil_sec.json`,
+  `guidance_auto.json`, todos rastreados no `main`), `utils/dados_fixos.json` nunca tinha sido
+  commitado - ficava só local, então qualquer deploy novo (ou este próprio ambiente) começava sem
+  nenhum ticker salvo. NÃO é um problema de fonte: testado de verdade, `buscar_fixos_br("BBAS3",
+  hoje)` busca direto nos documentos da CVM e acha ações, 4 trimestres de lucro/dividendo com fonte
+  e patrimônio líquido corretamente - só é lento (~270s, porque lê vários PDFs), então sem o
+  arquivo persistido cada carregamento frio refaria essa busca inteira. Corrigido rastreando
+  `utils/dados_fixos.json` no git (mesmo padrão dos caches irmãos) e gravando o resultado real já
+  buscado da CVM pra BBAS3 (igual ao que o módulo gravaria sozinho, só que feito manualmente aqui
+  pra não repetir os 270s) - o mecanismo de busca sob demanda do módulo não mudou.
+  **DECISÃO: `utils/dados_fixos.py` e `utils/biblioteca.py` continuam SEPARADOS, nunca mesclados.**
+  Cogitado (e descartado) migrar "Dados fixos" pra ler de `biblioteca.json` em vez do seu próprio
+  arquivo, pra ter "uma única fonte de verdade" - mas são 2 caches de propósitos DIFERENTES, não a
+  mesma fonte duplicada: `dados_fixos.json` guarda um registro estruturado de VÁRIOS campos por
+  ticker (ações, lucro, dividendo, patrimônio líquido, trimestres com fonte individual), buscado
+  DIRETO na CVM/SEC por código dedicado deste módulo; `biblioteca.json` guarda só 1 valor por
+  campo/ticker (`{valor, fonte, link, pagina, data_hora}`), vindo da Perplexity como ÚLTIMO recurso
+  quando não existe (ainda) uma busca direta dedicada pra aquele dado (ver "Biblioteca própria
+  (Perplexity)" acima - a REGRA TRAVADA trata a Perplexity como fallback, não como fonte primária).
+  Trocar a busca direta e já funcionando da CVM por uma leitura da Perplexity seria uma REGRESSÃO de
+  qualidade de dado, não uma simplificação - e exigiria redesenhar `biblioteca.json` pra guardar
+  5+ campos estruturados por ticker, duplicando o que `dados_fixos.py` já faz bem. A ausência real
+  de "2 fontes de verdade" pro MESMO dado não existe hoje: nenhum campo de `dados_fixos.json` é
+  também buscado por `biblioteca.py` pra nenhum ticker (confirmado - `biblioteca.json` só tem
+  `lpa_atual`, um campo que `dados_fixos.py` nem calcula desse jeito). O problema real era só a
+  falta de versionamento do arquivo, já corrigido acima.
 
 ## Issue #47 (26/11/2026): zonas sem julgamento, selo de fundamentos, bloco único LPA+P/L, remoção de backtest e preço justo, retorno sem misturar moeda
 

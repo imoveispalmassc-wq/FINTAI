@@ -1,0 +1,83 @@
+{
+  "BBAS3": {
+    "acoes_total": 2842623097.0,
+    "acoes_detalhe": "ON 2.842.623.097",
+    "tipo_acao": "ON",
+    "fator_adr": 1,
+    "moeda_resultado": "BRL",
+    "fonte_oficial": "PDF RI (CVM/IPE) - ações: Assembleia de 30/03/2026; lucro: release de resultados trimestral; dividendo: tabela do release/relatório de resultados (por ação); patrimônio líquido: tabela de destaques do release/relatório (coluna do trimestre)",
+    "data_ultimo_balanco": "30/09/2026",
+    "lucro_12m": 8560000000.0,
+    "dividendo_12m": 0.61,
+    "dividendo_motivo": null,
+    "patrimonio_liquido": 190121000000.0,
+    "patrimonio_motivo": null,
+    "trimestres": [
+      {
+        "tri": "4T25",
+        "fim": "31/12/2025",
+        "lucro": 1079000000.0,
+        "data": "24/02/2026",
+        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1481390&numSequencia=1006096&numVersao=3",
+        "dividendo": 0.26
+      },
+      {
+        "tri": "1T26",
+        "fim": "31/03/2026",
+        "lucro": 3090000000.0,
+        "data": "13/05/2026",
+        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1521600&numSequencia=1046306&numVersao=1",
+        "dividendo": 0.15
+      },
+      {
+        "tri": "2T26",
+        "fim": "30/06/2026",
+        "lucro": 3175000000.0,
+        "data": "17/08/2026",
+        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1558772&numSequencia=1083478&numVersao=2",
+        "dividendo": 0.16
+      },
+      {
+        "tri": "3T26",
+        "fim": "30/09/2026",
+        "lucro": 1216000000.0,
+        "data": "13/11/2026",
+        "url": "https://www.rad.cvm.gov.br/ENET/frmDownloadDocumento.aspx?Tela=ext&descTipo=IPE&CodigoInstituicao=1&numProtocolo=1589018&numSequencia=1113724&numVersao=2",
+        "dividendo": 0.04
+      }
+    ]
+  },
+  "MU": {
+    "acoes_total": 1131423212.0,
+    "tipo_acao": "comum",
+    "fator_adr": 1,
+    "moeda_resultado": "USD",
+    "fonte_oficial": "SEC EDGAR, XBRL companyfacts (10-Q/10-K)",
+    "data_ultimo_balanco": "03/09/2026",
+    "lucro_12m": 84969000000.0,
+    "dividendo_12m": 0.53,
+    "dividendo_motivo": null,
+    "trimestres": [
+      {
+        "fim": "27/11/2025",
+        "valor": 5240000000.0,
+        "form": "10-Q"
+      },
+      {
+        "fim": "26/02/2026",
+        "valor": 13785000000.0,
+        "form": "10-Q"
+      },
+      {
+        "fim": "28/05/2026",
+        "valor": 28243000000.0,
+        "form": "10-Q"
+      },
+      {
+        "fim": "03/09/2026",
+        "valor": 37701000000.0,
+        "form": "10-K"
+      }
+    ]
+  }
+}
