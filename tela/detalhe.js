@@ -218,7 +218,7 @@ function montar(root, d) {
       const diasTxt = sm.dias ? `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda desde o topo${sm.altas ? ` (${sm.altas} ${sm.altas === 1 ? 'alta' : 'altas'} no meio)` : ''}, ${sinal(sm.queda)}` : 'sem queda no último pregão';
       texto = `1. ${mmTxt} 2. ${sm.classe === 'OPORTUNIDADE' ? 'Faixa inferior' : sm.classe === 'CARO' ? 'Faixa superior' : 'Neutro'} (faixa de 52 semanas: ${(sm.zona52 || '').toLowerCase()}). 3. ${diasTxt}: ${sm.entrada}. ${sm.entradaDetalhe}.`
         + (hA && hA.vezes && sm.classe === 'OPORTUNIDADE' ? ` Histórico da ação: subiu no dia seguinte em ${f(hA.pct, 0)}% de ${hA.vezes} ${hA.vezes === 1 ? 'vez' : 'vezes'}${hA.vezes < 20 ? ' (poucos casos)' : ''}.` : '')
-        + ` Faixa inferior até ${din(sm.oportunidadeAte)}.`;
+        + ` Faixa neutra a partir de ${din(sm.oportunidadeAte)}.`;
     }
     const nome = document.createElement('div'); nome.className = 'razao'; nome.textContent = `${d.razao} · ${d.ticker}`;
     el.innerHTML = `<div class="decisao">

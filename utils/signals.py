@@ -103,12 +103,14 @@ def decidir_estado(percentil: float, minimo: float, maximo: float, *,
     `rotulo` nunca usa palavra de julgamento ("Oportunidade"/"Evitar") nem verbo de recomendação
     ("AGUARDAR") - só o nome neutro da zona, pra nunca sugerir uma recomendação de compra/venda/
     espera ao usuário (só `codigo`, interno, continua COMPRAR/AGUARDAR/CARO - usado pra cor/classe
-    CSS, nunca mostrado). O texto é sempre o limite da faixa inferior calculado para o ativo. Os
-    avisos (zona não validada pelo histórico, fundamento quebrado) vão em `alerta` e não mudam o
-    botão. A posição numérica na faixa nunca aparece no texto.
+    CSS, nunca mostrado). O texto é sempre o início da zona neutra calculado para o ativo (o mesmo
+    valor que fecha a faixa inferior - "a partir de", não "até", porque é onde a zona neutra começa,
+    não onde a faixa inferior termina). Os avisos (zona não validada pelo histórico, fundamento
+    quebrado) vão em `alerta` e não mudam o botão. A posição numérica na faixa nunca aparece no
+    texto.
     """
     alvo = preco_no_percentil(minimo, maximo, P_OPORTUNIDADE)
-    texto = f"Faixa inferior até {simbolo} {num(alvo)}"
+    texto = f"Faixa neutra a partir de {simbolo} {num(alvo)}"
     avisos = [f"Atenção: {motivo_quebra}."] if quebrou and motivo_quebra else []
     if percentil <= P_OPORTUNIDADE:
         if not compra_validada:
@@ -136,7 +138,7 @@ def decidir_estado_conservador(preco: float, teto: float, caro_acima: float | No
     (não existe backtest para este critério)."""
     alvo = teto * 0.70
     caro_acima = teto * 1.30 if caro_acima is None else caro_acima
-    texto = f"Faixa inferior até {simbolo} {num(alvo)}"
+    texto = f"Faixa neutra a partir de {simbolo} {num(alvo)}"
     avisos = [f"Atenção: {motivo_quebra}."] if quebrou and motivo_quebra else []
     if preco <= alvo:
         return Estado("COMPRAR", "Faixa inferior", texto, "Faixa inferior", False, " ".join(avisos))

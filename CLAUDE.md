@@ -206,8 +206,11 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   recomendação ("AGUARDAR"/"COMPRAR"/"CARO" como texto). `codigo` (COMPRAR/AGUARDAR/CARO) continua
   existindo só internamente, pra decidir a COR do badge (verde/âmbar/cinza) e a classe CSS - nunca
   é mostrado como texto na tela. A frase que antes era "Ponto de oportunidade em [valor]" virou
-  "Faixa inferior até [valor]" (mesmo valor de sempre: o limite de 30% sobre a faixa/âncora - só a
-  palavra mudou, nenhuma conta mudou). A pequena pílula que repetia a mesma zona embaixo do badge
+  "Faixa neutra a partir de [valor]" (mesmo valor de sempre: o limite de 30% sobre a faixa/âncora -
+  CORRIGIDO 27/11/2026: a 1ª versão dizia "Faixa inferior até [valor]", mas [valor] é onde a zona
+  neutra COMEÇA, não onde a faixa inferior termina - "até" dava a entender que o valor pertencia à
+  faixa inferior, quando na verdade é o início da neutra, logo acima; "a partir de" descreve o mesmo
+  ponto do lado certo). A pequena pílula que repetia a mesma zona embaixo do badge
   (ex. "Zona neutra") foi removida por ficar redundante com o próprio badge, que agora já diz a
   zona. Aplicado nos 3 modos (`utils.signals.decidir_estado`/`decidir_estado_conservador`,
   `utils.lynch.preco_lynch`, e o badge do SIMONS em `tela/detalhe.js`/`renderDecisao()`, que usa o
@@ -444,7 +447,7 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   foi empurrado pro afastar() (ex. preço de R$14,30 bem perto do limite de 3 anos de R$14,65 apareceria colado
   no traço do limite de 5 anos, bem mais longe). Sem texto explicativo embaixo
   da régua (só os cartões Faixa inferior/neutra/superior acima já explicam os cortes). O
-  PONTO DE ENTRADA (o texto "Faixa inferior até") é sempre o alvo fixo de 30% sobre a âncora de 1 ano -
+  PONTO DE ENTRADA (o texto "Faixa neutra a partir de") é sempre o alvo fixo de 30% sobre a âncora de 1 ano -
   não escala para os limites de 3/5 anos, que são só
   referência, nunca o ponto de entrada em si. O gráfico pontilhado do modo Conservador repete as mesmas 3 faixas
   de verde da barra, rotuladas Oportunidade 1 (o próprio ponto de entrada), Oportunidade 2 (limite de 3 anos) e

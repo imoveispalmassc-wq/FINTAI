@@ -75,7 +75,7 @@ def test_faixa_acompanha_o_periodo_do_grafico():
     assert fx["1a"]["rotulo"] == "Últimas 52 semanas" and fx["5a"]["rotulo"] == "Últimas 260 semanas (5 anos)"
     # só a faixa de 52 semanas tem teste histórico
     assert fx["1a"]["testada"] and not fx["5a"]["testada"] and not fx["max"]["testada"]
-    assert "Faixa inferior até R$" in fx["5a"]["decisao"]["texto"]
+    assert "Faixa neutra a partir de R$" in fx["5a"]["decisao"]["texto"]
 
 
 def test_faixa_de_5_anos_com_historico_curto_diz_quanto_cobre():
