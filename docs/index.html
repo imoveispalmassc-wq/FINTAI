@@ -176,16 +176,32 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 /* mini gráfico de barras (item 4, 27/11/2026) - só reaproveita valores já mostrados na tela */
 .mini-barras { display: flex; align-items: flex-end; gap: 10px; margin: 10px 0 14px; padding-top: 4px; }
 .mini-barra { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; min-width: 0; }
-.mb-val { font-size: 11px; color: var(--texto); font-weight: 600; margin-bottom: 4px; white-space: nowrap; }
+/* mb-val/mb-rot reservam uma altura fixa (pra até 2 linhas) - sem isso, uma coluna com rótulo mais
+   longo (ex. "Estimativa jan/26: R$ 4,20" ou "2026E Guidance", quebrando em 2 linhas) ficava mais
+   alta que as outras, e como `.mini-barras` alinha as colunas pela base (`align-items: flex-end`),
+   isso empurrava o conteúdo da coluna mais alta pra CIMA - as barras ficavam desalinhadas entre si
+   (bug reportado pelo usuário com print, 27/11/2026). Com a altura fixa, toda coluna tem a MESMA
+   altura total sempre, então as barras ficam sempre na mesma posição, não importa o tamanho do
+   rótulo de cima/baixo.
+   display:flex + align-items:flex-start faz o rótulo de cima (mb-val) começar sempre na MESMA altura
+   em toda coluna (1ª linha de todos os rótulos no mesmo nível, pedido do usuário) - um rótulo de
+   2 linhas cresce pra BAIXO, na direção da barra, em vez de subir; o rótulo de baixo (mb-rot) fica
+   normal (bloco), o espaço sobra embaixo. */
+.mb-val { display: flex; align-items: flex-start; justify-content: center; min-height: 28px; font-size: 11px; color: var(--texto); font-weight: 600; margin-bottom: 4px; white-space: nowrap; line-height: 1.2; }
 .mb-col { display: flex; align-items: flex-end; height: 58px; }
 .mb-cheia { width: 20px; border-radius: 4px 4px 0 0; background: var(--azul); }
 .mb-cheia.proj { background: repeating-linear-gradient(45deg, var(--azul), var(--azul) 3px, transparent 3px, transparent 6px); opacity: .55; border: 1px dashed var(--azul); }
 .mb-cheia.neg { background: var(--vermelho); }
-.mb-rot { font-size: 10px; line-height: 1.25; color: var(--suave); margin-top: 4px; text-align: center; }
+.mb-rot { display: block; min-height: 26px; font-size: 10px; line-height: 1.25; color: var(--suave); margin-top: 4px; text-align: center; }
 /* barra bicolor da estimativa inicial (item 4, follow-up 27/11/2026): empilhada, Atual (azul)
    embaixo + Perdido (vermelho hachurado) em cima - mesma escala das outras barras do gráfico. Coluna
    um pouco mais larga (mini-barra-larga) pra caber os 2 rótulos dentro dos segmentos. */
 .mini-barra-larga { flex: 1.7 1 0; }
+/* rótulo "Estimativa jan/26: R$ 4,20" é mais longo que os outros (ex. "R$ 5,23") e, com
+   white-space:nowrap do .mb-val padrão, vazava por cima da coluna vizinha (bug reportado pelo
+   usuário com print, 27/11/2026) - aqui quebra linha e fica centralizado (o "4,20" da 2ª linha
+   centralizado embaixo do "Estimativa jan/26: R$" da 1ª, a pedido do usuário) dentro da coluna. */
+.mini-barra-larga .mb-val { white-space: normal; justify-content: center; font-size: 10px; }
 .mb-stack { display: flex; flex-direction: column; width: 34px; border-radius: 4px 4px 0 0; overflow: hidden; }
 .mb-seg { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; overflow: hidden; }
 .mb-seg-real { background: var(--azul); }
@@ -1646,7 +1662,7 @@ function montar(root, d) {
           <div class="mb-seg mb-seg-perdido" style="height:${alturaBarra(perdidoInicial)}px" title="Perdido: ${din(perdidoInicial)}"><span class="mb-seg-l1">Perdido</span><span class="mb-seg-l2">-${f(perdidoInicial)}</span></div>
           <div class="mb-seg mb-seg-real" style="height:${alturaBarra(d.lpa)}px" title="Atual: ${din(d.lpa)}"><span class="mb-seg-l1">Atual</span><span class="mb-seg-l2">${f(d.lpa)}</span></div>
         </div></div>
-        <span class="mb-rot">${anoProj} Inicial jan/${String(anoProj).slice(-2)}</span></div>` : '';
+        <span class="mb-rot">${anoProj} Atual</span></div>` : '';
       const barraGuidanceHtml = barraGuidancePonto ? barraSimples(barraGuidancePonto) : '';
       const graficoLpa = `<div class="mini-barras">${barrasAnosHtml}${barraInicial}${barraGuidanceHtml}</div>`;
       // médias mais longas (mesma fonte anual do Yahoo; "Sem dado" quando ele não tem os anos pedidos)

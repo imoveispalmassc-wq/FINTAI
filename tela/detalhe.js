@@ -1212,7 +1212,7 @@ function montar(root, d) {
           <div class="mb-seg mb-seg-perdido" style="height:${alturaBarra(perdidoInicial)}px" title="Perdido: ${din(perdidoInicial)}"><span class="mb-seg-l1">Perdido</span><span class="mb-seg-l2">-${f(perdidoInicial)}</span></div>
           <div class="mb-seg mb-seg-real" style="height:${alturaBarra(d.lpa)}px" title="Atual: ${din(d.lpa)}"><span class="mb-seg-l1">Atual</span><span class="mb-seg-l2">${f(d.lpa)}</span></div>
         </div></div>
-        <span class="mb-rot">${anoProj} Inicial jan/${String(anoProj).slice(-2)}</span></div>` : '';
+        <span class="mb-rot">${anoProj} Atual</span></div>` : '';
       const barraGuidanceHtml = barraGuidancePonto ? barraSimples(barraGuidancePonto) : '';
       const graficoLpa = `<div class="mini-barras">${barrasAnosHtml}${barraInicial}${barraGuidanceHtml}</div>`;
       // médias mais longas (mesma fonte anual do Yahoo; "Sem dado" quando ele não tem os anos pedidos)

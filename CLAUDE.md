@@ -1442,6 +1442,46 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   só reordenada e com os rótulos ajustados. Testado ao vivo com BBAS3: 2023 (5,23) → 2024 (4,62) →
   2025 (2,40) → bicolor (Perdido 2,02 em cima / Atual 2,18 embaixo, "Estimativa jan/26: R$ 4,20" no
   topo) → guidance (R$ 1,75, hachura azul clara) - sem nenhuma barra duplicada do TTM.
+- **BUG CORRIGIDO (mesmo dia, achado pelo usuário num print)**: o rótulo "Estimativa jan/26: R$
+  4,20" (mais longo que os outros, ex. "R$ 5,23") usava o mesmo `.mb-val` com `white-space: nowrap`
+  das outras barras - sem quebrar linha, o texto vazava por cima da coluna vizinha (2025), ficando
+  colado/ilegível ("R$ 2,40Estimativa jan/26: R$ 4,20" grudados). Corrigido com uma regra só pra
+  essa coluna (`.mini-barra-larga .mb-val`): `white-space: normal` + fonte um pouco menor (10px) -
+  o texto agora quebra em 2 linhas dentro da própria coluna, sem invadir a vizinha. Ajuste seguinte
+  (mesmo dia, a pedido do usuário): `text-align: left`/`justify-content: flex-start` em vez de
+  centralizado - as 2 linhas do rótulo ficam alinhadas à esquerda, igual ao alinhamento natural dos
+  outros rótulos de 1 linha só.
+  **2º BUG CORRIGIDO (mesmo dia, a pedido do usuário "trazer mais para baixo os últimos 2")**: a
+  barra de guidance ficava visivelmente mais alta que as outras 4 - causa real: `.mb-rot` ("2026E
+  Guidance", mais longo que "2023" etc.) quebrava em 2 linhas, deixando aquela COLUNA mais alta que
+  as outras; como `.mini-barras` alinha as colunas pela base (`align-items: flex-end`), a coluna
+  mais alta empurrava seu próprio conteúdo (inclusive a barra) pra CIMA em relação às colunas mais
+  baixas - mesmo problema que já tinha acontecido com `.mb-val`, agora do lado de baixo (`.mb-rot`).
+  Corrigido na raiz: `.mb-val` e `.mb-rot` ganharam `min-height` fixo (28px e 26px, espaço pra até 2
+  linhas) - toda coluna passa a ter a MESMA altura total sempre, então as 5 barras ficam sempre no
+  mesmo nível, não importa se o rótulo de cima ou de baixo quebra em 1 ou 2 linhas.
+  `.mb-val` virou `display:flex;align-items:flex-end` (o rótulo "desce" até encostar na barra,
+  sobrando espaço em branco acima quando é só 1 linha) - `.mb-rot` continua bloco normal (o rótulo
+  começa logo abaixo da barra, sobra espaço embaixo). Testado ao vivo com BBAS3: as 5 barras (2023/
+  2024/2025/bicolor/guidance) ficam no mesmo nível de base, mesmo com "2026E Guidance" em 2 linhas.
+- **Ajustes finos (mesmo dia, 2 pedidos do usuário sobre o mesmo gráfico)**:
+  1. `align-items` do `.mb-val` trocado de volta de `flex-end` pra `flex-start` - o usuário pediu
+     pra "trazer os 2 da direita pra baixo igual os 3 da esquerda": com `flex-end`, um rótulo de 2
+     linhas (ex. "Estimativa jan/26: R$ 4,20") crescia pra CIMA a partir da base, ficando com a 1ª
+     linha mais alta que o topo dos rótulos de 1 linha só; com `flex-start`, a 1ª linha de QUALQUER
+     rótulo começa sempre na MESMA altura (todas as 5 colunas), e um rótulo de 2 linhas cresce pra
+     BAIXO (na direção da barra) em vez de subir - as barras continuam no mesmo nível de base de
+     qualquer jeito, graças ao `min-height` fixo já explicado acima; só mudou que lado cresce.
+  2. `.mini-barra-larga .mb-val` voltou a usar `justify-content: center` (era `flex-start`/esquerda
+     do ajuste anterior) - o usuário pediu pra deixar "o 4,20 no centro do texto": agora a 2ª linha
+     ("4,20") fica centralizada embaixo da 1ª linha ("Estimativa jan/26: R$"), não mais colada na
+     borda esquerda.
+  3. O rótulo embaixo da barra bicolor estava errado ("2026 Inicial jan/26" - texto que sobrou de
+     uma versão anterior, quando a barra ainda só mostrava a estimativa inicial) - corrigido pra
+     "2026 Atual" (`${anoProj} Atual`), que descreve melhor o que a barra mostra hoje: o TTM já
+     realizado (segmento azul "Atual") + o quanto foi perdido da estimativa inicial (segmento
+     vermelho "Perdido") - o "2026 Inicial" ficou só no rótulo de cima ("Estimativa jan/26: R$
+     4,20"), sem repetir a mesma ideia 2x com textos diferentes. Testado ao vivo com BBAS3.
 
 ## Textos
 
