@@ -83,6 +83,23 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
 
 ## Biblioteca própria (Perplexity) e divergência automática - Issue #48, itens 8 e 9
 
+- **DECISÃO TRAVADA (27/11/2026): Perplexity NÃO alimenta nenhum número da tela.** A chave
+  (`PERPLEXITY_API_KEY`) continua configurada nos Secrets do GitHub, mas o USO dela em cálculo foi
+  desligado por decisão do usuário - mesmo que `utils/biblioteca.py` (descrito abaixo) já exista e
+  tenha essa capacidade tecnicamente. Hoje ela já não alimenta nada mesmo na prática (confirmado em
+  27/11/2026 ao investigar um bug de "Sem dado" repetido no card "Lucro por ação" da B3: nenhuma
+  parte do app ou dos robôs que a tela lê chama `utils.biblioteca.obter()` - só o workflow
+  `biblioteca-perplexity.yml` grava um campo de exemplo, nunca lido de volta) - mas essa decisão
+  trava explicitamente que CONTINUE assim: nenhum número de LPA, Preço Teto, P/L ou qualquer
+  indicador mostrado na tela pode vir da Perplexity. Os números continuam SÓ Yahoo Finance (ou SEC/
+  CVM pros robôs de contábil/TTM) + `OVERRIDE` manual com fonte citada em `utils/override.py` - as
+  únicas fontes já documentadas no resto deste arquivo.
+  ÚNICO USO PERMITIDO da Perplexity (ainda não implementado - é trabalho futuro, não uma função já
+  existente): sugerir um LINK de fonte oficial (ex.: achar o release/Fato Relevante mais recente de
+  um ticker) pra um humano revisar e, se aprovar, cadastrar manualmente em `utils/override.py` -
+  nunca para preencher um número direto na tela ou em qualquer cache lido automaticamente. Ou seja,
+  a Perplexity pode no máximo virar uma FERRAMENTA DE BUSCA DE FONTE para quem mantém o `OVERRIDE`,
+  nunca uma fonte de dado ela mesma.
 - `utils/biblioteca.py` é um cache novo e genérico para qualquer dado fundamentalista pesquisado
   (LPA, lucro, dividendo, ROE etc.) - `utils/biblioteca.json`, no MESMO padrão dos outros caches
   do projeto (`contabil_br.json`/`contabil_sec.json`: ticker -> campo -> registro com valor, fonte
@@ -314,6 +331,27 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   a SEC disponível, isso travava "Média 5/10 anos" em "Sem dado" mesmo com histórico de sobra); o corte de ~4
   anos continua só onde é pra valer (crescimento de lucro/receita do Lynch, que quer a tendência recente, não
   um CAGR de décadas).
+  B3 NÃO tem SEC (é só EUA): pra um ticker da B3, `d["lpa_anual"]` vem só do Yahoo (`tk.income_stmt`, que
+  normalmente só traz ~3-4 anos) - sem fallback nenhum pra mais anos (não existe "SEC do Brasil" equivalente no
+  projeto). **IMPORTANTE, esclarecido em 27/11/2026 porque um usuário achou que era bug do Perplexity**: a
+  biblioteca própria (`utils/biblioteca.py`, Perplexity) NUNCA é chamada por este cálculo nem por nenhuma parte
+  do app/robôs que leem a tela - `grep -rln "biblioteca" --include="*.py"` fora de `utils/biblioteca.py`/
+  `utils/divergencia.py` só acha o próprio workflow `.github/workflows/biblioteca-perplexity.yml` (que grava só
+  o campo de exemplo `lpa_atual` em `utils/biblioteca.json`, nunca lido de volta pela tela). Então "Média 5
+  anos"/"Média 10 anos"/"P/L Conservador"/"Preço teto conservador" ficarem em "Sem dado" pra um ticker da B3
+  com só 3 anos de histórico (ex. BBAS3) NÃO é falha da Perplexity - é simplesmente a fonte real (Yahoo) não
+  ter mais anos pra esse ticker, e não ter outra fonte pra completar (diferente dos EUA, que têm a SEC).
+  REGRA DE "SEM DADO" (corrigida 27/11/2026, a pedido do usuário): essas 4 linhas (Média 5 anos, Média 10
+  anos, P/L Conservador, Preço teto conservador) NUNCA mostram "Sem dado" repetido - só mostra a linha se
+  tiver valor; linha sem valor simplesmente some. P/L Conservador e Preço teto dependem matematicamente da
+  Média de 10 anos (`pl_conservador = preco / lpa_media_10a`, `teto_conservador = lpa_media_10a * 15`), então
+  sempre faltam juntos quando ela falta. Quando um grupo inteiro falta, 1 nota cinza substitui as linhas vazias
+  desse grupo (nunca "Sem dado" × 4): "Dados de 5 e 10 anos indisponíveis para este ticker (P/L Conservador e
+  Preço teto conservador também dependem da média de 10 anos)." quando faltam os 2 grupos juntos (caso comum,
+  ex. BBAS3); "Dados de 5 e 10 anos indisponíveis para este ticker." quando só falta o 1º grupo; "P/L
+  Conservador e Preço teto conservador indisponíveis para este ticker (dependem da média de 10 anos)." quando
+  só falta o 2º (Média 5 anos presente, mas sem 10 anos completos). `tela/detalhe.js`, dentro do bloco "Lucro
+  por ação" (`renderBloco`).
 - Guidance TRIMESTRAL (EUA, card "Guidance da empresa para o próximo trimestre"): empresas como a Micron dão
   guidance a cada earnings release para o PRÓXIMO TRIMESTRE (receita, margem bruta, LPA), não para o ano fiscal
   inteiro - diferente do guidance ANUAL (lpa_min/lpa_max, "Previsão atual"/P/L, selo GUIDANCE OFICIAL) descrito

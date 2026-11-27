@@ -1155,18 +1155,31 @@ function montar(root, d) {
         : ` Dividendo projetado: ${din(G.lpa)} × payout ${f(G.payout * 100, 0)}% = ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`) : '';
       const linhaProj = anoProj ? `<div class="proj"><span>${anoProj} <span class="tag-proj">${G ? 'guidance' : 'projeção'}</span>${ex('lpaEsteAno')}</span><b>${tem(proj) ? din(proj) : 'Sem estimativa'}</b></div>` : '';
       // médias mais longas (mesma fonte anual do Yahoo; "Sem dado" quando ele não tem os anos pedidos)
-      // e, só no Conservador, o P/L e o preço teto sobre a média de 10 anos
-      const linhasLongas = `<div>Média 5 anos<b>${tem(d.lpaMedia5a) ? din(d.lpaMedia5a) : 'Sem dado'}</b></div>`
-        + `<div>Média 10 anos<b>${tem(d.lpaMedia10a) ? din(d.lpaMedia10a) : 'Sem dado'}</b></div>`
-        + `<div>P/L Conservador<b>${tem(d.plConservador) ? f(d.plConservador) : 'Sem dado'}</b></div>`
-        + `<div>Preço teto conservador<b>${tem(d.tetoConservador) ? din(d.tetoConservador) : 'Sem dado'}</b></div>`;
+      // e, só no Conservador, o P/L e o preço teto sobre a média de 10 anos - regra: nunca mostra
+      // "Sem dado" repetido (4 linhas vazias confundem); SÓ mostra a linha se tiver valor, e quando
+      // um grupo inteiro falta, uma única nota cinza substitui as linhas vazias desse grupo.
+      const grupo5e10 = [
+        tem(d.lpaMedia5a) ? `<div>Média 5 anos<b>${din(d.lpaMedia5a)}</b></div>` : null,
+        tem(d.lpaMedia10a) ? `<div>Média 10 anos<b>${din(d.lpaMedia10a)}</b></div>` : null,
+      ].filter(Boolean);
+      const grupoConservador = [
+        tem(d.plConservador) ? `<div>P/L Conservador<b>${f(d.plConservador)}</b></div>` : null,
+        tem(d.tetoConservador) ? `<div>Preço teto conservador<b>${din(d.tetoConservador)}</b></div>` : null,
+      ].filter(Boolean);
+      const linhasLongas = grupo5e10.join('') + grupoConservador.join('');
+      const notaIndisponivel = !grupo5e10.length && !grupoConservador.length
+        ? 'Dados de 5 e 10 anos indisponíveis para este ticker (P/L Conservador e Preço teto conservador também dependem da média de 10 anos).'
+        : !grupo5e10.length ? 'Dados de 5 e 10 anos indisponíveis para este ticker.'
+        : !grupoConservador.length ? 'P/L Conservador e Preço teto conservador indisponíveis para este ticker (dependem da média de 10 anos).'
+        : '';
       const avisoAnualHtml = d.avisoGuidanceAnual ? `<div class="aviso" style="margin-bottom:10px">${d.avisoGuidanceAnual}</div>` : '';
       el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>
         ${avisoAnualHtml}
         <div class="card">${G ? `<div style="margin-bottom:10px"><span class="selo ok">GUIDANCE OFICIAL · ${G.data}</span>
           <div class="nota" style="margin-top:6px">Fonte: ${G.url ? `<a class="link" href="${G.url}" target="_blank" rel="noopener" id="g-fonte"></a>` : '<span id="g-fonte"></span>'}</div></div>` : ''}${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}${linhaProj}</div>` : ''}
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
-          <div class="lista-v num" style="margin-top:10px">${linhasLongas}</div>
+          ${linhasLongas ? `<div class="lista-v num" style="margin-top:10px">${linhasLongas}</div>` : ''}
+          ${notaIndisponivel ? `<div class="nota" style="margin-top:10px">${notaIndisponivel}</div>` : ''}
           <div class="nota" id="g-nota"></div></div>${outlookHtml}`;
       if (G) { const fz = el.querySelector('#g-fonte'); if (fz) fz.textContent = G.fonte; }
       el.querySelector('#g-nota').textContent = `${nota}${anoProj ? ` ${tem(proj) ? `Projeção ${anoProj}: ${consenso}${tem(varProj) ? `; ${sinal(varProj, 0)} sobre ${anos[anos.length - 1].ano}${G && G.porLpa ? ' (o guidance é LPA ajustado; o ano anterior é o LPA contábil do Yahoo, bases diferentes)' : ''}` : ''}.${divG}${baseG} Não entra na média.${G ? ' O guidance oficial substitui o consenso dos analistas do Yahoo.' : ''}` : `Sem estimativa no Yahoo para ${anoProj}.`}` : ''}`;
