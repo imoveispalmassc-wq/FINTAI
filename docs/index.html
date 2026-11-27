@@ -535,10 +535,39 @@ function montar(root, d) {
   $('t-ticker').textContent = d.ticker;
   const topoEl = document.querySelector('.topo');
   if (topoEl) {
-    const sombra = () => topoEl.classList.toggle('rolou', window.scrollY > 4);
-    sombra();
-    window.addEventListener('scroll', sombra, { passive: true });
-    limpar.push(() => window.removeEventListener('scroll', sombra));
+    // BUG CORRIGIDO (27/11/2026): esta tela roda dentro de um iframe do componente do Streamlit
+    // (st.components.v2.component), que cresce pra caber todo o conteúdo em vez de ter scroll
+    // próprio - quem rola é a janela do Streamlit (window.parent), não este iframe. "position:
+    // sticky" sozinho não funciona nesse caso: ele gruda só dentro do próprio contexto de rolagem
+    // do iframe, que nunca rola de verdade (o iframe inteiro é que sobe junto com a página),
+    // então o topo "sumia" ao rolar em vez de ficar fixo. Quando dá pra acessar window.parent
+    // (mesma origem - é o caso normal do componente do Streamlit), calcula a posição real do
+    // próprio iframe na janela pai (getBoundingClientRect) e, quando ela já passou do topo da
+    // tela, troca pra position:fixed com o deslocamento exato pra compensar - fica
+    // visualmente preso no topo de verdade. Sem acesso a window.parent (origem cruzada, caso raro),
+    // cai pro sticky simples de antes, best-effort.
+    let painel = window, framed = false;
+    try { if (window.parent && window.parent !== window && window.frameElement) { painel = window.parent; framed = true; } }
+    catch (e) { /* origem cruzada: sem acesso a window.parent */ }
+    if (framed) {
+      const atualizar = () => {
+        const rect = window.frameElement.getBoundingClientRect();
+        const preso = rect.top < 0;
+        topoEl.classList.toggle('rolou', preso);
+        topoEl.style.position = preso ? 'fixed' : 'sticky';
+        topoEl.style.left = preso ? '0' : '';
+        topoEl.style.right = preso ? '0' : '';
+        topoEl.style.top = preso ? `${-rect.top}px` : '0';
+      };
+      atualizar();
+      painel.addEventListener('scroll', atualizar, { passive: true });
+      limpar.push(() => painel.removeEventListener('scroll', atualizar));
+    } else {
+      const sombra = () => topoEl.classList.toggle('rolou', window.scrollY > 4);
+      sombra();
+      window.addEventListener('scroll', sombra, { passive: true });
+      limpar.push(() => window.removeEventListener('scroll', sombra));
+    }
   }
   let modo = 'graham';
   try { modo = sessionStorage.getItem('fintai-modo') || 'graham'; } catch (e) { /* sem armazenamento */ }

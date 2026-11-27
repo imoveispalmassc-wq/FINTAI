@@ -884,17 +884,34 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   número errado que o usuário via era a combinação do branch `refatora-sinais` parado +
   `yfinance` destravado (ambos corrigidos no PR #60) - não uma segunda implantação concorrente.
   Nada foi apagado (branch `refatora-sinais` continua existindo, intacto).
-- **Ticker fixo no topo (item 3)**: `.topo` (em `tela/detalhe.html`/`.css`/`.js`) é
-  `position: sticky; top: 0`, com fundo sólido e sombra/borda ao rolar (classe `.rolou`, alternada
-  por um listener de `scroll` da própria janela). ESTADO NORMAL (topo da página, `.rolou` ausente):
-  mostra nome completo + bolsa + preço, como o resto da tela. ESTADO FIXO (rolando, `.rolou`
-  presente): mostra SÓ O TICKER (ex. "MU"), escondendo nome completo/bolsa/preço - CORRIGIDO
-  (27/11/2026): a 1ª versão mantinha nome e preço visíveis também ao rolar, repetindo o preço que
-  já aparece no cartão de decisão logo abaixo; o pedido era só manter o ticker identificável, sem
-  repetir mais nada. `#t-ticker` (`ticker-topo`) é um elemento à parte, escondido por padrão e
-  mostrado só com `.topo.rolou .ticker-topo`, enquanto `.topo.rolou .meio`/`.preco-topo` escondem o
-  resto. Testado visualmente com Playwright (`chromium`, dados reais da MU): antes de rolar mostra
-  "Micron / NASDAQ (MU) / 778,31"; rolando, mostra só "MU".
+- **Ticker fixo no topo (item 3)**: `.topo` (em `tela/detalhe.html`/`.css`/`.js`), fundo sólido e
+  sombra/borda ao rolar (classe `.rolou`). ESTADO NORMAL (topo da página, `.rolou` ausente): mostra
+  nome completo + bolsa + preço, como o resto da tela. ESTADO FIXO (rolando, `.rolou` presente):
+  mostra SÓ O TICKER (ex. "MU"), escondendo nome completo/bolsa/preço - CORRIGIDO (27/11/2026): a
+  1ª versão mantinha nome e preço visíveis também ao rolar, repetindo o preço que já aparece no
+  cartão de decisão logo abaixo; o pedido era só manter o ticker identificável, sem repetir mais
+  nada. `#t-ticker` (`ticker-topo`) é um elemento à parte, escondido por padrão e mostrado só com
+  `.topo.rolou .ticker-topo`, enquanto `.topo.rolou .meio`/`.preco-topo` escondem o resto.
+  2º BUG CORRIGIDO (mesma data, achado depois pelo usuário): a tela roda dentro de um iframe do
+  componente do Streamlit (`st.components.v2.component`, `app.py`), que cresce pra caber TODO o
+  conteúdo em vez de ter scroll próprio - quem rola é a janela do Streamlit (`window.parent`), não
+  este iframe. `position: sticky` sozinho não funciona nesse caso: ele gruda só dentro do próprio
+  contexto de rolagem do iframe, que nunca rola de verdade (o iframe inteiro sobe junto com a
+  página) - por isso o cabeçalho simplesmente sumia da tela ao rolar, em vez de ficar fixo (bug
+  só visível com o app de verdade rodando dentro do Streamlit - a página de exemplo isolada,
+  `docs/index.html`, não roda dentro de iframe, então escondia esse bug nos testes anteriores).
+  Corrigido: quando dá pra acessar `window.parent` (mesma origem - é o caso normal do componente do
+  Streamlit, verificado com `window.frameElement`), calcula a posição real do próprio iframe na
+  janela pai a cada scroll (`getBoundingClientRect().top`) e, quando ela já passou do topo da tela
+  (`< 0`), troca pra `position: fixed` com o deslocamento exato (`top: ${-rect.top}px`) pra
+  compensar - fica visualmente preso no topo de verdade. Sem acesso a `window.parent` (origem
+  cruzada, caso raro), cai pro sticky simples de antes (best-effort, nunca quebra o app). Testado
+  com Playwright reproduzindo a arquitetura real (servidor HTTP local, página externa com um
+  `<iframe>` redimensionado pra caber todo o conteúdo - igual o Streamlit faz - rolando a PÁGINA
+  EXTERNA, não o iframe): antes de rolar mostra "Micron Technology, Inc. / NasdaqGS (MU) / 601,25"
+  em fluxo normal; rolando a página externa até o meio do conteúdo, "MU" aparece fixo no topo da
+  janela de verdade (`position: fixed`); voltando ao topo, retorna a `position: sticky`/estado
+  normal sem ficar preso errado.
 - **CBRS sem Oportunidade 2/3 (item 6)**: investigado com dados reais do Yahoo Finance em
   26/11/2026 - NÃO é bug. CBRS tem só ~6 meses e meio de histórico de preço (IPO recente), então
   `media_fech_3a`/`media_fech_5a` ficam `None` (sem 3/5 anos de histórico - ver
