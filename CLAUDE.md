@@ -955,6 +955,11 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   `#stMain` de verdade, `.topo` ganha a classe `rolou`, prende logo abaixo da barra do Streamlit
   (`rectTop: 60`) e mostra só "MU"; voltando ao topo, volta ao estado normal (nome completo + bolsa +
   preço) sem ficar preso errado.
+  BUG CORRIGIDO (27/11/2026, achado pelo usuário num print): o preço no cabeçalho fixo (`$('t-preco')`)
+  mostrava só o número ("601,25"), sem "US$"/"R$" na frente - diferente do preço no cartão de decisão
+  logo abaixo, que já mostra a moeda. Causa: usava `f(d.preco)` (só formata o número) em vez de
+  `din(d.preco)` (que já prefixa `${d.moeda}`, a mesma função usada em todo o resto da tela).
+  Corrigido trocando para `din(d.preco)`.
 - **CBRS sem Oportunidade 2/3 (item 6)**: investigado com dados reais do Yahoo Finance em
   26/11/2026 - NÃO é bug. CBRS tem só ~6 meses e meio de histórico de preço (IPO recente), então
   `media_fech_3a`/`media_fech_5a` ficam `None` (sem 3/5 anos de histórico - ver

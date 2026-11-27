@@ -530,7 +530,7 @@ function montar(root, d) {
   // .rolou, abaixo), esconde tudo isso e mostra SÓ o ticker (ex. "MU") - achado após a 1ª versão
   // mostrar nome/preço também ao rolar: o pedido original era só manter o TICKER visível, pra saber
   // qual ativo está aberto, sem repetir preço (que já está no cartão de decisão logo abaixo).
-  $('t-preco').textContent = f(d.preco);
+  $('t-preco').textContent = din(d.preco);
   $('t-preco').style.color = tem(d.varDia) ? cor(d.varDia) : '';
   $('t-ticker').textContent = d.ticker;
   const topoEl = root.querySelector('.topo');
