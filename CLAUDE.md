@@ -1482,6 +1482,14 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
      realizado (segmento azul "Atual") + o quanto foi perdido da estimativa inicial (segmento
      vermelho "Perdido") - o "2026 Inicial" ficou só no rótulo de cima ("Estimativa jan/26: R$
      4,20"), sem repetir a mesma ideia 2x com textos diferentes. Testado ao vivo com BBAS3.
+- **CORREÇÃO FINAL (mesmo dia) - remover de vez a palavra "Atual"**: o usuário pediu pra tirar
+  "Atual" do gráfico inteiro - era o nome da antiga barra solta "2026 Atual (TTM)", já removida num
+  follow-up anterior (ver "5º follow-up" acima); o ajuste logo acima, que tinha trocado o rótulo de
+  BAIXO da barra bicolor pra "2026 Atual", reusou o nome errado (devia ter sumido de vez, não
+  reaparecido). Troca final: rótulo embaixo da barra bicolor "2026 Atual" -> "2026 Inicial"; rótulo
+  DENTRO do segmento azul "Atual 2,18" -> "Realizado 2,18". Mantido sem mudança: topo "Estimativa
+  jan/26: R$ 4,20", vermelho "Perdido -2,02", última barra "2026E Guidance R$ 1,75". A palavra
+  "Atual" não aparece mais em nenhum texto do gráfico. Testado ao vivo com BBAS3.
 
 ## Textos
 
