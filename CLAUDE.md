@@ -1398,6 +1398,37 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   removido, junto com a classe CSS `.mb-fantasma`). Testado ao vivo com BBAS3: as 5 barras (2023/
   2024/2025/2026 Atual TTM/2026E Guidance) ficam limpas, sem nenhum traço sobre elas; a nota de texto
   continua aparecendo normalmente logo abaixo.
+- **4º follow-up (mesmo dia) - VERSÃO DEFINITIVA do gráfico de LPA**: o usuário pediu a versão final,
+  reunindo tudo que já tinha sido decidido nas rodadas anteriores + 1 mudança nova (a nota de texto
+  da estimativa inicial virou uma barra de verdade) + mais 2 remoções (conta do guidance e nota de
+  5/10 anos). Nenhum número novo em nenhum dos 2 casos - só reorganização do que já existia:
+  1. **Barra bicolor da estimativa inicial** (substitui a nota de texto `notaFantasma` do follow-up
+     anterior): 6ª barra, empilhada, mesma escala das outras 5 - `Realizado` (azul, embaixo) = o
+     próprio TTM já confirmado (`d.lpa`, o mesmo valor da barra "2026 Atual (TTM)" ao lado);
+     `Perdido` (vermelho hachurado, em cima) = `d.guidanceInicial.lpa − d.lpa` (a diferença entre a
+     estimativa do início do ano e o que realmente saiu) - os 2 somados batem com a estimativa
+     inicial (2,18 + 2,02 = 4,20 pra BBAS3), é só uma subtração dos mesmos 2 números que já
+     apareciam em outro lugar da tela, nunca um valor novo. Rótulos ("Realizado"/valor,
+     "Perdido"/valor) ficam DENTRO de cada segmento colorido (fonte minúscula, 6-7,5px, branca) -
+     coluna um pouco mais larga que as outras 5 (`mini-barra-larga`, `mb-stack`) pra caber o texto
+     sem cortar. Só aparece quando a estimativa inicial é MAIOR que o TTM (`temBarraInicial`,
+     `lpaIniBarra > d.lpa`) - cenário normal de guidance revisado pra baixo; se um dia o TTM vier
+     MAIOR que a estimativa inicial (revisão pra cima), a barra simplesmente não aparece (nunca
+     mostra um "Perdido" negativo/sem sentido).
+  2. **Conta do guidance em 1 linha removida de vez** (`contaGuidance`, do follow-up anterior) - o
+     card volta a mostrar só o selo + as 2 linhas do `resumoGuidance` (Lucro esperado + LPA
+     projetado), sem nenhuma linha de fórmula. O texto completo (`textoProjecaoCompleto`) continua
+     existindo só pro caso sem guidance oficial (consenso do Yahoo).
+  3. **Nota "Sem histórico de 5/10 anos..." removida de vez** (`notaIndisponivel`) - sem dado, as
+     linhas de Média 5/10 anos e P/L/Preço teto Conservador simplesmente somem (como já era a regra
+     pra cada linha individual), sem nenhuma frase explicando a ausência do grupo inteiro.
+  Textos finais do card (testado ao vivo com BBAS3, nesta ordem): selo "GUIDANCE OFICIAL · data" →
+  "Lucro esperado: ..." → "LPA projetado: ..." → gráfico de 6 barras → "Média de 3 anos: R$ 4,08" →
+  "Sem prejuízo nos últimos 3 anos." - nada mais. `miniBarras()` (a função genérica) foi removida por
+  inteiro (código morto, sem mais nenhum chamador) - o gráfico agora é montado inline na própria
+  renderização do card (`pontosBarras`/`barrasSimples`/`barraInicial`/`graficoLpa`), já que a barra
+  bicolor precisa dividir a MESMA escala (`maxBarras`) das outras 5, o que a função genérica não
+  previa.
 
 ## Textos
 

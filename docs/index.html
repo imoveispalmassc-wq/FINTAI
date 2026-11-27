@@ -182,6 +182,16 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .mb-cheia.proj { background: repeating-linear-gradient(45deg, var(--ardosia), var(--ardosia) 3px, transparent 3px, transparent 6px); border: 1px dashed var(--suave); }
 .mb-cheia.neg { background: var(--vermelho); }
 .mb-rot { font-size: 10px; line-height: 1.25; color: var(--suave); margin-top: 4px; text-align: center; }
+/* barra bicolor da estimativa inicial (item 4, follow-up 27/11/2026): empilhada, Realizado (azul)
+   embaixo + Perdido (vermelho hachurado) em cima - mesma escala das outras barras do gráfico. Coluna
+   um pouco mais larga (mini-barra-larga) pra caber os 2 rótulos dentro dos segmentos. */
+.mini-barra-larga { flex: 1.7 1 0; }
+.mb-stack { display: flex; flex-direction: column; width: 34px; border-radius: 4px 4px 0 0; overflow: hidden; }
+.mb-seg { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; overflow: hidden; }
+.mb-seg-real { background: var(--azul); }
+.mb-seg-perdido { background: repeating-linear-gradient(45deg, var(--vermelho), var(--vermelho) 3px, transparent 3px, transparent 6px); border-bottom: 1px solid var(--vermelho); }
+.mb-seg-l1 { font-size: 6px; color: #fff; opacity: .85; }
+.mb-seg-l2 { font-size: 7.5px; color: #fff; font-weight: 700; margin-top: 1px; }
 .crit p { margin: 0 0 10px; color: var(--suave); font-size: 13px; line-height: 1.5; }
 
 /* indicadores */
@@ -496,24 +506,6 @@ function montar(root, d) {
   };
   const limpar = [];
   const ex = chave => (d.exemplos && d.exemplos[chave] ? ' <span class="tag-proto">EXEMPLO</span>' : '');
-  // mini gráfico de barras (item 4, 27/11/2026) - reaproveita valores já mostrados na tela (nunca
-  // busca/calcula nada novo); pontos sem valor (ex.: ano sem dado) viram uma barra vazia, nunca
-  // inventam um número. `proj` marca a barra de projeção/guidance com um estilo diferente (tracejado).
-  // Follow-up (27/11/2026): a linha pontilhada solta em cima da barra (marcando a estimativa inicial
-  // do início do ano) foi removida a pedido do usuário - ficava com cara de "traço solto" sem
-  // contexto. A informação em si continua, só que como texto (notaFantasma, abaixo do gráfico).
-  const miniBarras = (pontos, formatar) => {
-    const vals = pontos.map(p => p.v).filter(tem);
-    if (!vals.length) return '';
-    const max = Math.max(...vals.map(Math.abs), 1e-9);
-    return `<div class="mini-barras">${pontos.map(p => {
-      const vazio = !tem(p.v);
-      const h = vazio ? 0 : Math.max(4, Math.round(Math.abs(p.v) / max * 54));
-      return `<div class="mini-barra"><span class="mb-val">${vazio ? '—' : formatar(p.v)}</span>
-        <div class="mb-col"><div class="mb-cheia${p.proj ? ' proj' : ''}${!vazio && p.v < 0 ? ' neg' : ''}" style="height:${h}px"></div></div>
-        <span class="mb-rot">${p.rot}</span></div>`;
-    }).join('')}</div>`;
-  };
   const FOLHAS = {};
   const fonte = `<p><b>Fonte:</b> ${d.fonte} · atualizado em ${d.atualizado}.</p>`;
   // Selo de Fundamentos (issue #47, item 11): fato de fundamento, nunca recomendação - fica
@@ -1610,35 +1602,50 @@ function montar(root, d) {
       // gráfico (ver graficoLpa abaixo); a lista de texto equivalente foi removida (follow-up
       // 27/11/2026, a pedido do usuário - os valores já aparecem escritos em cima de cada barra).
       const temTTM = anoProj && tem(d.lpa);
-      // ITEM 3 (27/11/2026): guidance encurtado pra 2-3 linhas visíveis. Follow-up no mesmo dia:
-      // o botão "Ver metodologia" saiu - vira só a conta em 1 linha pequena (contaGuidance, abaixo);
-      // o parágrafo completo (consenso/variação/base recalculada/dividendo) continua existindo só
-      // pra quando NÃO há guidance oficial (textoProjecaoCompleto, caso `!G`, ver #g-nota-proj).
+      // ITEM 3 (27/11/2026): guidance encurtado pra 2-3 linhas visíveis - só o selo + resumoGuidance;
+      // sem botão "Ver metodologia" nem conta em linha própria (removidos num follow-up, a pedido do
+      // usuário - versão definitiva). O parágrafo completo (consenso/variação/base recalculada/
+      // dividendo) continua existindo só pra quando NÃO há guidance oficial (textoProjecaoCompleto,
+      // caso `!G`, ver #g-nota-proj).
       const resumoGuidance = G ? [
         !G.porLpa && tem(G.lucroMin) && tem(G.lucroMax) ? `Lucro esperado: ${din(G.lucroMin / 1e9, 1)} a ${din(G.lucroMax / 1e9, 1)} bi` : null,
         tem(G.lpaMin) && tem(G.lpaMax) ? `LPA projetado: ${din(G.lpaMin)} a ${din(G.lpaMax)} (média ${din(G.lpa)})${tem(varProj) ? ` · ${sinal(varProj, 0)} vs ${anos.length ? anos[anos.length - 1].ano : ''}` : ''}` : null,
       ].filter(Boolean) : [];
-      // follow-up (27/11/2026): botão "Ver metodologia" removido a pedido do usuário - vira 1 linha
-      // pequena com a própria conta (o cálculo que já existia, só reposicionado pra ficar visível
-      // direto, sem precisar abrir painel nenhum). Mesma fórmula de sempre, nenhum número novo.
-      const contaGuidance = G && tem(G.lpaMin) && tem(G.lpaMax)
-        ? (G.porLpa ? `(${din(G.lpaMin)} + ${din(G.lpaMax)}) ÷ 2 = ${din(G.lpa)}`
-          : `(${din(G.lucroMin / 1e9, 1)} bi + ${din(G.lucroMax / 1e9, 1)} bi) ÷ 2 ÷ ${f(G.acoes / 1e9, 2)} bi ações = ${din(G.lpa)}`) : '';
-      // ITEM 4 (27/11/2026): mini gráfico de barras, só com valores já mostrados na tela (os `anos`,
-      // o TTM contábil já exibido no card "Lucro e Preço vs Lucro" e a projeção/guidance do ano
-      // seguinte) - nenhuma fonte ou cálculo novo. 2ª mudança no mesmo dia: o ano de projeção virou
-      // 2 barras (TTM real sólida + guidance/projeção tracejada) em vez de 1 só, pra não misturar
-      // resultado já apurado com estimativa na mesma barra. GI.lpa (guidance do início do ano,
-      // congelado) vira só a nota de texto `notaFantasma` abaixo do gráfico (contexto de revisão) -
-      // o traço pontilhado em cima da própria barra foi removido num follow-up (ficava "solto").
+      // ITEM 4 (27/11/2026, versão definitiva do mesmo dia): mini gráfico de barras, só com valores
+      // já mostrados na tela (os `anos`, o TTM contábil já exibido no card "Lucro e Preço vs Lucro" e
+      // a projeção/guidance do ano seguinte) - nenhuma fonte ou cálculo novo. O ano de projeção tem 2
+      // barras (TTM real sólida + guidance/projeção tracejada), pra não misturar resultado já
+      // apurado com estimativa na mesma barra. Uma 6ª barra, bicolor empilhada, mostra a estimativa
+      // do INÍCIO do ano (`d.guidanceInicial.lpa`, o mesmo valor que já aparecia como linha
+      // pontilhada num follow-up anterior - aqui virou barra de verdade, a pedido do usuário):
+      // a parte de baixo (azul, "Realizado") é o próprio TTM já confirmado (`d.lpa`); a de cima
+      // (vermelha/hachurada, "Perdido") é a diferença entre a estimativa inicial e o TTM - os 2
+      // SOMADOS batem com a estimativa inicial (nenhum número novo, só a mesma conta de subtração).
       const GIb = d.guidanceInicial || {};
       const lpaIniBarra = tem(GIb.lpa) ? GIb.lpa : null;
-      const graficoLpa = miniBarras([
+      const temBarraInicial = temTTM && tem(lpaIniBarra) && lpaIniBarra > d.lpa;
+      const perdidoInicial = temBarraInicial ? lpaIniBarra - d.lpa : null;
+      const pontosBarras = [
         ...anos.map(a => ({ v: a.lpa, rot: a.ano })),
         temTTM ? { v: d.lpa, rot: `${anoProj} Atual (TTM)` } : null,
         anoProj ? { v: proj, rot: `${anoProj}E ${G ? 'Guidance' : 'Projeção'}`, proj: true } : null,
-      ].filter(Boolean), v => din(v));
-      const notaFantasma = temTTM && tem(lpaIniBarra) ? `<div class="nota" style="margin-top:2px;opacity:.65;font-size:10.5px">╌╌╌ Estimativa inicial jan/${String(anoProj).slice(-2)}: ${din(lpaIniBarra)} - revisada</div>` : '';
+      ].filter(Boolean);
+      const maxBarras = Math.max(...pontosBarras.map(p => Math.abs(p.v)).filter(tem), temBarraInicial ? lpaIniBarra : 0, 1e-9);
+      const alturaBarra = v => Math.max(4, Math.round(Math.abs(v) / maxBarras * 54));
+      const barrasSimples = pontosBarras.map(p => {
+        const vazio = !tem(p.v);
+        const h = vazio ? 0 : alturaBarra(p.v);
+        return `<div class="mini-barra"><span class="mb-val">${vazio ? '—' : din(p.v)}</span>
+          <div class="mb-col"><div class="mb-cheia${p.proj ? ' proj' : ''}${!vazio && p.v < 0 ? ' neg' : ''}" style="height:${h}px"></div></div>
+          <span class="mb-rot">${p.rot}</span></div>`;
+      }).join('');
+      const barraInicial = temBarraInicial ? `<div class="mini-barra mini-barra-larga"><span class="mb-val">${din(lpaIniBarra)}</span>
+        <div class="mb-col"><div class="mb-stack" style="height:${alturaBarra(d.lpa) + alturaBarra(perdidoInicial)}px">
+          <div class="mb-seg mb-seg-perdido" style="height:${alturaBarra(perdidoInicial)}px" title="Perdido: ${din(perdidoInicial)}"><span class="mb-seg-l1">Perdido</span><span class="mb-seg-l2">-${f(perdidoInicial)}</span></div>
+          <div class="mb-seg mb-seg-real" style="height:${alturaBarra(d.lpa)}px" title="Realizado: ${din(d.lpa)}"><span class="mb-seg-l1">Realizado</span><span class="mb-seg-l2">${f(d.lpa)}</span></div>
+        </div></div>
+        <span class="mb-rot">${anoProj} Inicial jan/${String(anoProj).slice(-2)}</span></div>` : '';
+      const graficoLpa = `<div class="mini-barras">${barrasSimples}${barraInicial}</div>`;
       // médias mais longas (mesma fonte anual do Yahoo; "Sem dado" quando ele não tem os anos pedidos)
       // e, só no Conservador, o P/L e o preço teto sobre a média de 10 anos - regra: nunca mostra
       // "Sem dado" repetido (4 linhas vazias confundem); SÓ mostra a linha se tiver valor, e quando
@@ -1652,31 +1659,23 @@ function montar(root, d) {
         tem(d.tetoConservador) ? `<div>Preço teto conservador<b>${din(d.tetoConservador)}</b></div>` : null,
       ].filter(Boolean);
       const linhasLongas = grupo5e10.join('') + grupoConservador.join('');
-      // ITEM 6 (27/11/2026, a pedido do usuário): texto encurtado - a explicação completa (que o
-      // P/L Conservador e o Preço teto também dependem da média de 10 anos) continua verdadeira,
-      // só não repetida por extenso aqui; a régua de "quando falta a quê" continua a mesma.
-      const notaIndisponivel = !grupo5e10.length && !grupoConservador.length
-        ? 'Sem histórico de 5/10 anos para este ticker.'
-        : !grupo5e10.length ? 'Sem histórico de 5/10 anos para este ticker.'
-        : !grupoConservador.length ? 'P/L Conservador e Preço teto conservador indisponíveis para este ticker.'
-        : '';
+      // ITEM 6 (27/11/2026, versão definitiva): a nota "Sem histórico de 5/10 anos..." foi removida
+      // de vez, a pedido do usuário - sem dado, as linhas de média 5/10 anos simplesmente somem
+      // (linhasLongas fica vazio), sem nenhuma frase explicando a ausência.
       const avisoAnualHtml = d.avisoGuidanceAnual ? `<div class="aviso" style="margin-bottom:10px">${d.avisoGuidanceAnual}</div>` : '';
-      // texto completo da projeção (consenso/variação/base recalculada/dividendo) - igual ao de
-      // antes, palavra por palavra; só mudou de lugar (visível direto -> "Ver metodologia" quando
-      // há guidance oficial, ver resumoGuidance acima).
+      // texto completo da projeção (consenso/variação/base recalculada/dividendo) - usado só quando
+      // NÃO há guidance oficial (consenso do Yahoo, caso `!G`, ver #g-nota-proj); com guidance
+      // oficial, o resumoGuidance (2 linhas) já basta - sem botão nem conta por extenso (ver acima).
       const textoProjecaoCompleto = anoProj ? `${tem(proj) ? `Projeção ${anoProj}: ${consenso}${tem(varProj) ? `; ${sinal(varProj, 0)} sobre ${anos.length ? anos[anos.length - 1].ano : ''}${G && G.porLpa ? ' (o guidance é LPA ajustado; o ano anterior é o LPA contábil do Yahoo, bases diferentes)' : ''}` : ''}.${divG}${baseG} Não entra na média.${G ? ' O guidance oficial substitui o consenso dos analistas do Yahoo.' : ''}` : `Sem estimativa no Yahoo para ${anoProj}.`}` : '';
       el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>
         ${avisoAnualHtml}
         <div class="card">${G ? `<div style="margin-bottom:10px">
           <span class="selo ok">GUIDANCE OFICIAL · ${G.data}</span>
           ${resumoGuidance.length ? `<div class="nota num" style="margin-top:6px">${resumoGuidance.join('<br>')}</div>` : ''}
-          ${contaGuidance ? `<div class="nota num" style="margin-top:4px;opacity:.75;font-size:11.5px">${contaGuidance}</div>` : ''}
           </div>` : ''}
           ${graficoLpa}
-          ${notaFantasma}
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
           ${linhasLongas ? `<div class="lista-v num" style="margin-top:10px">${linhasLongas}</div>` : ''}
-          ${notaIndisponivel ? `<div class="nota" style="margin-top:10px">${notaIndisponivel}</div>` : ''}
           <div class="nota" id="g-nota"></div>${!G ? `<div class="nota" id="g-nota-proj" style="margin-top:4px"></div>` : ''}</div>${outlookHtml}`;
       el.querySelector('#g-nota').textContent = nota;
       if (!G) { const gp = el.querySelector('#g-nota-proj'); if (gp) gp.textContent = textoProjecaoCompleto; }

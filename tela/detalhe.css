@@ -160,6 +160,16 @@ details.acord > .dentro { padding: 0 12px 12px; display: grid; gap: 10px; }
 .mb-cheia.proj { background: repeating-linear-gradient(45deg, var(--ardosia), var(--ardosia) 3px, transparent 3px, transparent 6px); border: 1px dashed var(--suave); }
 .mb-cheia.neg { background: var(--vermelho); }
 .mb-rot { font-size: 10px; line-height: 1.25; color: var(--suave); margin-top: 4px; text-align: center; }
+/* barra bicolor da estimativa inicial (item 4, follow-up 27/11/2026): empilhada, Realizado (azul)
+   embaixo + Perdido (vermelho hachurado) em cima - mesma escala das outras barras do gráfico. Coluna
+   um pouco mais larga (mini-barra-larga) pra caber os 2 rótulos dentro dos segmentos. */
+.mini-barra-larga { flex: 1.7 1 0; }
+.mb-stack { display: flex; flex-direction: column; width: 34px; border-radius: 4px 4px 0 0; overflow: hidden; }
+.mb-seg { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; overflow: hidden; }
+.mb-seg-real { background: var(--azul); }
+.mb-seg-perdido { background: repeating-linear-gradient(45deg, var(--vermelho), var(--vermelho) 3px, transparent 3px, transparent 6px); border-bottom: 1px solid var(--vermelho); }
+.mb-seg-l1 { font-size: 6px; color: #fff; opacity: .85; }
+.mb-seg-l2 { font-size: 7.5px; color: #fff; font-weight: 700; margin-top: 1px; }
 .crit p { margin: 0 0 10px; color: var(--suave); font-size: 13px; line-height: 1.5; }
 
 /* indicadores */
