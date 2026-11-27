@@ -21,6 +21,7 @@ import yfinance as yf
 
 import calculos
 import components.lpa_chart
+import components.retorno_chart
 import tela.dados
 import utils.benchmarks
 import utils.dados_fixos
@@ -40,7 +41,8 @@ import utils.simons
 # dados_fixos recarregado ia importar de uma versão antiga do módulo ainda em memória -
 # ImportError pra qualquer nome novo adicionado lá depois do último reload (issue #33).
 for _modulo in (utils.formato, utils.percentile, utils.signals, utils.benchmarks, utils.lynch, utils.override,
-                utils.simons, utils.fetch_guidance, utils.dados_fixos, components.lpa_chart, calculos, tela.dados):
+                utils.simons, utils.fetch_guidance, utils.dados_fixos, components.lpa_chart,
+                components.retorno_chart, calculos, tela.dados):
     importlib.reload(_modulo)
 
 from calculos import calcular, normalizar_ticker, retorno_periodo
@@ -92,13 +94,27 @@ CSS = """
 </style>
 """
 
-# Tela de detalhes: um componente só, montado com o pacote de dados de cada ticker.
+# Tela de detalhes: dividida em 2 componentes (27/11/2026) pra encaixar o gráfico nativo de LPA
+# (components/lpa_chart.py, st.bar_chart) logo abaixo do card "Lucro por ação", sem ficar só no
+# fim da tela - um widget nativo do Streamlit não pode ficar embutido no meio do HTML/JS de UM
+# componente só. O corte foi feito na costura que já existia entre "bloco de cada modo" e
+# "fundamentos" (tela/detalhe.html) - nunca no meio de um card. tela_detalhe = cabeçalho fixo +
+# Visão geral + Faixa/Tendência/Mínimo-máximo/bloco de cada modo (cabeçalho e scroll ficam 100%
+# aqui, intocados); tela_detalhe_fundo = Fundamentos/Indicadores/Retorno acumulado (tela/
+# detalhe_fundo.html/.js, novo). As 2 metades compartilham o mesmo CSS (detalhe.css).
 _PASTA = Path(__file__).parent / "tela"
+_CSS_DETALHE = (_PASTA / "detalhe.css").read_text(encoding="utf-8")
 tela_detalhe = st.components.v2.component(
     "fintai_detalhe",
     html=(_PASTA / "detalhe.html").read_text(encoding="utf-8"),
-    css=(_PASTA / "detalhe.css").read_text(encoding="utf-8"),
+    css=_CSS_DETALHE,
     js=(_PASTA / "detalhe.js").read_text(encoding="utf-8"),
+)
+tela_detalhe_fundo = st.components.v2.component(
+    "fintai_detalhe_fundo",
+    html=(_PASTA / "detalhe_fundo.html").read_text(encoding="utf-8"),
+    css=_CSS_DETALHE,
+    js=(_PASTA / "detalhe_fundo.js").read_text(encoding="utf-8"),
 )
 
 
@@ -561,18 +577,155 @@ def _pontos_lpa_grafico(dados: dict) -> list[dict]:
     ano_proj = (guia or {}).get("periodo") or (str(int(lpa_anos[-1]["ano"]) + 1) if lpa_anos else None)
     lpa_ttm = dados.get("lpa")
     lpa_ini = (dados.get("guidanceInicial") or {}).get("lpa")
-    if ano_proj and lpa_ttm is not None and lpa_ini is not None and lpa_ini > lpa_ttm:
-        perdido = lpa_ini - lpa_ttm
-        pontos.append({"ano": f"{ano_proj} Inicial", "valor": lpa_ini,
-                       "detalhe": f"Estimativa do início do ano: {moeda} {utils.formato.num(lpa_ini)} "
-                                  f"= Realizado {moeda} {utils.formato.num(lpa_ttm)} + "
-                                  f"Perdido {moeda} {utils.formato.num(perdido)}"})
+    # 2 barras SEPARADAS (nunca uma só empilhada) pra estimativa do início do ano x TTM já realizado
+    # - pedido do usuário (27/11/2026, follow-up): queria dar pra DIFERENCIAR visualmente os 2
+    # valores, não só ler a diferença numa legenda embaixo do gráfico.
+    if ano_proj and lpa_ini is not None and lpa_ini > 0:
+        pontos.append({"ano": f"{ano_proj} Inicial (jan)", "valor": lpa_ini,
+                       "detalhe": f"Estimativa do início do ano - {moeda} {utils.formato.num(lpa_ini)}."})
+    if ano_proj and lpa_ttm is not None:
+        perdido = lpa_ini - lpa_ttm if lpa_ini is not None and lpa_ini > lpa_ttm else None
+        detalhe_ttm = (f"Já realizado nos últimos 12 meses - {moeda} {utils.formato.num(perdido)} "
+                       f"a menos que a estimativa do início do ano." if perdido is not None
+                       else "Já realizado nos últimos 12 meses.")
+        pontos.append({"ano": f"{ano_proj} Atual (TTM)", "valor": lpa_ttm, "detalhe": detalhe_ttm})
 
     proj = ((dados.get("lynch") or {}).get("futuro") or {}).get("lpaEsteAno")
     if ano_proj and proj is not None:
         pontos.append({"ano": f"{ano_proj}E {'Guidance' if guia else 'Projeção'}", "valor": proj})
 
     return pontos
+
+
+_NOME_CURTO_COMPARADOR = {"S&P 500": "S&P", "S&P 500 (sem dividendos)": "S&P s/div",
+                          "Ibovespa": "Ibov", "Poupança": "Poup."}
+
+
+def _ret_fmt(v) -> str:
+    """Mesma regra de casas decimais do `ret()` em tela/detalhe.js: 0 casas acima de 100%, 1 abaixo."""
+    if v is None:
+        return "—"
+    return utils.formato.pct(v, 0 if abs(v) >= 100 else 1)
+
+
+def _retorno_bloco(dados: dict, ticker: str) -> None:
+    """Card "Retorno acumulado" - gráfico nativo (components/retorno_chart.py), MESMA regra do
+    gráfico de LPA (27/11/2026): nenhuma barra desenhada com div/CSS. Saiu de dentro de
+    `tela_detalhe_fundo` pelo mesmo motivo do gráfico de LPA - um widget nativo do Streamlit não
+    pode ficar embutido no HTML/JS de um componente customizado. Período (1/3/5 anos) e
+    reinvestir dividendos, antes botões client-side (instantâneos, sem round-trip), viram
+    controles nativos do Streamlit - o `@st.fragment` de `painel()` escopa o rerun só a este
+    bloco, sem perder a rolagem da página nem recarregar a tela inteira."""
+    st.subheader("Retorno acumulado")
+    retorno = dados.get("retorno") or {}
+    periodos = retorno.get("periodos") or []
+    total = retorno.get("total") or []
+    preco = retorno.get("preco") or []
+    idx = [i for i in range(len(periodos)) if i < len(total) and total[i] is not None]
+    if not idx:
+        st.caption("Histórico curto demais para calcular retornos.")
+        return
+
+    comparadores = dados.get("comparadores") or {}
+    moeda = dados.get("moeda") or ""
+    nome_ticker = dados.get("ticker") or ticker
+
+    key_per, key_rein = f"retorno_per_{ticker}", f"retorno_reinveste_{ticker}"
+    st.session_state.setdefault(key_rein, True)
+    if key_per not in st.session_state or st.session_state[key_per] not in idx:
+        st.session_state[key_per] = idx[0]
+    col1, col2 = st.columns([3, 2])
+    with col2:
+        reinveste = st.toggle("Reinvestindo dividendos", key=key_rein)
+    with col1:
+        per = st.segmented_control("Período", options=idx, format_func=lambda i: periodos[i], key=key_per)
+    if per is None:
+        per = st.session_state[key_per]
+
+    vals = total if reinveste else preco
+    p_sel = periodos[per]
+    dif_p = (total[per] - preco[per]) if (per < len(total) and per < len(preco)
+                                          and total[per] is not None and preco[per] is not None) else None
+    recebido = dados.get("dividendo") if per == 0 else dados.get("dividendos5Anos") if per == 2 else None
+    if reinveste:
+        if dif_p is None:
+            texto = "Retorno com os dividendos reinvestidos em mais ações."
+        elif dif_p < 1:
+            texto = (f"Quase nenhuma diferença em {p_sel}. Reinvestir ou não muda "
+                     f"{utils.formato.num(max(dif_p, 0), 1)} ponto no seu retorno.")
+        else:
+            abertura = "Grande diferença" if dif_p >= 10 else "Faz diferença"
+            texto = (f"{abertura}. Em {p_sel}, reinvestir os dividendos faz seu retorno ir de "
+                     f"{_ret_fmt(preco[per])} para {_ret_fmt(total[per])}, porque você compra mais "
+                     f"ações com o dividendo.")
+    else:
+        texto = (f"Você recebeu {moeda} {utils.formato.num(recebido)} por ação em dividendos em "
+                 f"{p_sel}, em dinheiro, e não recomprou." if recebido is not None and recebido > 0
+                 else f"Você recebeu os dividendos de {p_sel} em dinheiro e não recomprou.")
+        if dif_p is not None and dif_p >= 10:
+            texto += f" Deixou de ganhar {utils.formato.num(dif_p, 1)} pontos do efeito bola de neve."
+    st.caption(texto)
+
+    v_sel = vals[per] if per < len(vals) else None
+    linhas = [{"nome": nome_ticker, "valor": v_sel, "rotulo": _ret_fmt(v_sel)}]
+    for o in comparadores.values():
+        v = o.get("v") or []
+        vv = v[per] if per < len(v) else None
+        linhas.append({"nome": _NOME_CURTO_COMPARADOR.get(o.get("nome"), o.get("nome")),
+                       "valor": vv, "rotulo": _ret_fmt(vv)})
+    linhas[1:] = sorted(linhas[1:], key=lambda l: l["valor"] if l["valor"] is not None else float("inf"))
+    components.retorno_chart.render_retorno_chart(linhas)
+
+    def _tem_dado(chave):
+        c = comparadores.get(chave)
+        return bool(c and any(v is not None for v in c.get("v") or []))
+    padrao = dados.get("comparadorPadrao")
+    comp_chave = padrao if _tem_dado(padrao) else next((k for k in comparadores if _tem_dado(k)), None)
+    comp = comparadores.get(comp_chave) if comp_chave else None
+    with st.container(border=True):
+        if v_sel is None:
+            st.markdown(f"**Retorno acumulado: Dados indisponíveis em {p_sel}**")
+        else:
+            cab = f"**{nome_ticker}: {_ret_fmt(v_sel)} em {p_sel}**" + ("" if reinveste else " (só preço)")
+            comp_v = (comp.get("v") or [None])[per] if comp and per < len(comp.get("v") or []) else None
+            if comp is None or comp_v is None:
+                st.markdown(f"{cab}  \n{comp.get('nome') if comp else '—'}: Dados indisponíveis")
+            else:
+                dif = v_sel - comp_v
+                casas = 0 if abs(dif) >= 100 else 1
+                sinal, lado = ("+", "acima") if dif >= 0 else ("-", "abaixo")
+                st.markdown(f"{cab}  \n{comp.get('nome')}: {_ret_fmt(comp_v)} | Diferença: "
+                            f"{sinal}{utils.formato.num(abs(dif), casas)} pontos {lado} "
+                            f"{comp.get('artigo', '')}")
+                with st.popover("O que são pontos percentuais?"):
+                    st.caption(f"p.p. = pontos percentuais. É só a conta: {utils.formato.num(v_sel, 1)}% - "
+                               f"{utils.formato.num(comp_v, 1)}% = {utils.formato.num(abs(dif), casas)} pontos. "
+                               f"Não é {utils.formato.num(abs(dif), casas)}%.")
+
+    renda_fixa = dados.get("rendaFixa") or {}
+    linhas_rf = [o for o in renda_fixa.values()
+                 if o.get("taxaAno") is not None or any(v is not None for v in (o.get("v") or []))]
+    if linhas_rf:
+        with st.container(border=True):
+            st.markdown("**Renda fixa** *[Outro tipo de investimento]*")
+            for o in linhas_rf:
+                v = (o.get("v") or [None])[per] if per < len(o.get("v") or []) else None
+                taxa = f" ({utils.formato.num(o['taxaAno'])}% a.a. hoje)" if o.get("taxaAno") is not None else ""
+                valor_txt = _ret_fmt(v) if v is not None else "Dados indisponíveis"
+                st.markdown(f"{o.get('nome')}{taxa}: **{valor_txt} em {p_sel}**")
+            st.caption("CDI e Selic são renda fixa, não um índice de bolsa - ficam fora do gráfico "
+                       "de retorno acima de propósito.")
+
+    t3 = total[1] if len(total) > 1 else None
+    t5 = total[2] if len(total) > 2 else None
+    porque = ""
+    if per == 2 and t3 is not None and t5 is not None and t3 > t5:
+        queda = abs((1 + t5 / 100) / (1 + t3 / 100) - 1) * 100
+        porque = (f"Por que 3 anos ({_ret_fmt(t3)}) rendeu mais que 5 anos ({_ret_fmt(t5)})? Porque "
+                  f"entre 5 e 3 anos atrás a ação caiu {utils.formato.num(queda, 0)}%. O ganho veio "
+                  f"todo nos últimos 3 anos. ")
+    st.caption(f"{porque}Retorno passado não garante retorno futuro.")
+    st.caption(f"Fonte: Yahoo Finance - Dados até {dados.get('data', '')}.")
 
 
 # ------------------------------------------------------------ telas
@@ -585,16 +738,20 @@ def painel(ticker: str):
     if aviso:
         dados = {**dados, "avisoGuidanceAnual": aviso}
     tela_detalhe(data={"dados": dados}, key=f"tela_{ticker}")
-    # Componente único de gráfico de LPA (components/lpa_chart.py, st.bar_chart nativo) - não pode
-    # ficar embutido no HTML/JS de `tela_detalhe` (um componente custom não hospeda um widget
-    # nativo do Streamlit no meio dele), então fica como bloco próprio, depois de toda a tela do
-    # ticker (decisão do usuário, 27/11/2026: prioridade é o gráfico certo e a tela não quebrar -
-    # dividir `tela_detalhe` em 2 partes pra encaixar o gráfico no meio arriscaria quebrar a barra
-    # fixa do topo e o scroll, ambos já corrigidos 3x nesta mesma sessão).
+    # Gráfico nativo de LPA (components/lpa_chart.py, st.bar_chart) colado logo abaixo do card
+    # "Lucro por ação" (27/11/2026, a pedido do usuário) - entra exatamente na costura entre as 2
+    # metades da tela (tela_detalhe/tela_detalhe_fundo, ver comentário onde elas são criadas acima).
+    # Aparece nos 3 modos (Conservador/Crescimento/Quantitativo), não só Conservador: Python não
+    # sabe qual aba está ativa (a troca é só client-side, dentro de tela_detalhe) - mesmo padrão já
+    # aceito no projeto pro card de guidance trimestral, que também aparece nos 3 modos.
     pontos_lpa = _pontos_lpa_grafico(dados)
     if pontos_lpa:
         st.subheader("Lucro por ação - Evolução")
         components.lpa_chart.render_lpa_chart(pontos_lpa)
+    tela_detalhe_fundo(data={"dados": dados}, key=f"tela_fundo_{ticker}")
+    # Retorno acumulado (components/retorno_chart.py) - saiu daqui de dentro pelo mesmo motivo do
+    # gráfico de LPA (27/11/2026): mesma regra, gráfico nativo, nenhuma barra em div/CSS.
+    _retorno_bloco(dados, ticker)
 
 
 def resumo(tickers: list[str]):

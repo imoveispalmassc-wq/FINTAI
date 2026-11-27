@@ -99,8 +99,6 @@ function montar(root, d) {
   // rótulo embaixo da bolinha: centrado nela; perto das pontas, alinhado à ponta para não sair da barra
   const ancora = p => p < 8 ? 'left:0;transform:none;text-align:left'
     : p > 92 ? 'left:auto;right:0;transform:none;text-align:right' : `left:${p}%`;
-  const dy = tem(d.dividendo) && d.preco ? d.dividendo / d.preco * 100 : null;
-  const naoPagadora = tem(dy) && dy < 0.5;
 
   /* ---------------- folha "Ver como calculamos" */
   function abrirFolha(titulo, html) {
@@ -870,92 +868,13 @@ function montar(root, d) {
       <div class="pilha">${bloco('mm12', 'Últimos 12 meses', d.min52, d.max52, '12 meses')}${bloco('mm30', 'Últimos 30 dias', d.min30, d.max30, '30 dias')}</div>`;
   })($('minmax'));
 
-  /* ---------------- fundamentos (issue #47, itens 12 e 14: bloco único "Lucro e Preço vs Lucro",
-     sem selo "Favorável"/"Desfavorável" (isso é só o Selo de Fundamentos do item 11, lá na Faixa
-     de preço) e sem "Ver como calculamos"/texto gigante. REGRA TRAVADA: 1 LPA só no app = LPA
-     CONTÁBIL TTM; ajustado só como [Ajustado] extra, nunca no cálculo principal. Linha sem dado
-     nunca aparece como "Sem dado" - some. */
-  (function Fundamentals(el) {
-    const prejuizo = tem(d.lpa) && d.lpa <= 0;
-    // LPA ajustado: só informativo, nunca no cálculo (REGRA TRAVADA)
-    const lpaAjustado = d.baseLpa === 'últimos 4 trimestres' && tem(d.lpa) && d.lpa > 0 && tem(d.lpaAgora) && d.lpaAgora > 0
-      && Math.abs(d.lpaAgora / d.lpa - 1) > 0.10 ? d.lpaAgora : null;
-    const plAjustado = tem(lpaAjustado) ? d.preco / lpaAjustado : null;
-    // Visão do ano: início do ano (guidance congelado) | contábil 12 meses | previsão atual (guidance ou consenso)
-    const Fp = d.consensoAno || {}, G0 = d.guidance, GI = d.guidanceInicial || {};
-    const anoPrev = (G0 && G0.periodo) || (d.lpaAnos && d.lpaAnos.length ? d.lpaAnos[d.lpaAnos.length - 1].ano + 1 : null);
-    const lpaCons = tem(Fp.lpa) && Fp.lpa > 0 ? Fp.lpa : null;
-    const lpaGuia = G0 && tem(G0.lpa) && G0.lpa > 0 ? G0.lpa : null;
-    const lpaPrev = lpaGuia || lpaCons;
-    const plPrev = tem(lpaPrev) ? d.preco / lpaPrev : null;
-    const lpaIni = tem(GI.lpa) && GI.lpa > 0 ? GI.lpa : null;
-    const plIni = tem(lpaIni) ? d.preco / lpaIni : null;
-    const fonteLinha = (() => { const S = d.lpaSec && d.lpaSec.status === 'ok' ? d.lpaSec : null;
-      if (S && S.trimestres && S.trimestres.length) return `Fonte: ${d.lpaFonte || 'Yahoo Finance'} · release XTXX · ${d.balanco && d.balanco.data ? d.balanco.data : ''}`;
-      return d.lpaFonte ? `Fonte: ${d.lpaFonte}` : ''; })();
-
-    // HIERARQUIA DO LPA (27/11/2026, a pedido do usuário): TTM é o único LPA que entra no cálculo
-    // de P/L (REGRA TRAVADA acima) - os outros 3 valores (início do ano, previsão atual, ajustado)
-    // são só referência/contexto, nunca o LPA usado. Por isso TTM fica em destaque na própria linha
-    // do cálculo (acima), e os outros 3 viram 1 única linha pequena/cinza, sem o peso visual de
-    // linhas separadas em negrito - "Início do ano" é o guidance CONGELADO no começo do ano fiscal
-    // (não muda); "Contábil 12 meses (TTM)" acima é o que realmente atualiza a cada balanço.
-    const contexto = [
-      lpaIni ? `Início do ano ${din(lpaIni)}${GI.ano ? ` (${GI.ano})` : ''}` : null,
-      tem(lpaPrev) ? `Previsão atual${anoPrev ? ` (${anoPrev})` : ''} ${din(lpaPrev)}${lpaGuia ? ' · guidance' : lpaCons ? ' · consenso' : ''}` : null,
-    ].filter(Boolean);
-    const linhasMedias = [
-      tem(d.lpaMedio3a) ? `3 anos ${din(d.lpaMedio3a)}` : null,
-      tem(d.lpaMedia5a) ? `5 anos ${din(d.lpaMedia5a)}` : null,
-      tem(d.lpaMedia10a) ? `10 anos ${din(d.lpaMedia10a)}` : null,
-    ].filter(Boolean);
-
-    // Dividendos (item 14, unificado 27/11/2026): ANTES o mesmo dividendo aparecia em 3 lugares
-    // com 3 valores diferentes (pago/declarado/projetado) sem dizer qual era qual - parecia erro.
-    // Agora as 3 linhas ficam juntas, nomeadas, só aqui - "Indicadores" não repete mais o valor
-    // bruto do dividendo (só o Dividend Yield, uma conta diferente). DF = utils.dados_fixos (CVM,
-    // declarado); d.dividendo = Yahoo (pago); d.guidance.dividendo = projeção da empresa.
-    const DF = d.dadosFixos, temDF = DF && DF.status === 'ok';
-    const cortou = tem(d.dividendo12Atras) && d.dividendo12Atras > 0 && d.dividendo < d.dividendo12Atras * 0.95;
-    const linhasDiv = [
-      tem(d.dividendo) ? ['Pago (365 dias)', din(d.dividendo)] : null,
-      temDF && tem(DF.dividendo12m) ? ['Declarado (CVM)', din(DF.dividendo12m)] : null,
-      d.guidance && tem(d.guidance.dividendo) ? [`Projetado${anoPrev ? ` ${anoPrev}` : ''}`, `${din(d.guidance.dividendo)} · DY ${f(d.guidance.dividendo / d.preco * 100, 1)}%`] : null,
-      tem(dy) ? ['DY atual (sobre o pago)', `${f(dy)}%`] : null,
-      tem(d.dyMedio12) ? ['DY média 12m', `${f(d.dyMedio12)}%`] : null,
-    ].filter(Boolean);
-    const fraseDiv = !tem(dy) ? ''
-      : naoPagadora ? (d.dividendo > 0 ? `A ${d.ticker} quase não paga dividendo; reinveste quase todo o lucro na própria empresa. É o perfil da empresa, para quem busca crescimento, não renda.`
-          : `A ${d.ticker} não pagou dividendo nos últimos 12 meses. É o perfil de quem reinveste o lucro, não necessariamente um problema.`)
-      : cortou ? `Dividendo reduzido vs 12 meses atrás: de ${din(d.dividendo12Atras)} para ${din(d.dividendo)} por ação.` : '';
-    // UMA única nota explicando os 3 métodos do dividendo (antes repetida, com texto diferente,
-    // em 3 cards - unificado 27/11/2026 a pedido do usuário).
-    const notaDiv = 'Pago = dinheiro que caiu na sua conta nos últimos 365 dias corridos (Yahoo Finance). '
-      + 'Declarado = valor aprovado pela empresa, somado dos últimos 4 trimestres na CVM.'
-      + (d.guidance && tem(d.guidance.dividendo) ? ' Projetado = estimativa da empresa pro ano em curso, ainda não paga nem declarada.' : '')
-      + ' Pago e declarado quase nunca batem exatamente - são 2 datas diferentes (pagamento x aprovação), não um erro.';
-
-    el.innerHTML = `<h2>Lucro e Preço vs Lucro</h2>
-      <div class="pilha">
-        <div class="card">
-          ${bolaAtualizacao(d.atualizacao)}
-          ${prejuizo ? `<div class="destaque" style="color:var(--vermelho)">A empresa teve prejuízo nos últimos 12 meses: a relação preço/lucro não se aplica.</div>` : !tem(d.pl) ? `<div class="nota">${INDISP}</div>` : `
-          <div class="duas"><span class="rot">Cotação ÷ LPA contábil TTM = P/L</span></div>
-          <div class="nota num" style="margin-top:2px;font-size:15px">${f(d.preco)} ÷ <b style="color:var(--texto);font-size:17px">${f(d.lpa)}</b> = <b style="color:var(--texto);font-size:17px">P/L ${f(d.pl)}</b></div>
-          ${contexto.length || tem(lpaAjustado) ? `<div class="nota" style="margin-top:6px;opacity:.85">${[...contexto, tem(lpaAjustado) ? `[Ajustado] ${din(lpaAjustado)}${tem(plAjustado) ? ` · P/L ${f(plAjustado)}` : ''}` : null].filter(Boolean).join(' · ')}</div>` : ''}
-          ${linhasMedias.length ? `<div class="nota num" style="margin-top:8px">Média: ${linhasMedias.join(' • ')}</div>` : ''}
-          ${tem(d.plMedio12) ? `<div class="nota num" style="margin-top:4px">P/L médio 12m: ${f(d.plMedio12)}${tem(d.pl) ? ` (vs. P/L atual ${f(d.pl)})` : ''}</div>` : ''}
-          `}
-          ${fonteLinha ? `<div class="nota" style="margin-top:10px">${fonteLinha}</div>` : ''}
-        </div>
-        <div class="card">
-          <strong>Dividendos</strong>
-          ${linhasDiv.length ? `<div class="lista-v num" style="margin-top:8px">${linhasDiv.map(([r, v]) => `<div>${r}<b>${v}</b></div>`).join('')}</div>` : `<div class="nota" style="margin-top:8px">${INDISP}</div>`}
-          ${linhasDiv.length ? `<div class="nota" style="margin-top:6px">${notaDiv}</div>` : ''}
-          ${fraseDiv ? `<p class="nota" style="margin-top:8px">${fraseDiv}</p>` : ''}
-        </div>
-      </div>`;
-  })($('fundamentos'));
+  /* ---------------- fundamentos / indicadores / retorno acumulado: MOVIDOS pra
+     tela/detalhe_fundo.js (27/11/2026) - componente separado, montado em app.py logo DEPOIS do
+     gráfico nativo de LPA (components/lpa_chart.py), pra esse gráfico ficar colado embaixo do
+     card "Lucro por ação" (bloco de cada modo, abaixo) em vez de só no fim da tela inteira. Corte
+     feito exatamente na costura que já existia entre modo-bloco e fundamentos (tela/detalhe.html)
+     - nada do cabeçalho fixo/scroll foi tocado, fica 100% aqui. Ver nota no topo de
+     detalhe_fundo.js para como a troca de modo (client-side, sem round-trip) chega até lá. */
 
   /* ---------------- "Dados fixos" REMOVIDO como bloco visual próprio (unificação pedida em
      27/11/2026): divergia do bloco "Lucro e Preço vs Lucro"/"Indicadores" pro mesmo indicador
@@ -963,155 +882,15 @@ function montar(root, d) {
      utils/dados_fixos.py (`buscar_fixos_br`) continua existindo como camada de dados interna -
      `d.dadosFixos` (tela/dados.dados_fixos_tela) ainda é calculado em tela/dados.montar(), só não
      vira mais a própria seção da tela: os campos que só existiam aqui (Ações em circulação, Lucro
-     líquido do período, fonte CVM, data de encerramento) migraram pro card "Indicadores" abaixo -
-     ver a seção Indicators. P/VP/Payout/ROE/ADR (Issue #35) eram exclusivos deste bloco e não
-     tinham equivalente em Indicadores - ficam só no `d.dadosFixos` (não descartados do cálculo,
-     só sem card próprio por enquanto; retomar se for pedido). */
+     líquido do período, fonte CVM, data de encerramento) migraram pro card "Indicadores" (agora em
+     detalhe_fundo.js). P/VP/Payout/ROE/ADR (Issue #35) eram exclusivos deste bloco e não tinham
+     equivalente em Indicadores - ficam só no `d.dadosFixos` (não descartados do cálculo, só sem
+     card próprio por enquanto; retomar se for pedido). */
 
   /* ---------------- preço justo: SEÇÃO REMOVIDA (issue #47, item 15). "Preço justo" era um
      preço-alvo (Bazin/Conservador/P/L histórico) e virava responsabilidade do app, como o
      backtest do item 13. O Fintai mostra só posição de preço (item 10) + fundamentos (item 11).
      O espaço fica vazio de propósito - sem substituir por outra versão. */
-
-  /* ---------------- indicadores */
-  (function Indicators(el) {
-    const difPL = tem(d.pl) && tem(d.plMedio12) && d.plMedio12 > 0 ? (d.pl / d.plMedio12 - 1) * 100 : null;
-    const q = qtd(d.acoes);
-    const medioSub = { trimestral: 'com o LPA de cada trimestre', contabil: 'com o lucro contábil de cada balanço', simplificado: 'preço médio do ano ÷ LPA atual' }[d.plMetodo] || '';
-    // Campos que só existiam no bloco "Dados fixos" (removido, unificação de 27/11/2026) -
-    // utils.dados_fixos.buscar_fixos_br continua a camada de dados interna (contabil_br.json /
-    // contabil_br_config.json), só não tem mais seção própria: Ações em circulação, Lucro líquido
-    // do período, fonte CVM e data de encerramento migraram pra cá.
-    const DF = d.dadosFixos;
-    const temDF = DF && DF.status === 'ok';
-    const fonteDF = temDF ? `${DF.fonteOficial || 'CVM'} · balanço de ${DF.dataUltimoBalanco || '—'}.` : '';
-    const avisoHtml = (temDF && DF.avisoBalancoNovo) ? `<div class="aviso" style="margin-bottom:10px">${DF.avisoBalancoNovo}</div>` : '';
-    const c = (rot, v, sub, dica) => [rot, v, sub, dica];
-    const cartoes = [
-      c('P/L atual', tem(d.pl) ? f(d.pl) : null, tem(difPL) ? `${sinal(difPL)} vs. média de 12m` : '', `Você paga ${din(d.pl)} para cada ${d.moeda} 1 de lucro. Conta: ${f(d.preco)} / ${f(d.lpa)} = ${f(d.pl)}`),
-      c('P/L médio 12 meses', tem(d.plMedio12) ? f(d.plMedio12) : null, medioSub, d.plMetodo === 'simplificado' ? 'Estimativa: preço médio do ano dividido pelo LPA atual, porque o Yahoo não traz o lucro de cada trimestre.' : d.plMetodo === 'contabil' ? `Média do P/L de cada pregão desde ${d.mediaDesde}, com o lucro contábil em vigor em cada data.` : 'Média do P/L de cada pregão do último ano, com o lucro já divulgado em cada data.'),
-      c('LPA básico', tem(d.lpa) ? din(d.lpa) : null, 'últimos 12 meses', `Lucro por ação. Cada ação ganhou ${din(d.lpa)} em 12 meses.${q ? ` Conta: Lucro / ${q} de ações` : ''}`),
-      // Dividendo anual (pago/declarado/projetado) unificado no card "Dividendos" (bloco "Lucro e
-      // Preço vs Lucro" acima, 27/11/2026) - aqui só o Dividend Yield, uma conta diferente (não
-      // duplica o valor bruto do dividendo).
-      c('Dividend yield', tem(dy) ? `${f(dy)}%` : null, tem(dy) ? `${f(d.dividendo)} / ${f(d.preco)}` : '', `Quanto o dividendo representa sobre o preço. ${f(d.dividendo)} / ${f(d.preco)} = ${f(dy)}%.${naoPagadora ? ` É baixo porque a ${d.ticker} reinveste o lucro, não porque está com problema.` : ''}`),
-      c('Ações em circulação', q, 'quantos pedaços a empresa foi dividida', `A ${d.ticker} foi fatiada em ${q} de ações.${temDF ? ` Fonte: ${fonteDF}` : ''}`),
-      c('Lucro líquido (12 meses)', temDF && tem(DF.lucro12m) ? `${f(DF.lucro12m / 1e9, 2)} bi` : null, 'declarado na CVM', `Lucro líquido total da empresa nos últimos 4 trimestres declarados na CVM. Fonte: ${fonteDF}`),
-    ];
-    // P/VP, Payout, ROE (Issue #35) - só existiam no bloco "Dados fixos" removido; reusam o
-    // MESMO cálculo já feito em utils.dados_fixos.calcular_indicadores (d.dadosFixos.pvp/payout/
-    // roe), nenhuma conta nova aqui. Ao contrário dos cartões acima, um card sem dado aqui SOME
-    // (não mostra "Dados indisponíveis") - são indicadores extra, opcionais, não o núcleo da tela.
-    const cartoesExtra = [
-      temDF && tem(DF.pvp) ? c('P/VP', f(DF.pvp, 2), 'Preço / Valor Patrimonial por Ação',
-        `P/VP = Preço ÷ VPA.${tem(DF.vpa) ? ` Conta: ${f(d.preco)} ÷ ${f(DF.vpa, 2)} = ${f(DF.pvp, 2)}.` : ''} Fonte: ${fonteDF}`) : null,
-      temDF && tem(DF.payout) ? c('Payout', `${f(DF.payout * 100, 1)}%`, 'dividendo declarado ÷ LPA',
-        `Payout = Dividendo declarado na CVM ÷ LPA.${tem(DF.dividendo12m) && tem(d.lpa) ? ` Conta: ${din(DF.dividendo12m)} ÷ ${din(d.lpa)} = ${f(DF.payout * 100, 1)}%.` : ''} Fonte: ${fonteDF}`) : null,
-      temDF && tem(DF.roe) ? c('ROE', `${f(DF.roe * 100, 1)}%`, 'lucro líquido ÷ patrimônio líquido',
-        `ROE = Lucro líquido (12 meses) ÷ Patrimônio líquido.${tem(DF.lucro12m) && tem(DF.patrimonioLiquido) ? ` Conta: ${f(DF.lucro12m / 1e9, 2)} bi ÷ ${f(DF.patrimonioLiquido / 1e9, 2)} bi = ${f(DF.roe * 100, 1)}%.` : ''} Fonte: ${fonteDF}`) : null,
-    ].filter(Boolean);
-    const todosCartoes = [...cartoes, ...cartoesExtra];
-    el.innerHTML = `<h2>Indicadores</h2>
-      <div class="sub">Dados de ${d.data} · Fonte: ${d.fonte} · <button class="link" data-folha="ind">Ver como calculamos</button></div>
-      ${avisoHtml}
-      <div class="grade2">${todosCartoes.map(([r, v, s, dica]) => v === null
-        ? `<div class="ind"><span class="rot">${r}</span><span class="s" style="margin-top:8px">${INDISP}</span></div>`
-        : `<button class="ind" aria-expanded="false"><span class="rot">${r}</span><span class="v num">${v}</span><span class="s num">${s}</span><span class="dica">${dica}</span></button>`).join('')}</div>`;
-    el.querySelectorAll('button.ind').forEach(b => { b.onclick = () => {
-      const abrir = b.getAttribute('aria-expanded') !== 'true';
-      el.querySelectorAll('button.ind').forEach(o => o.setAttribute('aria-expanded', 'false')); b.setAttribute('aria-expanded', abrir);
-    }; });
-    FOLHAS.ind = () => ['Como calculamos os indicadores', `
-      <p><b>P/L atual</b></p>${tem(d.pl) ? `<code>${f(d.preco)} ÷ ${f(d.lpa)} = ${f(d.pl)}</code>` : `<p>${INDISP}.</p>`}
-      <p><b>Dividend yield</b></p>${tem(dy) ? `<code>${f(d.dividendo)} ÷ ${f(d.preco)} = ${f(dy)}%</code>` : `<p>${INDISP}.</p>`}
-      <p><b>LPA básico:</b> lucro líquido dos últimos 12 meses dividido pelo número de ações.</p>
-      <p>Dividendo pago/declarado/projetado: card "Dividendos", no bloco "Lucro e Preço vs Lucro" acima.</p>
-      <p>Toque em um cartão para ver a explicação dele.</p>${fonte}`];
-  })($('indicadores'));
-
-  /* ---------------- retorno acumulado (issue #47, item 16): nunca mistura moeda - d.comparadores
-     já vem filtrado (BR só R$: Ibovespa/IPCA/Poupança; EUA só US$: S&P 500/Nasdaq - ver
-     app.comparadores). CDI/Selic (BR) saem para o card "Renda fixa", separado, com a etiqueta
-     [Outro tipo de investimento]. Sem simulação de R$/US$ 10.000: só % e diferença em pontos. */
-  (function TotalReturn(el) {
-    const idx = d.retorno.periodos.map((_, i) => i).filter(i => tem(d.retorno.total[i]));
-    if (!idx.length) { el.innerHTML = `<h2>Retorno acumulado</h2><div class="card nota">Histórico curto demais para calcular retornos.</div>`; return; }
-    const comDado = k => d.comparadores[k] && d.comparadores[k].v.some(tem);
-    // abre no comparador da bolsa da ação; se ele não tiver dado, no primeiro que tiver
-    let reinveste = true, dicaAberta = false, per = idx[0],
-      comp = comDado(d.comparadorPadrao) ? d.comparadorPadrao : (Object.keys(d.comparadores).find(comDado) || Object.keys(d.comparadores)[0]);
-    function render() {
-      const c = d.comparadores[comp];
-      const vals = reinveste ? d.retorno.total : d.retorno.preco;
-      const pSel = d.retorno.periodos[per];
-      const difP = tem(d.retorno.preco[per]) && tem(d.retorno.total[per]) ? d.retorno.total[per] - d.retorno.preco[per] : null;
-      const recebido = per === 0 ? d.dividendo : per === 2 ? d.dividendos5Anos : null;
-      let texto;
-      if (reinveste) texto = !tem(difP) ? 'Retorno com os dividendos reinvestidos em mais ações.'
-        : difP < 1 ? `Quase nenhuma diferença em ${pSel}. Reinvestir ou não muda ${f(Math.max(difP, 0), 1)} ponto no seu retorno.`
-        : `${difP >= 10 ? 'Grande diferença' : 'Faz diferença'}. Em ${pSel}, reinvestir os dividendos faz seu retorno ir de ${ret(d.retorno.preco[per])} para ${ret(d.retorno.total[per])}, porque você compra mais ações com o dividendo.`;
-      else texto = (tem(recebido) && recebido > 0 ? `Você recebeu ${din(recebido)} por ação em dividendos em ${pSel}, em dinheiro, e não recomprou.` : `Você recebeu os dividendos de ${pSel} em dinheiro e não recomprou.`)
-        + (tem(difP) && difP >= 10 ? ` Deixou de ganhar ${f(difP, 1)} pontos do efeito bola de neve.` : '');
-
-      // a ação primeiro; depois os comparadores (mesma moeda) do menor para o maior retorno
-      const linhasG = [{ nome: d.ticker, v: vals[per], acao: true },
-        ...Object.values(d.comparadores).map(o => ({ nome: o.nome, v: o.v[per] }))
-          .sort((x, y) => (tem(x.v) ? x.v : Infinity) - (tem(y.v) ? y.v : Infinity))];
-      const comV = linhasG.map(l => l.v).filter(tem);
-      let vhi = Math.max(0, ...comV), vlo = Math.min(0, ...comV);
-      const vpasso = passoBonito(Math.max(vhi - vlo, 1) / 4);
-      vhi = Math.max(vpasso, Math.ceil(vhi / vpasso) * vpasso); vlo = Math.floor(vlo / vpasso) * vpasso;
-      const vamp = vhi - vlo, vpos = v => (v - vlo) / vamp * 100;
-      const vmarcas = []; for (let v = vlo; v <= vhi + 1e-9; v += vpasso) vmarcas.push(v);
-      const grafico = `<div class="grade-y">${vmarcas.map(v => `<div style="bottom:${vpos(v)}%"><span>${f(v, 0)}%</span></div>`).join('')}<div class="zero" style="bottom:${vpos(0)}%"></div></div>
-        <div class="vcols">${linhasG.map(l => `<div class="vc${l.acao ? ' acao' : ''}">${tem(l.v)
-          ? `<div class="vb${l.v < 0 ? ' neg' : ''}" style="bottom:${vpos(Math.min(0, l.v))}%;height:${Math.max(Math.abs(l.v) / vamp * 100, 0.8)}%"><i class="num">${ret(l.v)}</i></div>`
-          : `<div class="vb vazio" style="bottom:${vpos(0)}%" title="Sem dado"><i>—</i></div>`}
-          <em>${({ 'S&P 500': 'S&P', 'S&P 500 (sem dividendos)': 'S&P s/div', 'Ibovespa': 'Ibov', 'Poupança': 'Poup.' })[l.nome] || l.nome}</em></div>`).join('')}</div>`;
-
-      // resumo do período contra o comparador da bolsa: só % e diferença em pontos (sem simulação de dinheiro)
-      const p = d.retorno.periodos[per];
-      let resumo;
-      if (!tem(vals[per])) resumo = `<div><b>Retorno acumulado: ${INDISP} em ${p}</b></div>`;
-      else {
-        const cab = `<b>${d.ticker}: ${ret(vals[per])} em ${p}</b>${reinveste ? '' : ' (só preço)'}`;
-        if (!tem(c.v[per])) resumo = `<div>${cab}<br>${c.nome}: ${INDISP}</div>`;
-        else {
-          const dif = vals[per] - c.v[per], casas = Math.abs(dif) >= 100 ? 0 : 1;
-          resumo = `<div>${cab}<br>
-          ${c.nome}: ${ret(c.v[per])} | Diferença: <span class="dif ${dif < 0 ? 'neg' : ''}">${dif >= 0 ? '+' : '-'}${f(Math.abs(dif), casas)} pontos ${dif >= 0 ? 'acima' : 'abaixo'} ${c.artigo}</span><button class="q" id="qpp" aria-label="O que são pontos percentuais?">?</button>
-          ${dicaAberta ? `<span class="dica-q">p.p. = pontos percentuais. É só a conta: ${f(vals[per], 1)}% - ${f(c.v[per], 1)}% = ${f(Math.abs(dif), casas)} pontos. Não é ${f(Math.abs(dif), casas)}%.</span>` : ''}</div>`;
-        }
-      }
-
-      const t3 = d.retorno.total[1], t5 = d.retorno.total[2];
-      const porque = per === 2 && tem(t3) && tem(t5) && t3 > t5
-        ? `Por que 3 anos (${ret(t3)}) rendeu mais que 5 anos (${ret(t5)})? Porque entre 5 e 3 anos atrás a ação caiu ${f(Math.abs(((1 + t5 / 100) / (1 + t3 / 100) - 1) * 100), 0)}%. O ganho veio todo nos últimos 3 anos. ` : '';
-      // Renda fixa (BR): CDI/Selic, separado do gráfico de índices - é outro tipo de investimento
-      const rendaFixaHtml = (() => {
-        const tx = Object.values(d.rendaFixa || {}).filter(o => tem(o.taxaAno) || (o.v && o.v.some(tem)));
-        if (!tx.length) return '';
-        return `<div class="card" style="margin-top:10px"><strong>Renda fixa <small>[Outro tipo de investimento]</small></strong>
-          <div class="lista-v num" style="margin-top:8px">${tx.map(o => `<div>${o.nome}${tem(o.taxaAno) ? ` (${f(o.taxaAno)}% a.a. hoje)` : ''}<b>${tem(o.v[per]) ? ret(o.v[per]) : INDISP} em ${d.retorno.periodos[per]}</b></div>`).join('')}</div>
-          <p class="nota" style="margin-top:6px">CDI e Selic são renda fixa, não um índice de bolsa - ficam fora do gráfico de retorno acima de propósito.</p></div>`;
-      })();
-      el.innerHTML = `<h2>Retorno acumulado</h2><div class="sub">com dividendos, comparado aos indicadores (${d.moeda})</div>
-        <div class="toggle" role="group" aria-label="Reinvestimento de dividendos">
-          <button data-r="1" aria-pressed="${reinveste}">Reinvestindo dividendos</button><button data-r="0" aria-pressed="${!reinveste}">Sem reinvestir</button>
-        </div>
-        <div class="chips periodos" role="group" aria-label="Período">${idx.map(i => `<button data-p="${i}" aria-pressed="${i === per}">${d.retorno.periodos[i]}</button>`).join('')}</div>
-        <p class="nota" style="margin:4px 2px 0">${texto}</p>
-        <div class="vbarras">${grafico}</div>
-        <div class="card resumo num">${resumo}</div>
-        ${rendaFixaHtml}
-        <p class="nota" style="margin:12px 2px 0">${porque}<b>Retorno passado não garante retorno futuro.</b></p>
-        <p class="nota" style="margin:8px 2px 0">Fonte: Yahoo Finance - Dados até ${d.data}.</p>`;
-      el.querySelectorAll('[data-r]').forEach(b => { b.onclick = () => { reinveste = b.dataset.r === '1'; render(); }; });
-      el.querySelectorAll('[data-p]').forEach(b => { b.onclick = () => { per = +b.dataset.p; render(); }; });
-      const q = $('qpp'); if (q) q.onclick = () => { dicaAberta = !dicaAberta; render(); };
-    }
-    render();
-  })($('retorno'));
 
   /* ---------------- backtest: SEÇÃO REMOVIDA (issue #47, item 13). "Os sinais funcionaram no
      passado?" validava/invalidava sinais e virava responsabilidade do app (SINAL INVALIDADO,
@@ -1358,12 +1137,17 @@ function montar(root, d) {
     if (OT) { const oz = el.querySelector('#ot-fonte'); if (oz) { oz.textContent = OT.fonte; oz.href = OT.url || ''; } }
   }
 
-  const SECOES = { faixa: ['graham'], tendencia: ['graham', 'lynch', 'simons'], minmax: ['graham', 'simons'],
-    fundamentos: ['graham', 'lynch'], indicadores: ['graham', 'lynch'], retorno: ['graham', 'lynch'] };
+  // fundamentos/indicadores/retorno saíram daqui (tela/detalhe_fundo.js, componente separado,
+  // 27/11/2026) - SECOES agora só cobre o que ainda está nesta metade.
+  const SECOES = { faixa: ['graham'], tendencia: ['graham', 'lynch', 'simons'], minmax: ['graham', 'simons'] };
   function renderModo() {
     root.querySelectorAll('.modos button').forEach(b => b.setAttribute('aria-pressed', b.dataset.modo === modo));
     Object.entries(SECOES).forEach(([id, modos]) => { $(id).hidden = !modos.includes(modo); });
     renderDecisao(); renderBloco(); aoMudarModo();
+    // avisa a 2ª metade (tela/detalhe_fundo.js, componente/shadow root separado) que o modo mudou,
+    // pra ela aplicar a MESMA visibilidade por modo nos 3 cards que moraram pra lá - evento no
+    // `document`, não em `root`, porque atravessa a fronteira entre os 2 componentes.
+    document.dispatchEvent(new CustomEvent('fintai-modo-mudou', { detail: { modo } }));
   }
   root.querySelectorAll('.modos button').forEach(b => { b.onclick = () => {
     modo = b.dataset.modo;

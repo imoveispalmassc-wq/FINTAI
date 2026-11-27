@@ -195,9 +195,21 @@ def pacote() -> dict:
 def pagina(dados: dict) -> str:
     tela = RAIZ / "tela"
     css = (tela / "detalhe.css").read_text(encoding="utf-8").replace(":host {", ":root {", 1)
-    js = (tela / "detalhe.js").read_text(encoding="utf-8")
-    js = js[:js.index("export default function")]
-    assert ":root {" in css and "function montar(" in js
+    # Tela dividida em 2 componentes no app real (27/11/2026, ver app.py) - a página estática
+    # (fora do Streamlit, sem shadow DOM) precisa montar as 2 metades em containers PRÓPRIOS (não
+    # direto no `document`): as 2 metades têm elementos com o MESMO id (ex. o modal "Ver como
+    # calculamos", #fundo/#folha-t/#folha-c/#folha-x, duplicado em cada metade) - no Streamlit cada
+    # componente tem seu próprio shadow root, então os ids nunca colidem; numa página só, sem shadow
+    # DOM, colidiriam se as duas fossem montadas contra `document`. Cada metade também fica dentro
+    # de uma IIFE própria (função isolada) porque as duas declaram os MESMOS nomes no nível do
+    # arquivo (`tem`, `f`, `sinal`, `montar`, etc.) - sem isso, o 2º `<script>` daria erro de
+    # "Identifier already declared" ao tentar redeclarar o que o 1º já declarou no mesmo escopo.
+    js_a = (tela / "detalhe.js").read_text(encoding="utf-8")
+    js_a = js_a[:js_a.index("export default function")]
+    js_b = (tela / "detalhe_fundo.js").read_text(encoding="utf-8")
+    js_b = js_b[:js_b.index("export default function")]
+    assert ":root {" in css and "function montar(" in js_a and "function montar(" in js_b
+    dados_json = json.dumps(dados, ensure_ascii=False, separators=(",", ":"))
     return f"""<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -223,10 +235,23 @@ body {{ margin: 0; background: var(--bg); font-family: var(--corpo); }}
 </head>
 <body>
 <div style="padding:0 16px"><div class="proto">Dados de exemplo · MU em 13/11/2026 · não são cotações reais</div></div>
+<div id="parte-a">
 {(tela / "detalhe.html").read_text(encoding="utf-8")}
+</div>
+<div id="parte-b">
+{(tela / "detalhe_fundo.html").read_text(encoding="utf-8")}
+</div>
 <script>
-{js}
-montar(document, {json.dumps(dados, ensure_ascii=False, separators=(",", ":"))});
+(function() {{
+{js_a}
+montar(document.getElementById('parte-a'), {dados_json});
+}})();
+</script>
+<script>
+(function() {{
+{js_b}
+montar(document.getElementById('parte-b'), {dados_json});
+}})();
 </script>
 </body>
 </html>

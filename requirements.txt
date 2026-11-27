@@ -12,3 +12,4 @@ pandas==3.0.5
 numpy==2.5.3
 lxml>=5.0
 requests>=2.31   # fila pública de tickers novos (utils/fila_github.py)
+altair>=5.0   # gráfico nativo de LPA (components/lpa_chart.py) - não influencia cálculo de preço

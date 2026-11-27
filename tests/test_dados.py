@@ -239,7 +239,9 @@ def test_card_pl_na_ordem_inicio_contabil_previsao():
     # própria linha "Cotação ÷ LPA contábil TTM = P/L"; início do ano e previsão viram contexto
     # (menor, cinza) logo abaixo, na MESMA ordem cronológica de antes.
     import pathlib
-    js = pathlib.Path(__file__).resolve().parent.parent.joinpath("tela", "detalhe.js").read_text(encoding="utf-8")
+    # bloco "Lucro e Preço vs Lucro" mora em detalhe_fundo.js desde 27/11/2026 (split em 2
+    # componentes pra encaixar o gráfico nativo de LPA logo abaixo do card "Lucro por ação").
+    js = pathlib.Path(__file__).resolve().parent.parent.joinpath("tela", "detalhe_fundo.js").read_text(encoding="utf-8")
     tpl_ini = js.index("el.innerHTML = `<h2>Lucro e Preço vs Lucro")
     tpl = js[tpl_ini:tpl_ini + 2500]
     assert tpl.index("LPA contábil TTM") < tpl.index("contexto")   # TTM renderiza antes do contexto

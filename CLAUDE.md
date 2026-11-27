@@ -1561,6 +1561,151 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   (`.mb-*`) restou na página; o gráfico nativo aparece como a última seção da tela, com as 5 barras
   (2023/2024/2025/2026 Inicial/2026E Guidance) proporcionais de verdade (Streamlit/Vega-Lite calcula
   a escala, não o projeto) e o caption da barra "2026 Inicial" explicando Realizado + Perdido.
+- **FOLLOW-UP NO MESMO DIA - gráfico de LPA colado no card, não no fim da tela (tela dividida em 2
+  componentes)**: o usuário testou a versão acima e apontou que não queria o gráfico "no final do
+  app" - queria ele logo abaixo do card "Lucro por ação", antes do próximo card. Isso esbarra numa
+  limitação real, já explicada ao usuário ANTES de implementar (`AskUserQuestion`): a tela inteira
+  de um ticker é UM componente customizado só (`st.components.v2.component`), e um widget nativo do
+  Streamlit nunca pode ficar embutido no meio do HTML/JS desse componente - só ANTES ou DEPOIS dele
+  inteiro. Pra encaixar o gráfico exatamente onde o usuário queria, a ÚNICA forma é dividir o
+  componente em 2, com o gráfico nativo no meio da divisão - e o usuário escolheu essa opção
+  conscientemente (ciente do risco, já que a barra fixa do topo e o scroll foram corrigidos 3x nesta
+  mesma sessão).
+  **Onde o corte foi feito**: exatamente na costura que já existia em `tela/detalhe.html` entre
+  `#modo-bloco` (bloco de cada modo - "Lucro por ação" no Conservador, "Crescimento" no Crescimento,
+  "Movimento curto" no Quantitativo) e `#fundamentos` - nunca no meio de um card. `tela/detalhe.js`
+  (`tela_detalhe` em app.py) virou só a 1ª metade: cabeçalho fixo, Visão geral, Faixa/Tendência/
+  Mínimo-máximo/bloco de cada modo - o cabeçalho fixo e a lógica de scroll (sentinela +
+  IntersectionObserver, já corrigidos 3x) ficam 100% aqui, intocados. `tela/detalhe_fundo.html`/`.js`
+  (novo par de arquivos, `tela_detalhe_fundo` em app.py) é a 2ª metade: Fundamentos ("Lucro e Preço
+  vs Lucro" + "Dividendos"), Indicadores, Retorno acumulado - código copiado tal como estava de
+  `tela/detalhe.js` (nenhuma lógica de cálculo mudou, só o arquivo onde mora). As 2 metades
+  compartilham o MESMO `tela/detalhe.css` (`app.py` lê o arquivo uma vez e passa pra 2 componentes).
+  Em `app.py` (`painel()`), a ordem agora é: `tela_detalhe(...)` → gráfico nativo de LPA
+  (`components.lpa_chart.render_lpa_chart`) → `tela_detalhe_fundo(...)`.
+  **Troca de modo atravessando os 2 componentes**: o modo (Conservador/Crescimento/Quantitativo) é
+  só client-side (variável JS + `sessionStorage`, sem round-trip no Streamlit) - a 2ª metade, agora
+  um componente/shadow root SEPARADO, não tem os botões de aba e não tem como saber sozinha quando o
+  modo muda. Resolvido com um evento customizado: a 1ª metade (`renderModo()`, a cada clique de aba)
+  dispara `document.dispatchEvent(new CustomEvent('fintai-modo-mudou', { detail: { modo } }))` - um
+  evento no `document` (não no `root` do próprio shadow root) atravessa a fronteira entre os 2
+  shadow roots; a 2ª metade escuta esse evento (`document.addEventListener`) e aplica a MESMA regra
+  de visibilidade por modo (`SECOES`) que Fundamentos/Indicadores/Retorno já tinham antes da divisão
+  (escondidos no modo Quantitativo) - só que agora local a ela. Ao montar pela 1ª vez, a 2ª metade lê
+  o modo direto do `sessionStorage` (mesma chave, `fintai-modo`) pra já nascer com a visibilidade
+  certa, sem depender do evento (que só dispara em cliques seguintes).
+  **Modal "Ver como calculamos" duplicado**: o card "Indicadores" (2ª metade) tem seu próprio botão
+  "Ver como calculamos" - como shadow roots são isolados, a 2ª metade precisa da SUA PRÓPRIA cópia do
+  modal (`#fundo`/`#folha-t`/`#folha-c`/`#folha-x` em `detalhe_fundo.html`, mesma lógica de abrir/
+  fechar em `detalhe_fundo.js`) - a 1ª metade mantém a dela, usada só pelo "Ver como calculamos" do
+  Mínimo/máximo/ponto médio. Os 2 modais nunca colidem (shadow roots separados no app; na página de
+  exemplo estática, ver abaixo, cada metade fica num container HTML próprio por causa disso).
+  **LIMITAÇÃO REAL, aceita conscientemente pelo usuário**: como a 1ª metade agora termina mais cedo
+  (logo depois do bloco de cada modo, não mais no fim da tela inteira), o cabeçalho fixo (sticky)
+  deixa de ficar visível ao rolar pela 2ª metade (gráfico de LPA, Fundamentos, Indicadores, Retorno)
+  - `position: sticky` só prende um elemento enquanto o contêiner dele (a 1ª metade) ainda está na
+  tela; rolando além dela, o cabeçalho sai de vista com o resto do conteúdo da 1ª metade. Isso é uma
+  consequência geométrica inevitável de qualquer divisão (não um bug a corrigir) - antes, com tudo
+  num componente só, o cabeçalho ficava fixo a página inteira.
+  **O gráfico nativo aparece nos 3 modos, não só no Conservador** (decisão aceita explicitamente pelo
+  usuário: "se não der sem complicar, pode mostrar nos 3 modos... não trava por causa disso") - o
+  Python não sabe qual aba está ativa no momento (só o JS sabe, e só client-side), então o gráfico
+  fica sempre visível entre as 2 metades, mesmo quando o card acima dele é "Crescimento" ou
+  "Movimento curto", não "Lucro por ação" - mesmo padrão já aceito no projeto pro card de guidance
+  trimestral, que também aparece nos 3 modos por ser informativo.
+  **Página de exemplo (`tools/gerar_demo.py`, `docs/index.html`)**: também dividida em 2 containers
+  (`#parte-a`/`#parte-b`) e 2 blocos `<script>`, cada um numa IIFE própria - sem isso, as 2 metades
+  declarariam os MESMOS nomes de nível de arquivo (`tem`, `f`, `montar`, etc.) no mesmo escopo global
+  da página estática (erro de "Identifier already declared"), e os 2 modais (`#fundo` etc.)
+  colidiriam por id se montados direto contra `document` (no app de verdade isso nunca acontece, já
+  que cada componente Streamlit tem seu próprio shadow root). A página de exemplo não tenta
+  reproduzir o gráfico nativo de LPA (precisaria do Streamlit rodando de verdade) - fica só com as 2
+  metades da tela, igual sempre foi, sem o gráfico entre elas.
+  `tests/test_dados.py::test_card_pl_na_ordem_inicio_contabil_previsao` ajustado para ler
+  `tela/detalhe_fundo.js` (onde o bloco "Lucro e Preço vs Lucro" mora agora) em vez de
+  `tela/detalhe.js`. Testado ao vivo com BBAS3 (Playwright): nenhum erro de JS no console; ordem na
+  tela confirmada por posição real (`getBoundingClientRect`) - `#modo-bloco` → cabeçalho do gráfico
+  nativo → `#fundamentos`; clicar na aba QUANTITATIVO esconde Fundamentos/Indicadores/Retorno na 2ª
+  metade (evento cruzando os 2 componentes funcionando); print do card "Lucro por ação" com o
+  gráfico colado logo abaixo, sem nenhum card entre os dois.
+- **FOLLOW-UP NO MESMO DIA - valor em cima de cada barra**: o usuário reportou "Não tem valor nas
+  barras" - `st.bar_chart` (API simples do Streamlit) não tem opção de mostrar o valor de cada
+  ponto. Trocado por `st.altair_chart` (ainda um widget NATIVO do Streamlit, zero HTML/CSS/div
+  escrito à mão - só muda qual API do Streamlit desenha o gráfico) com 2 camadas: barra + texto
+  (`mark_bar()` + `mark_text()`), ambas na MESMA escala/encoding (`x`/`y`) - a altura continua
+  100% calculada pelo Vega-Lite (dentro do Altair), nunca por conta própria do projeto; só o
+  texto do valor (formatado em padrão BR, `utils.formato.num`) foi adicionado por cima de cada
+  barra. `altair` (dependência do próprio Streamlit, já instalada) entrou em `requirements.txt`
+  como dependência direta, mesmo padrão de documentação das outras libs do arquivo - não influencia
+  cálculo de preço algum. Testado ao vivo com BBAS3: as 5 barras mostram "5,23"/"4,62"/"2,40"/
+  "4,20"/"1,75" em cima, sem erro de JS no console.
+- **FOLLOW-UP NO MESMO DIA - estimativa de início do ano e TTM separados em 2 barras**: o usuário
+  pediu pra diferenciar visualmente os 2 valores (antes só UMA barra "2026 Inicial" de 4,20, com a
+  diferença pro TTM de 2,18 só lida numa legenda embaixo do gráfico). `app._pontos_lpa_grafico`
+  agora gera 2 pontos SEPARADOS (nunca empilhados - mesma regra de sempre) - "2026 Inicial (jan)"
+  (a estimativa congelada, `d.guidanceInicial.lpa`) e "2026 Atual (TTM)" (o TTM já realizado,
+  `d.lpa`) - cada um com sua própria barra/valor/legenda; a legenda do TTM calcula a diferença só
+  como TEXTO, nunca como segmento de barra. Com guidance revisado pra CIMA (TTM > estimativa
+  inicial), as 2 barras continuam aparecendo normalmente, cada uma com seu valor real - diferente
+  da versão anterior (empilhada), que só mostrava a barra "Inicial" quando ela era maior (pra nunca
+  desenhar um "Perdido" negativo); sem esse segmento, essa restrição não existe mais. Testado ao
+  vivo com BBAS3: 6 barras (2023/2024/2025/2026 Inicial (jan)/2026 Atual (TTM)/2026E Guidance),
+  4,20 e 2,18 em colunas distintas com valor em cima de cada uma.
+- **GRÁFICO DE LPA APROVADO (27/11/2026) - 3 follow-ups no mesmo dia**:
+  1. **Conferido o valor de 2024 (dúvida do usuário: "4,61" ou "4,62"?)**: buscado direto no Yahoo
+     Finance (`tk.income_stmt`, "Basic EPS"/"Diluted EPS" da BBAS3, 2024-12-31) = **4,620 exatos**,
+     sem nenhuma ambiguidade de arredondamento (não é um valor de fronteira tipo 4,615) - bate com
+     o que a tela já mostrava. Não existe nenhum "4,61" em lugar nenhum do código (`grep` não achou
+     nada) nem outro caminho de cálculo pra esse número - `d.lpaAnos`/`app._pontos_lpa_grafico` é a
+     ÚNICA fonte, direto do Yahoo, sem cache. 4,62 já era o único valor usado em todo o app.
+  2. **Rótulos do eixo X na horizontal**: trocado `labelAngle=-45` pra `labelAngle=0` em
+     `components/lpa_chart.py` - testado ao vivo com as 6 barras da BBAS3 ("2026 Inicial (jan)",
+     "2026 Atual (TTM)" incluídos, os rótulos mais longos) e coube sem sobrepor, sem precisar
+     manter a diagonal.
+  3. **MESMA regra aplicada ao gráfico "Retorno acumulado"**: criado `components/retorno_chart.py`
+     (`render_retorno_chart`), MESMO padrão do `lpa_chart.py` - Altair nativo, barra + texto, sem
+     div/CSS, sem empilhar. Única diferença de propósito: retorno pode ser negativo, então o
+     rótulo fica acima da barra quando positivo e abaixo quando negativo (2 camadas de texto
+     filtradas por sinal, `transform_filter`, nunca uma conta de posição em pixel) e a cor muda
+     (vermelho/azul, mesmas cores do resto do app: `--vermelho`/`--azul`).
+     **O card "Retorno acumulado" (período 1/3/5 anos, Reinvestir dividendos, resumo, Renda fixa)
+     saiu de dentro de `tela_detalhe_fundo`** - mesmo motivo do gráfico de LPA: um widget nativo do
+     Streamlit não pode ficar embutido no HTML/JS do componente customizado. O card inteiro virou
+     `app._retorno_bloco(dados, ticker)`, chamado logo depois de `tela_detalhe_fundo(...)` -
+     `tela/detalhe_fundo.js`/`.html` perderam a seção `#retorno`/função `TotalReturn` por completo
+     (não só o gráfico - os controles também, já que eles só faziam sentido client-side enquanto
+     estavam no mesmo componente do gráfico que controlavam). Período e "Reinvestir dividendos",
+     antes botões client-side instantâneos, viram `st.segmented_control`/`st.toggle` nativos - cada
+     clique agora passa pelo `@st.fragment` de `painel()` (rerun escopado só a este bloco, sem
+     perder a rolagem da página nem recarregar a tela inteira) em vez de ser 100% client-side; troca
+     perceptível mas aceitável dado que já é o mesmo padrão usado pelo preço ao vivo (`run_every=60`).
+     Texto completo portado 1:1 de `tela/detalhe_fundo.js` pra `app.py` (explicação de reinvestir/
+     não reinvestir, resumo com diferença em pontos - popover "O que são pontos percentuais?" em
+     vez do botão "?" com `aria-expanded`, "por que 3 anos rendeu mais que 5" quando aplicável,
+     card "Renda fixa [Outro tipo de investimento]", "Retorno passado não garante retorno futuro.",
+     fonte) - nenhuma lógica nova, só a mesma conta/texto em Python.
+     **BUG CORRIGIDO na mesma rodada**: o rótulo da barra (Altair, `utils.formato.pct`, 2 casas por
+     padrão) e o texto do "resumo" logo abaixo (`_ret_fmt`, 0/1 casa conforme o valor) arredondavam
+     o MESMO número de 2 jeitos diferentes na mesma tela (ex. barra "-21,56%" vs resumo "-21,6%”).
+     `render_retorno_chart` ganhou um campo opcional `rotulo` (texto já formatado, por ponto) -
+     `app._retorno_bloco` passa o mesmo `_ret_fmt` usado no resumo, garantindo 1 só número em toda
+     a tela (mesma regra geral do item 1 acima, "Deixa um só em todo o app").
+     **Card de "Retorno acumulado" aparece nos 3 modos agora** (antes escondido no Quantitativo,
+     `SECOES_FUNDO.retorno`) - mesma limitação/precedente do gráfico de LPA: Python não sabe qual
+     aba está ativa (troca é client-side, só dentro de `tela_detalhe`), então um bloco nativo não
+     pode ser escondido por modo sem reconstruir a troca de abas inteira como estado do servidor -
+     não implementado aqui, por ser fora do pedido original.
+     CSS morto removido de `tela/detalhe.css` (`.toggle`, `.chips`/`.chips.periodos`, `.resumo`,
+     `.q`, `.dica-q`, `.vbarras` e descendentes) - nenhum JS referencia mais essas classes depois da
+     mudança. `tools/gerar_demo.py`/`docs/index.html` não mostram o card de Retorno (igual ao de
+     LPA: a página de exemplo não roda Streamlit de verdade, só as 2 metades HTML/JS do componente).
+     Testado ao vivo com BBAS3: controles funcionando (clicar "3 anos"/"5 anos" e o toggle
+     atualiza o gráfico e os textos), gráfico com as cores certas (BBAS3 vermelho -21,6%, Ibovespa
+     azul +11,6%), rótulo da barra batendo exatamente com o texto do resumo, sem erro de JS.
+  4. **Follow-up no mesmo dia - rótulos do eixo X do Retorno acumulado também na horizontal**:
+     mesma mudança do item 2 (`labelAngle=0`), agora em `components/retorno_chart.py`. Testado ao
+     vivo com BBAS3 em "1 ano" e "5 anos" (2 colunas, BBAS3/Ibovespa) - "BBAS3"/"Ibov" ficam
+     horizontais sem sobrepor nos 2 períodos.
 
 ## Textos
 
