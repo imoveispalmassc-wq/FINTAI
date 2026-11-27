@@ -259,6 +259,11 @@ def pesquisar_via_perplexity(ticker: str, periodo: str, *, chamar=None) -> dict 
                 if not texto:
                     log.warning("biblioteca: resposta da Perplexity sem texto de mensagem (output vazio ou sem 'message')")
                     return None
+                # loga a resposta de verdade (truncada) - sem isso, um "não confirmado" da API do
+                # Claude não dá pra diagnosticar: não dá pra saber se a Perplexity não achou o dado,
+                # achou sem fonte oficial, ou achou certinho e foi a confirmação que travou à toa.
+                log.info("biblioteca: Perplexity respondeu (%d caracteres): %s",
+                        len(texto), texto[:800] + ("..." if len(texto) > 800 else ""))
                 return texto
             except (KeyError, IndexError, TypeError, ValueError, AttributeError):
                 log.warning("biblioteca: resposta da Perplexity fora do formato esperado")
@@ -353,13 +358,18 @@ def confirmar_com_claude(resposta_perplexity: dict, ticker: str, campo: str, cha
         log.error("biblioteca: resposta da API do Claude fora do formato esperado")
         return None
     if not dados.get("achou") or dados.get("valor_contabil") is None:
-        log.info("biblioteca: API do Claude não confirmou um valor de %s para %s", campo, ticker)
+        # loga o JSON inteiro que a API do Claude devolveu - sem isso não dá pra saber SE o motivo
+        # foi "achou: false" (Perplexity não trouxe nada com fonte oficial) ou um valor nulo com
+        # achou:true (inconsistência da própria API).
+        log.info("biblioteca: API do Claude não confirmou um valor de %s para %s - resposta: %s",
+                campo, ticker, dados)
         return None
     # REGRA TRAVADA: sem link ou sem página da fonte oficial, não é dado confiável - nunca salva
     link = (dados.get("link") or "").strip()
     pagina = (dados.get("pagina") or "").strip()
     if not link or not pagina:
-        log.info("biblioteca: %s de %s sem link+página de fonte oficial - não confirmado", campo, ticker)
+        log.info("biblioteca: %s de %s sem link+página de fonte oficial - não confirmado (fonte: %r, trecho: %r)",
+                campo, ticker, dados.get("fonte"), (dados.get("trecho") or "")[:200])
         return None
     # o trecho tem de existir mesmo na resposta da Perplexity - senão pode ter sido inventado
     trecho = (dados.get("trecho") or "").strip()
