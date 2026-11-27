@@ -426,10 +426,24 @@ def obter(ticker: str, campo: str, periodo: str, hoje: dt.date | None = None, *,
 
 # ------------------------------------------------------------ workflow (.github/workflows/biblioteca-perplexity.yml)
 def _periodo_atual(hoje: dt.date) -> str:
-    """"3T26", no mesmo formato do resto do projeto (trimestre civil - aproximação razoável pro
-    PROMPT PADRÃO, que já pede pra Perplexity comparar com o trimestre anterior)."""
-    tri = (hoje.month - 1) // 3 + 1
-    return f"{tri}T{hoje:%y}"
+    """"3T26", no mesmo formato do resto do projeto (trimestre civil). BUG CORRIGIDO (27/11/2026,
+    achado pedindo BBAS3 de verdade pra Perplexity): antes pedia o trimestre CALENDÁRIO em que
+    `hoje` cai (ex.: 27/11/2026 -> "4T26") - mas o 4T26 de uma empresa quase nunca está divulgado
+    nessa data (BBAS3: previsto só pra 10/02/2027), então a Perplexity corretamente respondia "Não
+    divulgado" e a API do Claude corretamente recusava confirmar (não é falha da trava de fonte
+    oficial - a confirmação nem chegava lá, travava antes mesmo, em "achou: false"). Corrigido pra
+    pedir sempre o trimestre ANTERIOR ao calendário de hoje (27/11/2026 -> "3T26") - nunca inventa
+    uma data de divulgação por empresa (não existe calendário de divulgação genérico no projeto):
+    um trimestre só termina quando o calendário vira a página, e mesmo aí a divulgação leva
+    semanas - então o trimestre anterior ao atual é o único que tem alguma chance real de já ter
+    sido divulgado, sem precisar adivinhar a data de cada empresa. Ainda pode vir "Não divulgado"
+    (empresa atrasada) - a Perplexity/API do Claude continuam livres pra dizer isso, nunca inventam."""
+    tri_atual = (hoje.month - 1) // 3 + 1
+    ano = hoje.year
+    tri = tri_atual - 1
+    if tri == 0:   # janeiro-março: o trimestre anterior é o 4º do ano passado
+        tri, ano = 4, ano - 1
+    return f"{tri}T{ano % 100:02d}"
 
 
 def atualizar_tickers(tickers: list[str], campo: str = "lpa_atual", hoje: dt.date | None = None, *,

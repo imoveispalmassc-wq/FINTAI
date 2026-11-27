@@ -173,6 +173,24 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   função `chamar` REAL (não injetada) via `monkeypatch` de `requests.post` - confirmam o payload e
   o parsing da resposta da Agent API sem bater na rede, já que os testes que usam `chamar=`
   injetado não exercitam esse trecho do código.
+  LOG DETALHADO (27/11/2026): `pesquisar_via_perplexity` loga a resposta de verdade (truncada a 800
+  caracteres) e `confirmar_com_claude` loga o JSON completo da decisão quando não confirma (achou,
+  valor_contabil, fonte, link, pagina, trecho) - sem isso, um "não confirmado" só dizia o nome do
+  ticker/campo, sem dar pra saber SE o motivo foi a Perplexity não achar nada, achar sem fonte
+  oficial, ou a trava de link+página barrando à toa.
+  BUG CORRIGIDO - `_periodo_atual` pedia o trimestre ERRADO (27/11/2026, achado testando BBAS3 de
+  verdade pela primeira vez, já com crédito pago liberado na Perplexity): pedia o trimestre
+  CALENDÁRIO em que `hoje` cai (27/11/2026 -> "4T26") - mas o 4T26 do Banco do Brasil só sai em
+  10/02/2027, então a Perplexity corretamente respondia "Não divulgado" pra tudo e a API do Claude
+  corretamente recusava confirmar (`achou: false`) - nem chegava na trava de link+página, travava
+  antes. Corrigido pra sempre pedir o trimestre ANTERIOR ao calendário de hoje (27/11/2026 ->
+  "3T26") - sem inventar uma data de divulgação por empresa (não existe calendário de divulgação
+  genérico no projeto): um trimestre corrente nunca está divulgado assim que o calendário vira a
+  página (a divulgação leva semanas depois do fim do trimestre), então o trimestre ANTERIOR é o
+  único com chance real de já ter sido divulgado. Ainda pode vir "Não divulgado" pra empresas
+  atrasadas - a Perplexity/API do Claude continuam livres pra dizer isso, nunca inventam. Testes
+  travados em `test_periodo_atual_pede_o_trimestre_anterior_ao_calendario_de_hoje` (inclui a virada
+  de ano, jan-mar -> 4º trimestre do ano anterior).
 
 - `utils/divergencia.py` (Issue #48, item 9): quando um robô acha um número diferente do que já
   está salvo, ele mesmo abre uma Issue sozinho (`abrir_issue_divergencia`, API REST do GitHub com

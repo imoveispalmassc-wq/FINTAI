@@ -330,9 +330,15 @@ def test_obter_sem_nada_disponivel_devolve_none_nunca_inventa(tmp_path):
 
 
 # ------------------------------------------------------------ workflow: atualizar_tickers / CLI
-def test_periodo_atual_formata_trimestre_civil():
-    assert bib._periodo_atual(dt.date(2026, 11, 26)) == "4T26"
-    assert bib._periodo_atual(dt.date(2026, 2, 1)) == "1T26"
+def test_periodo_atual_pede_o_trimestre_anterior_ao_calendario_de_hoje():
+    # BUG CORRIGIDO (27/11/2026): pede o ÚLTIMO trimestre com chance real de já ter sido
+    # divulgado, não o trimestre calendário de hoje (esse quase nunca foi divulgado ainda -
+    # achado pedindo BBAS3 de verdade: 27/11/2026 cai no 4T26, mas o 4T26 do Banco do Brasil só
+    # sai em 10/02/2027 - a Perplexity respondia "Não divulgado" pro 4T26).
+    assert bib._periodo_atual(dt.date(2026, 11, 26)) == "3T26"
+    assert bib._periodo_atual(dt.date(2026, 10, 1)) == "3T26"      # início do 4T26 -> ainda pede 3T26
+    assert bib._periodo_atual(dt.date(2026, 2, 1)) == "4T25"       # início do 1T26 -> vira o ano
+    assert bib._periodo_atual(dt.date(2026, 4, 15)) == "1T26"      # início do 2T26 -> pede 1T26
 
 
 def test_atualizar_tickers_processa_cada_ticker_e_registra_resultado(tmp_path):
