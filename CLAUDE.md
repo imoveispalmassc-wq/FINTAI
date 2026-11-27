@@ -1490,6 +1490,77 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   DENTRO do segmento azul "Atual 2,18" -> "Realizado 2,18". Mantido sem mudança: topo "Estimativa
   jan/26: R$ 4,20", vermelho "Perdido -2,02", última barra "2026E Guidance R$ 1,75". A palavra
   "Atual" não aparece mais em nenhum texto do gráfico. Testado ao vivo com BBAS3.
+- **BUG CORRIGIDO (mesmo dia, reportado 2x pelo usuário EM PRODUÇÃO - nunca reproduzido nesta
+  sandbox, mesmo medindo pixel a pixel)**: o usuário insistiu que, na versão publicada
+  (`main@6b229c7`, depois de reboot/refresh forçado - não era cache), a barra "2026 Inicial" (4,20)
+  aparecia MENOR que "2025" (2,40) e a barra de "2026E Guidance" "flutuava" sem encostar na base -
+  só que a mesma medição via `getBoundingClientRect()` nesta sandbox sempre deu as alturas certas
+  (54/48/25/43/18px, todas com a base na mesma linha, diff 0). Em vez de insistir "não reproduzo" e
+  arriscar o usuário continuar vendo errado em produção, a causa raiz mais provável foi tratada como
+  ESTRUTURAL: o alinhamento das 5 barras dependia de 3 níveis de flex encadeados (`.mini-barras` >
+  `.mini-barra` > `.mb-col`, `align-items: flex-end` em cada um) - um comportamento que pode variar
+  entre engines/versões de navegador de um jeito que uma sandbox não reproduz. Reescrito pra não
+  depender de NENHUM flex herdado: `.mb-col` virou só a referência de posição
+  (`position: relative`, altura fixa 58px) e a própria barra (`.mb-cheia`/`.mb-stack`) se fixa no
+  fundo dela com `position: absolute; bottom: 0; left: 50%; transform: translateX(-50%)` - a altura
+  e a posição ficam garantidas por CSS básico (position/bottom), sem herdar alinhamento de nenhum
+  elemento pai. Também corrigida uma imprecisão real (mas pequena, 1px) encontrada nessa revisão: a
+  altura da barra bicolor era a SOMA de 2 alturas arredondadas separadamente (`alturaBarra(d.lpa) +
+  alturaBarra(perdidoInicial)`), podendo ficar 1-2px menor que o esperado pela escala - agora a
+  altura TOTAL (`alturaTotalInicial`) vem direto do valor combinado (`lpaIniBarra`), na MESMA escala
+  das outras 4 barras, e o segmento vermelho fica com o RESTO exato (nunca sobra nem falta pixel
+  entre os 2 segmentos). Texto "Perdido -2,02" (sobre a hachura vermelha, fundo irregular/listrado,
+  mais difícil de ler): as 2 linhas (`.mb-seg-l1`/`.mb-seg-l2`) ganharam um fundo escuro translúcido
+  por trás (`.mb-seg-label`, `rgba(10,14,26,.6)`) - garante contraste em qualquer variação de brilho/
+  zoom/tela, em vez de depender só do branco sobre a textura. Testado ao vivo com BBAS3: as 5 barras
+  (54/48/25/43/18px) encostam exatamente na mesma base (diff 0 medido via `getBoundingClientRect`).
+- **GRÁFICO DE LPA: DE "BARRA DESENHADA NA MÃO" PRA WIDGET NATIVO DO STREAMLIT (27/11/2026,
+  `components/lpa_chart.py`) - SUBSTITUI a tentativa anterior com `utils/chart_rules.py`**: a
+  primeira tentativa de resolver o bug de altura/alinhamento reportado em produção (nunca
+  reproduzido nesta sandbox, mesmo medindo pixel a pixel) foi criar `utils/chart_rules.py` - uma
+  função Python só, testada, que calculava e validava a altura em pixel de cada barra, com o
+  HTML/CSS ainda desenhado na mão em `tela/detalhe.js`/`.css` (div com `height` em px, fundo em
+  camadas pra simular a barra dividida). Essa 1ª tentativa foi TESTADA NESTA SANDBOX com sucesso
+  (pixel medido via `getBoundingClientRect`, proporção batendo) - mas o usuário, vendo um novo print
+  em produção, reportou que a barra "2026 Inicial" continuava minúscula (não proporcional ao valor)
+  e a de guidance virou "um quadradinho hachurado", além de um bug novo de sobreposição visual no
+  cabeçalho. Em vez de insistir numa 3ª rodada de ajuste fino de CSS/pixel (que já tinha falhado 2x
+  em produção mesmo com a conta certa em Python), o usuário decidiu que o problema de fundo é a
+  técnica em si - desenhar barra com `<div>`/CSS é frágil demais (sensível a diferença de engine/
+  versão de navegador entre esta sandbox e produção, como já documentado no bug anterior) - e pediu
+  pra apagar 100% desse componente (`utils/chart_rules.py` e `tests/test_chart_rules.py` DELETADOS,
+  não reaproveitados) e usar um gráfico NATIVO do Streamlit, que já resolve proporção/escala
+  sozinho, sem nenhuma conta de pixel no código do projeto.
+  `components/lpa_chart.py` (`render_lpa_chart(dados)`) é agora o ÚNICO componente de gráfico de LPA
+  do projeto inteiro - PROIBIDO qualquer tela ter seu próprio código de barra (`<div>`/CSS, altura em
+  pixel, hachura representando valor, ou empilhar 2 barras pra simular uma divisão). Contrato de
+  entrada fixo: `list[dict]` com `{"ano": str, "valor": float, "detalhe": str opcional}` - monta um
+  `pd.DataFrame` e chama `st.bar_chart(df.set_index("ano"), height=220)`; `detalhe` (quando presente)
+  vira uma legenda de texto (`st.caption`) logo abaixo do gráfico, pra explicar um ponto sem
+  desenhar nada em cima da barra (ex. a barra "2026 Inicial" ganha o caption "Estimativa do início
+  do ano: R$ 4,20 = Realizado R$ 2,18 + Perdido R$ 2,02" - a mesma informação de antes, só que como
+  texto, não como 2 segmentos coloridos empilhados).
+  **LIMITAÇÃO ARQUITETURAL REAL, aceita conscientemente pelo usuário**: a tela inteira de um ticker
+  (cabeçalho, barra fixa, todos os cards de todos os modos) é UM componente customizado só
+  (`st.components.v2.component`, `tela_detalhe(...)`, `app.py`) - um widget nativo do Streamlit como
+  `st.bar_chart` NÃO pode ficar embutido no meio do HTML/JS gerado por esse componente. Por isso o
+  gráfico "Lucro por ação - Evolução" saiu de dentro do card escuro "Lucro por ação" (que agora
+  mostra só o selo de guidance, o resumo e a nota - sem nenhuma barra) e virou um bloco PRÓPRIO,
+  nativo do Streamlit (fundo claro/estilo padrão do Streamlit, não o tema escuro do resto da tela),
+  renderizado em `app.py` (`painel()`) logo DEPOIS de toda a tela do ticker (`tela_detalhe(...)`),
+  nunca entre 2 cards específicos. Decisão explícita do usuário, perguntada antes de implementar
+  (`AskUserQuestion`): dividir o componente único em 2 partes pra encaixar o gráfico exatamente onde
+  a barra ficava antes foi DESCARTADO por risco - a barra fixa do topo e o scroll (ambos corrigidos
+  3x nesta mesma sessão, ver bugs acima) dependem de ser tudo 1 componente só, e dividir arriscaria
+  quebrar os dois de novo. Prioridade explícita: gráfico com proporção certa + tela sem quebrar,
+  beleza/posição exata vem depois se for pedido.
+  `app.py` (`_pontos_lpa_grafico`, chamada em `painel()`) monta os pontos a partir do MESMO `dados`
+  que já alimenta `tela_detalhe` (nenhum cálculo novo: `lpaAnos`, `lpa` TTM, `guidanceInicial.lpa`,
+  `guidance.periodo`, `lynch.futuro.lpaEsteAno`) - a mesma regra de quais anos/guidance entram que o
+  texto do card já usava. Testado ao vivo com BBAS3 (Playwright): nenhum elemento do gráfico antigo
+  (`.mb-*`) restou na página; o gráfico nativo aparece como a última seção da tela, com as 5 barras
+  (2023/2024/2025/2026 Inicial/2026E Guidance) proporcionais de verdade (Streamlit/Vega-Lite calcula
+  a escala, não o projeto) e o caption da barra "2026 Inicial" explicando Realizado + Perdido.
 
 ## Textos
 

@@ -566,6 +566,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str, 
                 "acoesFonte": g["acoesFonte"], "lucroTipo": g["lucroTipo"], "porLpa": g.get("porLpa", False),
                 "periodo": g.get("periodo", ""), "dividendoFonte": g.get("dividendoFonte", ""),
                 "bases": g.get("bases", [])}
+    guidance_inicial = _inicial(curto, guia, lpa_anos, r, f["acoes"])
 
     after = None
     if info.get("postMarketPrice") and info.get("postMarketChangePercent") is not None:
@@ -602,7 +603,7 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str, 
         "conservadorFaixa": conservador_faixa,
         "lynch": lynch,
         "guidance": guia, "consensoAno": consenso_ano,
-        "guidanceInicial": _inicial(curto, guia, lpa_anos, r, f["acoes"]),
+        "guidanceInicial": guidance_inicial,
         "simons": modo_simons(hist, r, faixa),
         "pl": _n(f["pl"], 4), "plMedio12": _n(f["pl_medio"], 4), "precoMedio12": _n(f["preco_medio"], 4), "mediaDesde": f["media_desde"], "mediaMeses": f["media_meses"], "plMetodo": f["metodo"],
         "lpa": _n(f["lpa"], 4), "lpaAgora": _n(f["lpa_agora"], 4), "lpa12Atras": _n(f["lpa_antes"], 4),

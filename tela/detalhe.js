@@ -1164,9 +1164,9 @@ function montar(root, d) {
       const divG = G && tem(G.dividendo) ? (G.dividendoFonte === 'empresa' ? ` Dividendo anual divulgado pela empresa: ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`
         : ` Dividendo projetado: ${din(G.lpa)} × payout ${f(G.payout * 100, 0)}% = ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`) : '';
       // TTM contábil (número real, já parcialmente ou totalmente dentro do ano de guidance) e o
-      // guidance/consenso em si (projeção) nunca se misturam - cada um é sua própria barra no
-      // gráfico (ver graficoLpa abaixo); a lista de texto equivalente foi removida (follow-up
-      // 27/11/2026, a pedido do usuário - os valores já aparecem escritos em cima de cada barra).
+      // guidance/consenso em si (projeção) nunca se misturam - cada um é seu próprio ponto no
+      // gráfico nativo "Lucro por ação - Evolução" (components/lpa_chart.py, chamado de app.py,
+      // fora deste componente - ver nota mais abaixo onde o gráfico desenhado na mão foi removido).
       const temTTM = anoProj && tem(d.lpa);
       // ITEM 3 (27/11/2026): guidance encurtado pra 2-3 linhas visíveis - só o selo + resumoGuidance;
       // sem botão "Ver metodologia" nem conta em linha própria (removidos num follow-up, a pedido do
@@ -1189,33 +1189,16 @@ function montar(root, d) {
       // cima (vermelha/hachurada, "Perdido") é a diferença entre a estimativa inicial e o TTM - os
       // 2 somados batem com a estimativa inicial (nenhum número novo, só subtração dos mesmos 2
       // valores que já apareciam em outro lugar da tela).
-      const GIb = d.guidanceInicial || {};
-      const lpaIniBarra = tem(GIb.lpa) ? GIb.lpa : null;
-      const temBarraInicial = temTTM && tem(lpaIniBarra) && lpaIniBarra > d.lpa;
-      const perdidoInicial = temBarraInicial ? lpaIniBarra - d.lpa : null;
-      const barrasAnos = anos.map(a => ({ v: a.lpa, rot: a.ano }));
-      const barraGuidancePonto = anoProj ? { v: proj, rot: `${anoProj}E ${G ? 'Guidance' : 'Projeção'}`, proj: true } : null;
-      const maxBarras = Math.max(
-        ...barrasAnos.map(p => Math.abs(p.v)).filter(tem),
-        barraGuidancePonto && tem(barraGuidancePonto.v) ? Math.abs(barraGuidancePonto.v) : 0,
-        temBarraInicial ? lpaIniBarra : 0, 1e-9);
-      const alturaBarra = v => Math.max(4, Math.round(Math.abs(v) / maxBarras * 54));
-      const barraSimples = p => {
-        const vazio = !tem(p.v);
-        const h = vazio ? 0 : alturaBarra(p.v);
-        return `<div class="mini-barra"><span class="mb-val">${vazio ? '—' : din(p.v)}</span>
-          <div class="mb-col"><div class="mb-cheia${p.proj ? ' proj' : ''}${!vazio && p.v < 0 ? ' neg' : ''}" style="height:${h}px"></div></div>
-          <span class="mb-rot">${p.rot}</span></div>`;
-      };
-      const barrasAnosHtml = barrasAnos.map(barraSimples).join('');
-      const barraInicial = temBarraInicial ? `<div class="mini-barra mini-barra-larga"><span class="mb-val">Estimativa jan/${String(anoProj).slice(-2)}: ${din(lpaIniBarra)}</span>
-        <div class="mb-col"><div class="mb-stack" style="height:${alturaBarra(d.lpa) + alturaBarra(perdidoInicial)}px">
-          <div class="mb-seg mb-seg-perdido" style="height:${alturaBarra(perdidoInicial)}px" title="Perdido: ${din(perdidoInicial)}"><span class="mb-seg-l1">Perdido</span><span class="mb-seg-l2">-${f(perdidoInicial)}</span></div>
-          <div class="mb-seg mb-seg-real" style="height:${alturaBarra(d.lpa)}px" title="Realizado: ${din(d.lpa)}"><span class="mb-seg-l1">Realizado</span><span class="mb-seg-l2">${f(d.lpa)}</span></div>
-        </div></div>
-        <span class="mb-rot">${anoProj} Inicial</span></div>` : '';
-      const barraGuidanceHtml = barraGuidancePonto ? barraSimples(barraGuidancePonto) : '';
-      const graficoLpa = `<div class="mini-barras">${barrasAnosHtml}${barraInicial}${barraGuidanceHtml}</div>`;
+      // GRÁFICO DE LPA REMOVIDO DAQUI (27/11/2026): o gráfico de barras desenhado na mão (div/CSS,
+      // altura calculada por tela) nunca ficou de verdade proporcional/confiável, mesmo depois de
+      // várias rodadas de correção - o usuário pediu pra apagar 100% desse componente e usar um
+      // gráfico NATIVO do Streamlit (`st.bar_chart`, sem nenhuma conta de pixel no código do
+      // projeto). Um widget nativo do Streamlit não pode ficar embutido no meio do HTML gerado por
+      // este componente custom - por isso o gráfico "Lucro por ação - Evolução" agora é renderizado
+      // à parte, em Python (`components/lpa_chart.py`, chamado de `app.py` logo depois de
+      // `tela_detalhe(...)`), como um bloco separado, depois de toda a tela do ticker. Este card
+      // continua mostrando só o TEXTO (selo de guidance, resumo, destaque da média, nota) - nunca
+      // mais uma barra desenhada aqui.
       // médias mais longas (mesma fonte anual do Yahoo; "Sem dado" quando ele não tem os anos pedidos)
       // e, só no Conservador, o P/L e o preço teto sobre a média de 10 anos - regra: nunca mostra
       // "Sem dado" repetido (4 linhas vazias confundem); SÓ mostra a linha se tiver valor, e quando
@@ -1243,7 +1226,6 @@ function montar(root, d) {
           <span class="selo ok">GUIDANCE OFICIAL · ${G.data}</span>
           ${resumoGuidance.length ? `<div class="nota num" style="margin-top:6px">${resumoGuidance.join('<br>')}</div>` : ''}
           </div>` : ''}
-          ${graficoLpa}
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
           ${linhasLongas ? `<div class="lista-v num" style="margin-top:10px">${linhasLongas}</div>` : ''}
           <div class="nota" id="g-nota"></div>${!G ? `<div class="nota" id="g-nota-proj" style="margin-top:4px"></div>` : ''}</div>${outlookHtml}`;

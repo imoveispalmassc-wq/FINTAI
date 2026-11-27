@@ -20,6 +20,7 @@ import streamlit as st
 import yfinance as yf
 
 import calculos
+import components.lpa_chart
 import tela.dados
 import utils.benchmarks
 import utils.dados_fixos
@@ -39,7 +40,7 @@ import utils.simons
 # dados_fixos recarregado ia importar de uma versão antiga do módulo ainda em memória -
 # ImportError pra qualquer nome novo adicionado lá depois do último reload (issue #33).
 for _modulo in (utils.formato, utils.percentile, utils.signals, utils.benchmarks, utils.lynch, utils.override,
-                utils.simons, utils.fetch_guidance, utils.dados_fixos, calculos, tela.dados):
+                utils.simons, utils.fetch_guidance, utils.dados_fixos, components.lpa_chart, calculos, tela.dados):
     importlib.reload(_modulo)
 
 from calculos import calcular, normalizar_ticker, retorno_periodo
@@ -547,6 +548,33 @@ def barra_de_acoes(ticker: str):
                 st.caption(f"Copie o endereço desta página e acrescente ?t={curto(ticker)} ao final.")
 
 
+def _pontos_lpa_grafico(dados: dict) -> list[dict]:
+    """Pontos pro gráfico nativo "Lucro por ação - Evolução" (components/lpa_chart.py) - mesmos
+    anos/guidance que o card de texto "Lucro por ação" (dentro de `tela_detalhe`) já mostra, sem
+    recalcular nada: só lê o que `tela.dados.montar()` já colocou em `dados`. Vale pra qualquer
+    ticker, B3 ou EUA - nenhuma lógica específica de um ativo aqui."""
+    moeda = dados.get("moeda") or ""
+    lpa_anos = dados.get("lpaAnos") or []
+    pontos = [{"ano": str(a["ano"]), "valor": a["lpa"]} for a in lpa_anos if a.get("lpa") is not None]
+
+    guia = dados.get("guidance")
+    ano_proj = (guia or {}).get("periodo") or (str(int(lpa_anos[-1]["ano"]) + 1) if lpa_anos else None)
+    lpa_ttm = dados.get("lpa")
+    lpa_ini = (dados.get("guidanceInicial") or {}).get("lpa")
+    if ano_proj and lpa_ttm is not None and lpa_ini is not None and lpa_ini > lpa_ttm:
+        perdido = lpa_ini - lpa_ttm
+        pontos.append({"ano": f"{ano_proj} Inicial", "valor": lpa_ini,
+                       "detalhe": f"Estimativa do início do ano: {moeda} {utils.formato.num(lpa_ini)} "
+                                  f"= Realizado {moeda} {utils.formato.num(lpa_ttm)} + "
+                                  f"Perdido {moeda} {utils.formato.num(perdido)}"})
+
+    proj = ((dados.get("lynch") or {}).get("futuro") or {}).get("lpaEsteAno")
+    if ano_proj and proj is not None:
+        pontos.append({"ano": f"{ano_proj}E {'Guidance' if guia else 'Projeção'}", "valor": proj})
+
+    return pontos
+
+
 # ------------------------------------------------------------ telas
 @st.fragment(run_every=60)   # atualiza a cotação sozinho a cada 60s, sem recarregar a página (mantém a rolagem)
 def painel(ticker: str):
@@ -557,6 +585,16 @@ def painel(ticker: str):
     if aviso:
         dados = {**dados, "avisoGuidanceAnual": aviso}
     tela_detalhe(data={"dados": dados}, key=f"tela_{ticker}")
+    # Componente único de gráfico de LPA (components/lpa_chart.py, st.bar_chart nativo) - não pode
+    # ficar embutido no HTML/JS de `tela_detalhe` (um componente custom não hospeda um widget
+    # nativo do Streamlit no meio dele), então fica como bloco próprio, depois de toda a tela do
+    # ticker (decisão do usuário, 27/11/2026: prioridade é o gráfico certo e a tela não quebrar -
+    # dividir `tela_detalhe` em 2 partes pra encaixar o gráfico no meio arriscaria quebrar a barra
+    # fixa do topo e o scroll, ambos já corrigidos 3x nesta mesma sessão).
+    pontos_lpa = _pontos_lpa_grafico(dados)
+    if pontos_lpa:
+        st.subheader("Lucro por ação - Evolução")
+        components.lpa_chart.render_lpa_chart(pontos_lpa)
 
 
 def resumo(tickers: list[str]):
