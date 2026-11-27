@@ -193,7 +193,7 @@ def test_lynch_csmg3_oportunidade_pela_mm200():
     p = preco_lynch(54.67, 56.94)
     assert p["codigo"] == "COMPRAR" and p["zona"] == "Faixa inferior" and p["dist"] == -3.99
     assert [round(p[k], 2) for k in ("bemAbaixoAte", "oportunidadeAte", "caroAcima")] == [51.25, 59.79, 65.48]
-    assert p["texto"] == "Ponto de oportunidade em R$ 59,79"
+    assert p["texto"] == "Faixa inferior até R$ 59,79"
 
 
 @pytest.mark.parametrize("preco,codigo,zona", [(85, "COMPRAR", "Bem abaixo da MM200"), (90, "COMPRAR", "Faixa inferior"),

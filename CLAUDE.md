@@ -193,12 +193,29 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   mínima + 70%. Validação: mínima 192,59 e máxima 1.255,00 dão 511,31 e 936,28.
 - A faixa acompanha o período do gráfico: Hoje/1S/1M/1A usam 52 semanas; 5A usa 260 semanas;
   Máx. usa todo o histórico. Mesma regra de 30%/70%. Só a faixa de 52 semanas tem teste histórico;
-  nas outras não tem. O card de decisão (badge COMPRAR/AGUARDAR/CARO) não mostra mais selo nem
-  alerta embaixo da zona (ex. "SEM TESTE", "VALIDADO", avisos de MM200/Lynch) - só rótulo, preço,
-  badge, "Ponto de oportunidade" e a zona. Esses resultados de teste (quando existem, ex. SIMONS)
-  continuam na seção própria de cada modo, mais abaixo na tela.
-- Decisão: COMPRAR - Oportunidade / AGUARDAR - Neutro / CARO - Evitar, sempre com
-  "Ponto de oportunidade em [valor]".
+  nas outras não tem. O card de decisão não mostra mais selo nem alerta embaixo da zona (ex. "SEM
+  TESTE", "VALIDADO", avisos de MM200/Lynch) - só rótulo, preço, badge e o texto com o limite da
+  faixa inferior. Esses resultados de teste (quando existem, ex. SIMONS) continuam na seção própria
+  de cada modo, mais abaixo na tela.
+- Decisão (REGRA TRAVADA, 27/11/2026 - antes dizia "COMPRAR - Oportunidade" / "AGUARDAR - Neutro" /
+  "CARO - Evitar"; mudado depois que o usuário apontou que o app não pode dizer "AGUARDAR" nem usar
+  a palavra "oportunidade" pro usuário - app de análise não pode soar como recomendação de compra/
+  venda/espera): o badge (`rotulo`, em `utils/signals.py` e `utils/lynch.py`) mostra só o nome
+  neutro da zona - "Faixa inferior" / "Neutro" / "Faixa superior" (ou "Bem abaixo da MM200" no Lynch,
+  quando for o caso) - nunca palavra de julgamento ("Oportunidade"/"Evitar") nem verbo de
+  recomendação ("AGUARDAR"/"COMPRAR"/"CARO" como texto). `codigo` (COMPRAR/AGUARDAR/CARO) continua
+  existindo só internamente, pra decidir a COR do badge (verde/âmbar/cinza) e a classe CSS - nunca
+  é mostrado como texto na tela. A frase que antes era "Ponto de oportunidade em [valor]" virou
+  "Faixa inferior até [valor]" (mesmo valor de sempre: o limite de 30% sobre a faixa/âncora - só a
+  palavra mudou, nenhuma conta mudou). A pequena pílula que repetia a mesma zona embaixo do badge
+  (ex. "Zona neutra") foi removida por ficar redundante com o próprio badge, que agora já diz a
+  zona. Aplicado nos 3 modos (`utils.signals.decidir_estado`/`decidir_estado_conservador`,
+  `utils.lynch.preco_lynch`, e o badge do SIMONS em `tela/detalhe.js`/`renderDecisao()`, que usa o
+  mesmo componente visual). NÃO aplicado (fica pra outra issue, se pedido): o vocabulário interno
+  do próprio modo SIMONS mais abaixo na tela (`utils/simons.py`, a classificação OPORTUNIDADE/
+  NEUTRO/CARO e a entrada escalonada "AGUARDAR"/"NÃO COMPRA"/"OBSERVA" de `timing()`) - é uma
+  metodologia própria, já documentada como escopo à parte na Issue #47 item 10, e só o badge
+  compartilhado do topo (que usa o mesmo componente dos outros 2 modos) foi corrigido aqui.
 - Regra de prejuízo (Graham e Lynch): LPA dos últimos 3 anos; 1 ano negativo sai da média
   ("Ano de prejuízo excluído"); 2 ou mais, não calcula ("Sem cálculo - Empresa com prejuízo recorrente").
 - Graham em duas versões: atual = √(22,5 × LPA 12 meses × VPA); média = √(22,5 × LPA médio 3 anos × VPA),
@@ -387,7 +404,7 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Cartões em barras visuais: classificação na faixa de 52 semanas com a MM200 marcada; dias de 0 a 10+ com as
   partes da entrada; histórico em vezes que subiu/caiu (sem % solto; contorno azul = hoje; ★ MELHOR só com 30+ casos, 8+ pontos
   acima da média geral e 5+ acima da segunda melhor; senão "Nenhum padrão forte - todos entre X% e Y%"); régua fixa de 1 a 5+.
-- CONSERVADOR: a "Faixa de preço" (zona de oportunidade/neutra/cara e o badge COMPRAR/AGUARDAR/CARO do topo) usa
+- CONSERVADOR: a "Faixa de preço" (faixa inferior/neutra/superior e o badge de decisão do topo) usa
   valuation, não a faixa histórica de 52 semanas. Preço Teto = ÂNCORA = preço médio dos últimos 1 ano (fechamento
   semanal, igual à `media_fechamentos` de 52 semanas). Oportunidade até 0,70 × Teto (margem de segurança de 30%);
   Neutra alargada até 1,30 × Teto (30% ACIMA do teto - não vira "Cara" só por passar um pouco da âncora); Cara
@@ -426,8 +443,8 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   senão a bolinha ficaria "presa" perto do traço errado sempre que o preço real estiver perto de um ponto que
   foi empurrado pro afastar() (ex. preço de R$14,30 bem perto do limite de 3 anos de R$14,65 apareceria colado
   no traço do limite de 5 anos, bem mais longe). Sem texto explicativo embaixo
-  da régua (só os cartões Zona de oportunidade/neutra/cara acima já explicam os cortes). O
-  PONTO DE ENTRADA (o texto "Ponto de oportunidade em") é sempre o alvo fixo de 30% sobre a âncora de 1 ano -
+  da régua (só os cartões Faixa inferior/neutra/superior acima já explicam os cortes). O
+  PONTO DE ENTRADA (o texto "Faixa inferior até") é sempre o alvo fixo de 30% sobre a âncora de 1 ano -
   não escala para os limites de 3/5 anos, que são só
   referência, nunca o ponto de entrada em si. O gráfico pontilhado do modo Conservador repete as mesmas 3 faixas
   de verde da barra, rotuladas Oportunidade 1 (o próprio ponto de entrada), Oportunidade 2 (limite de 3 anos) e
@@ -724,13 +741,19 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   "Faixa neutra até" / "Média 200d" / "Faixa inferior 1" / "Faixa inferior 2" / "Faixa inferior 3"
   (1 = mais perto do neutro, 3 = mais embaixo - mesma ordem de antes, só o nome mudou); legenda do
   gráfico (abaixo dele): "Inferior" / "Neutra" / "Superior" / "Média 200d" / "Bem abaixo" (Lynch).
-  DECISÃO SOBRE ESCOPO: o rótulo do badge de decisão no topo ("COMPRAR - Oportunidade" / "AGUARDAR
-  - Neutro" / "CARO - Evitar") NÃO mudou - é um conceito diferente (o veredito, travado desde antes
-  deste issue na regra "Decisão" deste arquivo), não o nome da zona de preço. O modo SIMONS também
-  não mudou (continua usando OPORTUNIDADE/NEUTRO/CARO como nome interno da sua própria
+  DECISÃO SOBRE ESCOPO (ORIGINAL, 26/11/2026 - REVERTIDA DEPOIS, ver regra "Decisão" no topo deste
+  arquivo): o rótulo do badge de decisão no topo ("COMPRAR - Oportunidade" / "AGUARDAR - Neutro" /
+  "CARO - Evitar") NÃO mudou nesta issue - foi tratado como um conceito diferente (o veredito, não o
+  nome da zona de preço). Revertido em 27/11/2026: o usuário apontou que o app não pode dizer
+  "AGUARDAR" nem a palavra "oportunidade" pro usuário (soa como recomendação de compra/venda/espera,
+  não só posição de preço) - o badge passou a usar as mesmas 3 zonas sem julgamento deste item
+  ("Faixa inferior" / "Neutro" / "Faixa superior"), ver a regra "Decisão" no topo deste arquivo para
+  os detalhes. O modo SIMONS CONTINUA fora de escopo (nem nesta issue, nem na correção de
+  27/11/2026) - continua usando OPORTUNIDADE/NEUTRO/CARO como nome interno da sua própria
   classificação por MM200 - é uma metodologia própria, documentada à parte neste arquivo, e
-  renomeá-la arriscava quebrar a lógica de entrada escalonada sem ganho claro); se for pedido depois,
-  entra como item separado.
+  renomeá-la arriscava quebrar a lógica de entrada escalonada sem ganho claro; só o badge
+  COMPARTILHADO do topo (mesmo componente visual dos outros 2 modos) foi corrigido lá. Se pedido
+  depois, o vocabulário interno do próprio SIMONS entra como item separado.
 - **Item 11 - Selo de Fundamentos** (fato, nunca recomendação; fica logo abaixo de "Faixa inferior"):
   `utils.signals.avaliar_fundamentos()` implementa a regra travada dos 3 fundamentos - (1) LPA
   CONTÁBIL (nunca ajustado) caindo vs. mesmo trimestre do ano anterior; (2) ROE caindo vs. 12 meses

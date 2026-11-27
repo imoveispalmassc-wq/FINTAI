@@ -179,27 +179,32 @@ function montar(root, d) {
 
   function renderDecisao() {
     const el = $('decisao');
-    let rotulo, classe = '', texto, pilula = '', extra = '';
+    // O badge e o texto desta função nunca usam palavra de julgamento ("Oportunidade"/"Evitar")
+    // nem verbo de recomendação ("AGUARDAR") - só o nome neutro da zona (Faixa inferior/Neutro/
+    // Faixa superior), igual ao resto da tela desde a Issue #47, item 10. `classe` (COMPRAR/CARO,
+    // usada só pra cor do badge) continua interna, nunca mostrada como texto. A pequena pílula que
+    // repetia a mesma zona embaixo do badge foi removida por ficar redundante com o próprio rótulo.
+    let rotulo, classe = '', texto, extra = '';
     if (modo === 'graham') {
       const C = d.conservadorFaixa;
       if (C) {
         // Faixa de preço por valuation (âncora = preço médio de 1 ano), não a faixa histórica
         // de 52 semanas: nunca tem teste histórico, por isso sempre "SEM TESTE".
-        const e = C.decisao; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
+        const e = C.decisao; rotulo = e.rotulo; texto = e.texto;
         classe = e.codigo === 'COMPRAR' ? 'COMPRAR' : e.codigo === 'CARO' ? 'CARO' : '';
       } else {
-        const e = fx.decisao; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
+        const e = fx.decisao; rotulo = e.rotulo; texto = e.texto;
         classe = e.codigo === 'COMPRAR' ? (e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
       }
     } else if (modo === 'lynch') {
-      // Lynch só pela MM200 (ignora a faixa 30/70): oportunidade de -10% a +5%, neutro até +15%, caro acima
-      const LP = d.lynch.preco, e = LP || fx.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto; pilula = e.zona;
+      // Lynch só pela MM200 (ignora a faixa 30/70): faixa inferior de -10% a +5%, neutro até +15%, faixa superior acima
+      const LP = d.lynch.preco, e = LP || fx.decisao, v = d.lynch.veredito; rotulo = e.rotulo; texto = e.texto;
       classe = e.codigo === 'COMPRAR' ? (LP || e.validado ? 'COMPRAR' : '') : e.codigo === 'CARO' ? 'CARO' : '';
-      const zona = LP && LP.zona === 'Bem abaixo da MM200' ? 'faixa Bem abaixo da MM200' : { COMPRAR: 'Faixa inferior', AGUARDAR: 'Zona Neutra', CARO: 'Faixa superior' }[e.codigo];
+      const zona = LP && LP.zona === 'Bem abaixo da MM200' ? 'faixa Bem abaixo da MM200' : { COMPRAR: 'Faixa inferior', AGUARDAR: 'Zona neutra', CARO: 'Faixa superior' }[e.codigo];
       const conclusao = v.cor === 'verde'
-        ? (e.codigo === 'COMPRAR' ? 'Crescimento aprovado e o preço está na Zona de Oportunidade.'
-          : `Crescimento aprovado, mas o preço está na ${zona}. Por isso: AGUARDAR.`)
-        : v.cor === 'amarelo' ? `Fica de olho no crescimento, e o preço está na ${zona}.${e.codigo === 'COMPRAR' ? '' : ' Por isso: AGUARDAR.'}`
+        ? (e.codigo === 'COMPRAR' ? 'Crescimento aprovado e o preço está na Faixa inferior.'
+          : `Crescimento aprovado, mas o preço está na ${zona}.`)
+        : v.cor === 'amarelo' ? `Fica de olho no crescimento, e o preço está na ${zona}.`
         : v.cor === 'vermelho' ? `Não compra pelo crescimento, qualquer que seja o preço. O preço está na ${zona}.`
         : `Sem PEG para avaliar o crescimento. O preço está na ${zona}.`;
       const stV = { verde: 'bom', vermelho: 'ruim' }[v.cor] || 'neutro';
@@ -208,13 +213,13 @@ function montar(root, d) {
         <div class="destaque">${conclusao}</div></div>`;
     } else {
       const sm = d.simons, hA = sm.histAtual;
-      const R = { OPORTUNIDADE: ['COMPRAR - Oportunidade', 'COMPRAR'], NEUTRO: ['AGUARDAR - Neutro', 'AGUARDAR'], CARO: ['CARO - Evitar', 'CARO'] }[sm.classe] || [sm.acao, ''];
+      const R = { OPORTUNIDADE: ['Faixa inferior', 'COMPRAR'], NEUTRO: ['Neutro', 'AGUARDAR'], CARO: ['Faixa superior', 'CARO'] }[sm.classe] || [sm.acao, ''];
       rotulo = R[0]; classe = R[1];
       const mmTxt = tem(sm.mm200) ? `Média 200d ${din(sm.mm200)}: preço ${sinal(sm.distMM200, 1)} ${sm.distMM200 < 0 ? 'abaixo' : 'acima'}${sm.mm200Caindo ? ', média caindo' : ''}.` : 'Sem média de 200 dias (histórico curto).';
       const diasTxt = sm.dias ? `${sm.dias} ${sm.dias === 1 ? 'dia' : 'dias'} de queda desde o topo${sm.altas ? ` (${sm.altas} ${sm.altas === 1 ? 'alta' : 'altas'} no meio)` : ''}, ${sinal(sm.queda)}` : 'sem queda no último pregão';
-      texto = `1. ${mmTxt} 2. ${sm.classe === 'OPORTUNIDADE' ? 'Oportunidade' : sm.classe === 'CARO' ? 'Caro' : 'Neutro'} (faixa de 52 semanas: ${(sm.zona52 || '').toLowerCase()}). 3. ${diasTxt}: ${sm.entrada}. ${sm.entradaDetalhe}.`
+      texto = `1. ${mmTxt} 2. ${sm.classe === 'OPORTUNIDADE' ? 'Faixa inferior' : sm.classe === 'CARO' ? 'Faixa superior' : 'Neutro'} (faixa de 52 semanas: ${(sm.zona52 || '').toLowerCase()}). 3. ${diasTxt}: ${sm.entrada}. ${sm.entradaDetalhe}.`
         + (hA && hA.vezes && sm.classe === 'OPORTUNIDADE' ? ` Histórico da ação: subiu no dia seguinte em ${f(hA.pct, 0)}% de ${hA.vezes} ${hA.vezes === 1 ? 'vez' : 'vezes'}${hA.vezes < 20 ? ' (poucos casos)' : ''}.` : '')
-        + ` Ponto de oportunidade em ${din(sm.oportunidadeAte)}.`;
+        + ` Faixa inferior até ${din(sm.oportunidadeAte)}.`;
     }
     const nome = document.createElement('div'); nome.className = 'razao'; nome.textContent = `${d.razao} · ${d.ticker}`;
     el.innerHTML = `<div class="decisao">
@@ -224,7 +229,6 @@ function montar(root, d) {
       ${d.after ? `<div class="after num" style="color:${cor(d.after.variacao)}">After Market: ${din(d.after.preco)} ${seta(d.after.variacao)} ${sinal(d.after.variacao)}${d.after.hora ? ` | ${d.after.hora}` : ''}</div>` : ''}
       <div><span class="badge ${classe}" id="d-rotulo"></span></div>
       <div class="ponto" id="d-texto"></div>
-      ${pilula ? `<span class="pilula">${pilula}</span>` : ''}
       ${extra}
     </div>`;
     el.firstElementChild.insertBefore(nome, el.firstElementChild.children[1]);
