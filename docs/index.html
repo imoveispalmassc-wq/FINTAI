@@ -369,6 +369,7 @@ body { margin: 0; background: var(--bg); font-family: var(--corpo); }
 <body>
 <div style="padding:0 16px"><div class="proto">Dados de exemplo · MU em 13/11/2026 · não são cotações reais</div></div>
 <div class="app">
+  <div id="t-sentinela-topo" style="height:1px"></div>
   <header class="topo">
     <div class="meio">
       <div class="nome" id="t-nome"></div>
@@ -533,41 +534,51 @@ function montar(root, d) {
   $('t-preco').textContent = f(d.preco);
   $('t-preco').style.color = tem(d.varDia) ? cor(d.varDia) : '';
   $('t-ticker').textContent = d.ticker;
-  const topoEl = document.querySelector('.topo');
-  if (topoEl) {
-    // BUG CORRIGIDO (27/11/2026): esta tela roda dentro de um iframe do componente do Streamlit
-    // (st.components.v2.component), que cresce pra caber todo o conteúdo em vez de ter scroll
-    // próprio - quem rola é a janela do Streamlit (window.parent), não este iframe. "position:
-    // sticky" sozinho não funciona nesse caso: ele gruda só dentro do próprio contexto de rolagem
-    // do iframe, que nunca rola de verdade (o iframe inteiro é que sobe junto com a página),
-    // então o topo "sumia" ao rolar em vez de ficar fixo. Quando dá pra acessar window.parent
-    // (mesma origem - é o caso normal do componente do Streamlit), calcula a posição real do
-    // próprio iframe na janela pai (getBoundingClientRect) e, quando ela já passou do topo da
-    // tela, troca pra position:fixed com o deslocamento exato pra compensar - fica
-    // visualmente preso no topo de verdade. Sem acesso a window.parent (origem cruzada, caso raro),
-    // cai pro sticky simples de antes, best-effort.
-    let painel = window, framed = false;
-    try { if (window.parent && window.parent !== window && window.frameElement) { painel = window.parent; framed = true; } }
-    catch (e) { /* origem cruzada: sem acesso a window.parent */ }
-    if (framed) {
-      const atualizar = () => {
-        const rect = window.frameElement.getBoundingClientRect();
-        const preso = rect.top < 0;
-        topoEl.classList.toggle('rolou', preso);
-        topoEl.style.position = preso ? 'fixed' : 'sticky';
-        topoEl.style.left = preso ? '0' : '';
-        topoEl.style.right = preso ? '0' : '';
-        topoEl.style.top = preso ? `${-rect.top}px` : '0';
-      };
-      atualizar();
-      painel.addEventListener('scroll', atualizar, { passive: true });
-      limpar.push(() => painel.removeEventListener('scroll', atualizar));
-    } else {
-      const sombra = () => topoEl.classList.toggle('rolou', window.scrollY > 4);
-      sombra();
-      window.addEventListener('scroll', sombra, { passive: true });
-      limpar.push(() => window.removeEventListener('scroll', sombra));
-    }
+  const topoEl = root.querySelector('.topo');
+  const sentinela = $('t-sentinela-topo');
+  if (topoEl && sentinela && typeof IntersectionObserver === 'function') {
+    // BUG CORRIGIDO (27/11/2026, investigação com a app real): não existe iframe nenhum aqui - o
+    // st.components.v2.component (BidiComponent) monta o conteúdo direto numa shadow root
+    // (mode=open) dentro da própria página do Streamlit (confirmado: document.querySelectorAll
+    // ('iframe').length === 0 na app rodando de verdade). "position: sticky" no CSS já funciona
+    // sozinho (confirmado prendendo .topo no topo real da tela ao rolar o #stMain, o scroll de
+    // verdade do Streamlit) - uma versão anterior deste código chegou a supor um iframe e tentar
+    // corrigir via window.parent + position:fixed (nunca existiu iframe pra isso valer) - removido.
+    // 2º BUG, achado só com a app real rodando (document.querySelector('.topo') sempre null aqui,
+    // por isso a classe "rolou" nunca ligava - nem no antigo código do iframe, nem numa 1ª tentativa
+    // de corrigi-lo escutando scroll em document/window): ".topo" vive dentro da shadow root deste
+    // componente, e consulta de CSS feita a partir do "document" de fora (bare document.querySelector)
+    // NUNCA enxerga pra dentro de uma shadow root - é assim que shadow DOM isola por design. Por
+    // isso topoEl sempre dava null e o "if" inteiro nunca rodava, silenciosamente (sem erro nenhum).
+    // Correção: usar "root" (o parâmetro desta função, a própria raiz do componente - mesma técnica
+    // que o helper $() já usa) em vez de "document" pra achar elementos do próprio componente.
+    // Com isso resolvido, ainda falta como DETECTAR o scroll: o scroll de verdade do Streamlit
+    // acontece dentro de um <main id="stMain"> interno (overflow:auto) - nunca na window/document -,
+    // e mesmo escutando no "document" certo (document.addEventListener('scroll', fn, {capture:true})
+    // pega eventos de QUALQUER elemento da página, inclusive #stMain), isso dependeria de um "id"
+    // interno do Streamlit que pode mudar de versão pra versão. Por isso a detecção usa
+    // IntersectionObserver em vez de escutar evento de scroll: ele mede a posição real do elemento
+    // na tela (root: null = viewport de verdade) e dispara sozinho, não importa qual ancestral rolou
+    // nem como. Observa uma sentinela de 1px logo ACIMA do cabeçalho (t-sentinela-topo no HTML):
+    // quando ela sai da tela (intersectionRatio 0), o cabeçalho já colou no topo - liga "rolou";
+    // quando ela volta a aparecer, desliga.
+    const io = new IntersectionObserver(
+      (entradas) => { topoEl.classList.toggle('rolou', entradas[0].intersectionRatio === 0); },
+      { threshold: [0] }
+    );
+    io.observe(sentinela);
+    limpar.push(() => io.disconnect());
+
+    // 3º BUG, só visível com .rolou já ligando de verdade: o Streamlit tem a sua PRÓPRIA barra fixa
+    // no topo (header com o menu/Deploy, fora da shadow root deste componente), position:absolute,
+    // top:0, com z-index MUITO alto (999990) - mesmo com .topo preso em top:0 (sticky) e z-index:20,
+    // essa barra do Streamlit fica por cima e esconde o cabeçalho fixo inteiro atrás dela. Medindo a
+    // altura real dessa barra (quando existir) e somando ao "top" do sticky, o cabeçalho fixo cola
+    // logo ABAIXO da barra do Streamlit, visível, em vez de atrás dela. Sem essa barra (ex.: página
+    // de exemplo fora do Streamlit), fica 0 como antes - nunca inventa um valor fixo em pixels, que
+    // quebraria se o Streamlit mudar a altura da própria barra numa versão futura.
+    const barraStreamlit = document.querySelector('[data-testid="stHeader"]');
+    topoEl.style.top = barraStreamlit ? `${barraStreamlit.getBoundingClientRect().height}px` : '0';
   }
   let modo = 'graham';
   try { modo = sessionStorage.getItem('fintai-modo') || 'graham'; } catch (e) { /* sem armazenamento */ }
