@@ -1,4 +1,13 @@
 {
+  "AAPL": {
+    "lpa_atual": {
+      "data_hora": "27/11/2026 13:02",
+      "fonte": "Perplexity, confirmado pela API do Claude (SEC, release de resultados 3T26 (8-K EX-99.1), demonstração de operações)",
+      "link": "https://www.sec.gov/Archives/edgar/data/320193/000032019326000018/a8-kex991q3202606272026.htm",
+      "pagina": "demonstração de operações, p. 1",
+      "valor": 2.02
+    }
+  },
   "BBAS3": {
     "lpa_atual": {
       "data_hora": "27/11/2026 12:36",
