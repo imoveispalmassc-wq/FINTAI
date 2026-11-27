@@ -75,15 +75,20 @@ function montar(root, d) {
   // mini gráfico de barras (item 4, 27/11/2026) - reaproveita valores já mostrados na tela (nunca
   // busca/calcula nada novo); pontos sem valor (ex.: ano sem dado) viram uma barra vazia, nunca
   // inventam um número. `proj` marca a barra de projeção/guidance com um estilo diferente (tracejado).
+  // `fantasma` (opcional, 27/11/2026): valor antigo de referência (ex. guidance do início do ano,
+  // já revisado) marcado como uma linha pontilhada fina sobre a própria barra - entra na escala
+  // (pro traço nunca estourar a altura do gráfico) mas nunca vira uma barra própria, pra não ter o
+  // mesmo peso visual dos números atuais.
   const miniBarras = (pontos, formatar) => {
-    const vals = pontos.map(p => p.v).filter(tem);
+    const vals = pontos.flatMap(p => [p.v, p.fantasma]).filter(tem);
     if (!vals.length) return '';
     const max = Math.max(...vals.map(Math.abs), 1e-9);
     return `<div class="mini-barras">${pontos.map(p => {
       const vazio = !tem(p.v);
       const h = vazio ? 0 : Math.max(4, Math.round(Math.abs(p.v) / max * 54));
+      const hFant = tem(p.fantasma) ? Math.max(4, Math.round(Math.abs(p.fantasma) / max * 54)) : null;
       return `<div class="mini-barra"><span class="mb-val">${vazio ? '—' : formatar(p.v)}</span>
-        <div class="mb-col"><div class="mb-cheia${p.proj ? ' proj' : ''}${!vazio && p.v < 0 ? ' neg' : ''}" style="height:${h}px"></div></div>
+        <div class="mb-col">${hFant != null ? `<div class="mb-fantasma" style="bottom:${hFant}px" title="${p.fantasmaTitulo || ''}"></div>` : ''}<div class="mb-cheia${p.proj ? ' proj' : ''}${!vazio && p.v < 0 ? ' neg' : ''}" style="height:${h}px"></div></div>
         <span class="mb-rot">${p.rot}</span></div>`;
     }).join('')}</div>`;
   };
@@ -1179,6 +1184,11 @@ function montar(root, d) {
       const baseG = G && G.bases && G.bases.length ? ` Base recalculada pela empresa: ${G.bases.map(b => `${b.ano} = ${din(b.valor)}${tem(b.antes) ? ` (antes ${din(b.antes)})` : ''}`).join(', ')}; o guidance ${G.periodo || ''} (${din(G.lpa)}) fica ${sinal((G.lpa / G.bases[0].valor - 1) * 100, 1)} acima da base ${G.bases[0].ano}. Os LPAs anuais acima são do Yahoo (contábil) e não usam essa base.` : '';
       const divG = G && tem(G.dividendo) ? (G.dividendoFonte === 'empresa' ? ` Dividendo anual divulgado pela empresa: ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`
         : ` Dividendo projetado: ${din(G.lpa)} × payout ${f(G.payout * 100, 0)}% = ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`) : '';
+      // 2 linhas pro ano de projeção (27/11/2026, a pedido do usuário): o TTM contábil (número real,
+      // já parcialmente ou totalmente dentro do ano de guidance) e o guidance/consenso em si (projeção)
+      // nunca ficam na mesma linha - um é resultado já apurado, o outro é estimativa.
+      const temTTM = anoProj && tem(d.lpa);
+      const linhaAtualTTM = temTTM ? `<div>${anoProj} Atual (TTM)<b>${din(d.lpa)}</b></div>` : '';
       const linhaProj = anoProj ? `<div class="proj"><span>${anoProj} <span class="tag-proj">${G ? 'guidance' : 'projeção'}</span>${ex('lpaEsteAno')}</span><b>${tem(proj) ? din(proj) : 'Sem estimativa'}</b></div>` : '';
       // ITEM 3 (27/11/2026): guidance encurtado pra 2-3 linhas visíveis; o parágrafo completo
       // (consenso/variação/base recalculada/dividendo) vai pra "Ver metodologia" (FOLHAS.guidance) -
@@ -1187,9 +1197,21 @@ function montar(root, d) {
         !G.porLpa && tem(G.lucroMin) && tem(G.lucroMax) ? `Lucro esperado: ${din(G.lucroMin / 1e9, 1)} a ${din(G.lucroMax / 1e9, 1)} bi` : null,
         tem(G.lpaMin) && tem(G.lpaMax) ? `LPA projetado: ${din(G.lpaMin)} a ${din(G.lpaMax)} (média ${din(G.lpa)})${tem(varProj) ? ` · ${sinal(varProj, 0)} vs ${anos.length ? anos[anos.length - 1].ano : ''}` : ''}` : null,
       ].filter(Boolean) : [];
-      // ITEM 4 (27/11/2026): mini gráfico de barras, só com valores já mostrados na tela (os `anos`
-      // + a projeção/guidance do ano seguinte) - nenhuma fonte ou cálculo novo.
-      const graficoLpa = miniBarras([...anos.map(a => ({ v: a.lpa, rot: a.ano })), anoProj ? { v: proj, rot: `${anoProj}E`, proj: true } : null].filter(Boolean), v => din(v));
+      // ITEM 4 (27/11/2026): mini gráfico de barras, só com valores já mostrados na tela (os `anos`,
+      // o TTM contábil já exibido no card "Lucro e Preço vs Lucro" e a projeção/guidance do ano
+      // seguinte) - nenhuma fonte ou cálculo novo. 2ª mudança no mesmo dia: o ano de projeção virou
+      // 2 barras (TTM real sólida + guidance/projeção tracejada) em vez de 1 só, pra não misturar
+      // resultado já apurado com estimativa na mesma barra. GI.lpa (guidance do início do ano,
+      // congelado) vira só uma linha pontilhada fina sobre a barra do TTM - contexto de revisão, não
+      // uma barra própria (nunca com o mesmo peso visual dos números atuais).
+      const GIb = d.guidanceInicial || {};
+      const lpaIniBarra = tem(GIb.lpa) ? GIb.lpa : null;
+      const graficoLpa = miniBarras([
+        ...anos.map(a => ({ v: a.lpa, rot: a.ano })),
+        temTTM ? { v: d.lpa, rot: `${anoProj} Atual (TTM)`, fantasma: lpaIniBarra, fantasmaTitulo: tem(lpaIniBarra) ? `Estimativa inicial jan/${String(anoProj).slice(-2)}: ${din(lpaIniBarra)} - revisada` : '' } : null,
+        anoProj ? { v: proj, rot: `${anoProj}E ${G ? 'Guidance' : 'Projeção'}`, proj: true } : null,
+      ].filter(Boolean), v => din(v));
+      const notaFantasma = temTTM && tem(lpaIniBarra) ? `<div class="nota" style="margin-top:2px;opacity:.65;font-size:10.5px">╌╌╌ Estimativa inicial jan/${String(anoProj).slice(-2)}: ${din(lpaIniBarra)} - revisada</div>` : '';
       // médias mais longas (mesma fonte anual do Yahoo; "Sem dado" quando ele não tem os anos pedidos)
       // e, só no Conservador, o P/L e o preço teto sobre a média de 10 anos - regra: nunca mostra
       // "Sem dado" repetido (4 linhas vazias confundem); SÓ mostra a linha se tiver valor, e quando
@@ -1221,7 +1243,8 @@ function montar(root, d) {
           <button class="link" data-folha="guidance" style="margin-top:6px">Ver metodologia</button>
           </div>` : ''}
           ${graficoLpa}
-          ${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}${linhaProj}</div>` : ''}
+          ${notaFantasma}
+          ${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}${linhaAtualTTM}${linhaProj}</div>` : ''}
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
           ${linhasLongas ? `<div class="lista-v num" style="margin-top:10px">${linhasLongas}</div>` : ''}
           ${notaIndisponivel ? `<div class="nota" style="margin-top:10px">${notaIndisponivel}</div>` : ''}

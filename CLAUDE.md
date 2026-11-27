@@ -1342,6 +1342,19 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   Nada em `tela/dados.py` nem `utils/dados_fixos.py` foi tocado - só `tela/detalhe.js`/`.css` (e o
   teste de ordem do card, `tests/test_dados.py`, ajustado pra continuar verificando a mesma ordem
   cronológica Início do ano -> TTM -> Previsão atual, só que no novo formato visual).
+- **Follow-up no mesmo dia - mini gráfico com 2 barras pro ano de guidance**: o ano de projeção
+  (2026 pra BBAS3) virou 2 barras lado a lado em vez de 1 só - "2026 Atual (TTM)" (sólida, cor
+  normal, o mesmo `d.lpa` já usado no P/L) e "2026E Guidance" (tracejada, como já era). Nenhum
+  valor novo: as 2 barras e as 2 linhas da lista abaixo (`linhaAtualTTM`/`linhaProj`) só reusam
+  `d.lpa` (TTM) e `proj`/`G.lpa` (guidance/consenso), que já apareciam nos cards "Lucro por ação" e
+  "Lucro e Preço vs Lucro". `miniBarras()` ganhou um parâmetro opcional `fantasma` - uma linha
+  pontilhada fina sobre a barra do TTM, marcando `d.guidanceInicial.lpa` (o guidance congelado do
+  início do ano, reusado da MESMA fonte que já alimenta `lpaIni` no card "Lucro e Preço vs Lucro")
+  como contexto de revisão, com uma legenda minúscula e apagada (`.nota` 10.5px, opacity .65) abaixo
+  do gráfico - nunca uma barra própria, nunca com o mesmo peso visual dos números atuais. O valor
+  fantasma entra na escala do gráfico (pra nunca estourar a altura do traço), mas não vira uma
+  barra. Testado ao vivo com BBAS3: 5 barras (2023/2024/2025/2026 Atual TTM/2026E Guidance) e a
+  linha pontilhada em R$ 4,20 sobre a barra do TTM (R$ 2,18).
 
 ## Textos
 
