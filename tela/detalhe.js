@@ -1161,14 +1161,13 @@ function montar(root, d) {
       </div>` : '';
     if (modo === 'graham') {
       const rg = d.regra, anos = d.lpaAnos;
-      const linhas = anos.map(a => `<div>${a.ano}<b style="color:${a.lpa < 0 ? 'var(--vermelho)' : 'inherit'}">${din(a.lpa)}</b></div>`).join('');
       const destaque = rg.status === 'ok' ? `Média de ${anos.length} ${anos.length === 1 ? 'ano' : 'anos'}: ${din(rg.media)}`
         : rg.status === 'excluido' ? 'Ano de prejuízo excluído' : rg.status === 'recorrente' ? rg.mensagem : INDISP;
       const fonteAnual = d.lpaAnualFonte ? `Histórico de lucro por ação verificado na fonte oficial: ${d.lpaAnualFonte}. `
         : d.lpaAnualSecMotivo ? `Yahoo Finance (SEC não usada: ${d.lpaAnualSecMotivo}). ` : '';
       const nota = fonteAnual + (rg.status === 'excluido' ? `Média dos anos com lucro: ${din(rg.media)}.`
         : rg.status === 'recorrente' ? 'Dois ou mais anos de prejuízo nos últimos 3 anos.'
-        : rg.status === 'ok' ? 'Nenhum ano de prejuízo nos últimos 3 anos.' : 'O Yahoo Finance não traz o lucro anual deste ativo.');
+        : rg.status === 'ok' ? 'Sem prejuízo nos últimos 3 anos.' : 'O Yahoo Finance não traz o lucro anual deste ativo.');
       // projeção: LPA estimado pelos analistas para o ano fiscal em curso (o seguinte ao último divulgado)
       const proj = d.lynch && d.lynch.futuro ? d.lynch.futuro.lpaEsteAno : null;
       // com guidance cadastrado, o período vem da empresa (ex.: FY2027); senão, o ano seguinte ao último divulgado
@@ -1184,19 +1183,25 @@ function montar(root, d) {
       const baseG = G && G.bases && G.bases.length ? ` Base recalculada pela empresa: ${G.bases.map(b => `${b.ano} = ${din(b.valor)}${tem(b.antes) ? ` (antes ${din(b.antes)})` : ''}`).join(', ')}; o guidance ${G.periodo || ''} (${din(G.lpa)}) fica ${sinal((G.lpa / G.bases[0].valor - 1) * 100, 1)} acima da base ${G.bases[0].ano}. Os LPAs anuais acima são do Yahoo (contábil) e não usam essa base.` : '';
       const divG = G && tem(G.dividendo) ? (G.dividendoFonte === 'empresa' ? ` Dividendo anual divulgado pela empresa: ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`
         : ` Dividendo projetado: ${din(G.lpa)} × payout ${f(G.payout * 100, 0)}% = ${din(G.dividendo)}${d.preco ? ` (DY ${f(G.dividendo / d.preco * 100, 1)}%)` : ''}.`) : '';
-      // 2 linhas pro ano de projeção (27/11/2026, a pedido do usuário): o TTM contábil (número real,
-      // já parcialmente ou totalmente dentro do ano de guidance) e o guidance/consenso em si (projeção)
-      // nunca ficam na mesma linha - um é resultado já apurado, o outro é estimativa.
+      // TTM contábil (número real, já parcialmente ou totalmente dentro do ano de guidance) e o
+      // guidance/consenso em si (projeção) nunca se misturam - cada um é sua própria barra no
+      // gráfico (ver graficoLpa abaixo); a lista de texto equivalente foi removida (follow-up
+      // 27/11/2026, a pedido do usuário - os valores já aparecem escritos em cima de cada barra).
       const temTTM = anoProj && tem(d.lpa);
-      const linhaAtualTTM = temTTM ? `<div>${anoProj} Atual (TTM)<b>${din(d.lpa)}</b></div>` : '';
-      const linhaProj = anoProj ? `<div class="proj"><span>${anoProj} <span class="tag-proj">${G ? 'guidance' : 'projeção'}</span>${ex('lpaEsteAno')}</span><b>${tem(proj) ? din(proj) : 'Sem estimativa'}</b></div>` : '';
-      // ITEM 3 (27/11/2026): guidance encurtado pra 2-3 linhas visíveis; o parágrafo completo
-      // (consenso/variação/base recalculada/dividendo) vai pra "Ver metodologia" (FOLHAS.guidance) -
-      // texto IDÊNTICO ao de antes, só reposicionado, nenhuma informação removida.
+      // ITEM 3 (27/11/2026): guidance encurtado pra 2-3 linhas visíveis. Follow-up no mesmo dia:
+      // o botão "Ver metodologia" saiu - vira só a conta em 1 linha pequena (contaGuidance, abaixo);
+      // o parágrafo completo (consenso/variação/base recalculada/dividendo) continua existindo só
+      // pra quando NÃO há guidance oficial (textoProjecaoCompleto, caso `!G`, ver #g-nota-proj).
       const resumoGuidance = G ? [
         !G.porLpa && tem(G.lucroMin) && tem(G.lucroMax) ? `Lucro esperado: ${din(G.lucroMin / 1e9, 1)} a ${din(G.lucroMax / 1e9, 1)} bi` : null,
         tem(G.lpaMin) && tem(G.lpaMax) ? `LPA projetado: ${din(G.lpaMin)} a ${din(G.lpaMax)} (média ${din(G.lpa)})${tem(varProj) ? ` · ${sinal(varProj, 0)} vs ${anos.length ? anos[anos.length - 1].ano : ''}` : ''}` : null,
       ].filter(Boolean) : [];
+      // follow-up (27/11/2026): botão "Ver metodologia" removido a pedido do usuário - vira 1 linha
+      // pequena com a própria conta (o cálculo que já existia, só reposicionado pra ficar visível
+      // direto, sem precisar abrir painel nenhum). Mesma fórmula de sempre, nenhum número novo.
+      const contaGuidance = G && tem(G.lpaMin) && tem(G.lpaMax)
+        ? (G.porLpa ? `(${din(G.lpaMin)} + ${din(G.lpaMax)}) ÷ 2 = ${din(G.lpa)}`
+          : `(${din(G.lucroMin / 1e9, 1)} bi + ${din(G.lucroMax / 1e9, 1)} bi) ÷ 2 ÷ ${f(G.acoes / 1e9, 2)} bi ações = ${din(G.lpa)}`) : '';
       // ITEM 4 (27/11/2026): mini gráfico de barras, só com valores já mostrados na tela (os `anos`,
       // o TTM contábil já exibido no card "Lucro e Preço vs Lucro" e a projeção/guidance do ano
       // seguinte) - nenhuma fonte ou cálculo novo. 2ª mudança no mesmo dia: o ano de projeção virou
@@ -1225,10 +1230,13 @@ function montar(root, d) {
         tem(d.tetoConservador) ? `<div>Preço teto conservador<b>${din(d.tetoConservador)}</b></div>` : null,
       ].filter(Boolean);
       const linhasLongas = grupo5e10.join('') + grupoConservador.join('');
+      // ITEM 6 (27/11/2026, a pedido do usuário): texto encurtado - a explicação completa (que o
+      // P/L Conservador e o Preço teto também dependem da média de 10 anos) continua verdadeira,
+      // só não repetida por extenso aqui; a régua de "quando falta a quê" continua a mesma.
       const notaIndisponivel = !grupo5e10.length && !grupoConservador.length
-        ? 'Dados de 5 e 10 anos indisponíveis para este ticker (P/L Conservador e Preço teto conservador também dependem da média de 10 anos).'
-        : !grupo5e10.length ? 'Dados de 5 e 10 anos indisponíveis para este ticker.'
-        : !grupoConservador.length ? 'P/L Conservador e Preço teto conservador indisponíveis para este ticker (dependem da média de 10 anos).'
+        ? 'Sem histórico de 5/10 anos para este ticker.'
+        : !grupo5e10.length ? 'Sem histórico de 5/10 anos para este ticker.'
+        : !grupoConservador.length ? 'P/L Conservador e Preço teto conservador indisponíveis para este ticker.'
         : '';
       const avisoAnualHtml = d.avisoGuidanceAnual ? `<div class="aviso" style="margin-bottom:10px">${d.avisoGuidanceAnual}</div>` : '';
       // texto completo da projeção (consenso/variação/base recalculada/dividendo) - igual ao de
@@ -1240,22 +1248,16 @@ function montar(root, d) {
         <div class="card">${G ? `<div style="margin-bottom:10px">
           <span class="selo ok">GUIDANCE OFICIAL · ${G.data}</span>
           ${resumoGuidance.length ? `<div class="nota num" style="margin-top:6px">${resumoGuidance.join('<br>')}</div>` : ''}
-          <button class="link" data-folha="guidance" style="margin-top:6px">Ver metodologia</button>
+          ${contaGuidance ? `<div class="nota num" style="margin-top:4px;opacity:.75;font-size:11.5px">${contaGuidance}</div>` : ''}
           </div>` : ''}
           ${graficoLpa}
           ${notaFantasma}
-          ${linhas ? `<div class="lista-v num" style="margin-top:0">${linhas}${linhaAtualTTM}${linhaProj}</div>` : ''}
           <div class="destaque" style="${rg.status === 'recorrente' ? 'color:var(--vermelho)' : ''}">${destaque}</div>
           ${linhasLongas ? `<div class="lista-v num" style="margin-top:10px">${linhasLongas}</div>` : ''}
           ${notaIndisponivel ? `<div class="nota" style="margin-top:10px">${notaIndisponivel}</div>` : ''}
           <div class="nota" id="g-nota"></div>${!G ? `<div class="nota" id="g-nota-proj" style="margin-top:4px"></div>` : ''}</div>${outlookHtml}`;
       el.querySelector('#g-nota').textContent = nota;
       if (!G) { const gp = el.querySelector('#g-nota-proj'); if (gp) gp.textContent = textoProjecaoCompleto; }
-      if (G) {
-        FOLHAS.guidance = () => ['Metodologia do guidance', `
-          <p>${textoProjecaoCompleto}</p>
-          <p><b>Fonte:</b> ${G.url ? `<a class="link" href="${G.url}" target="_blank" rel="noopener">${G.fonte}</a>` : G.fonte}</p>`];
-      }
     } else if (modo === 'lynch') {
       const L = d.lynch, v = L.veredito, F = L.futuro, pc = x => tem(x) ? `${sinal(x, 1)} ao ano` : 'Sem dado';
       // crescimento acima de 100% ao ano vem de base quase zero: mostra quantas vezes multiplicou

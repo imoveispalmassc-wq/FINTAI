@@ -1355,6 +1355,32 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   fantasma entra na escala do gráfico (pra nunca estourar a altura do traço), mas não vira uma
   barra. Testado ao vivo com BBAS3: 5 barras (2023/2024/2025/2026 Atual TTM/2026E Guidance) e a
   linha pontilhada em R$ 4,20 sobre a barra do TTM (R$ 2,18).
+- **2º follow-up no mesmo dia - gráfico combinado Lucro × Receita (estilo Investing) PEDIDO E NÃO
+  IMPLEMENTADO - falta a fonte**: o usuário pediu um gráfico de eixo duplo (Receita em barra azul +
+  LPA em barra cinza + traço laranja de projeção), condicionado explicitamente a existir receita em
+  `d.dadosFixos` - e ele mesmo pediu pra avisar e manter o gráfico atual se não existisse. Checado:
+  `utils/dados_fixos.py` (grep por "receita"/"revenue") NÃO tem nenhum campo de receita - o módulo
+  só busca ações, lucro, dividendo e patrimônio líquido na fonte oficial (CVM/SEC), nunca receita.
+  Existe receita de OUTRA fonte no projeto (`tela/dados.py`, `d.get("receita_anual")`, vindo do
+  Yahoo `income_stmt`, já usado no crescimento do Lynch) - mas essa série anual completa não é hoje
+  exposta pra tela como um array ano a ano (só TTM/média/previsão de 1 valor cada, não uma lista tipo
+  `d.lpaAnos`), e o pedido era condicionado especificamente a `d.dadosFixos`. Por decisão (seguindo a
+  instrução explícita do usuário: "me avisar e manter o gráfico atual"), o gráfico combinado NÃO foi
+  construído - o mini gráfico de LPA continua como estava (barras de 2023/2024/2025/2026 Atual TTM/
+  2026E Guidance + linha fantasma). Pra implementar de verdade no futuro, precisaria: (a) decidir se
+  usa a série anual do Yahoo (`receita_anual`, já existe mas não está exposta ano a ano) ou criar uma
+  busca de receita trimestral na fonte oficial (CVM/SEC) dentro de `dados_fixos.py`, igual ao lucro -
+  ambas são mudanças de BACKEND, fora do escopo de um ajuste só de apresentação.
+  Os outros itens do mesmo pedido, independentes de receita, foram implementados: (1) botão "Ver
+  metodologia" removido - vira 1 linha pequena e apagada com a própria conta (`contaGuidance`,
+  ex. "(R$ 9,0 bi + R$ 11,0 bi) ÷ 2 ÷ 5,71 bi ações = R$ 1,75"), a mesma fórmula de sempre, só
+  visível direto em vez de atrás de um painel; o texto completo (`textoProjecaoCompleto`) continua
+  existindo só pro caso SEM guidance oficial (consenso do Yahoo, `#g-nota-proj}`), que não tinha
+  pedido de mudança. (2) lista de texto abaixo do gráfico (anos + "2026 Atual (TTM)" + guidance)
+  removida - os valores já aparecem escritos em cima de cada barra do mini gráfico, então vinham
+  duplicados. (3) texto "Dados de 5 e 10 anos indisponíveis... Nenhum ano de prejuízo..." encurtado
+  pra "Sem histórico de 5/10 anos para este ticker." + "Sem prejuízo nos últimos 3 anos." (2 linhas
+  curtas sucessivas, mesmo sentido, bem mais curto que o parágrafo de antes).
 
 ## Textos
 
