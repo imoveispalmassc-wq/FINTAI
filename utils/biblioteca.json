@@ -8,6 +8,16 @@
       "valor": 2.02
     }
   },
+  "B3SA3": {
+    "lpa_atual": {
+      "data_hora": "28/11/2026 12:26",
+      "fonte": "Perplexity, confirmado pela API do Claude (RI B3, Release 3T26 (tabela de indicadores / reconciliação) e Apresentação de Resultados 3T26)",
+      "link": "https://filemanager-cdn.mziq.com/published/5fd7b7d8-54a1-472d-8426-eb896ad8a3c4/c76b58cd-dd66-4d54-ac8b-71e1fad9bd68",
+      "pagina": "Apresentação, p. 20; Release 3T26, tabela de indicadores / reconciliação",
+      "valor": 0.33,
+      "valor_ajustado": 0.28
+    }
+  },
   "BBAS3": {
     "lpa_atual": {
       "data_hora": "27/11/2026 12:36",
@@ -15,6 +25,25 @@
       "link": "https://filemanager-cdn.mziq.com/published/5760dff3-15e1-4962-9e81-322a0b3d0bbd/0e3bf08c-f87e-4e9a-b013-191b564d84cf",
       "pagina": "Sumário do Resultado, p. 3",
       "valor": 0.21
+    }
+  },
+  "TSLA": {
+    "lpa_atual": {
+      "data_hora": "28/11/2026 12:31",
+      "fonte": "Perplexity, confirmado pela API do Claude (SEC EDGAR, Update 3T26 (Exhibit 99.1 do 8-K))",
+      "link": "https://www.sec.gov/Archives/edgar/data/1318605/000162828026066738/exhibit9914.htm",
+      "pagina": "Update 3T26, reconciliação GAAP/non-GAAP, tabela",
+      "valor": 0.22,
+      "valor_ajustado": 0.48
+    }
+  },
+  "WEGE3": {
+    "lpa_atual": {
+      "data_hora": "28/11/2026 12:26",
+      "fonte": "Perplexity, confirmado pela API do Claude (RI, Release de Resultados 3T26 (Earnings Release 3Q 2026))",
+      "link": "https://api.mziq.com/mzfilemanager/v2/d/50c1bd3e-8ac6-42d9-884f-b9d69f690602/b24337ad-54ab-6c14-441a-a1162a7e8ef9?origin=2",
+      "pagina": "Anexo I (trimestral) e Anexo II (acumulado), p. 10–11",
+      "valor": 0.39687
     }
   }
 }
