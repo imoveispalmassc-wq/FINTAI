@@ -29,7 +29,13 @@ def render_lpa_chart(dados):
     """
     df = pd.DataFrame([{"ano": d["ano"], "valor": d["valor"], "rotulo": _num(d["valor"])} for d in dados])
     base = alt.Chart(df).encode(
-        x=alt.X("ano:N", sort=None, title=None, axis=alt.Axis(labelAngle=0)),
+        # labelOverlap=False força o Vega-Lite a mostrar TODOS os rótulos do eixo, mesmo quando ele
+        # "acharia" melhor esconder alguns por falta de espaço (comportamento padrão que escondia
+        # barras no meio, ex. 2024/2026 Inicial/2026 Atual) - fonte menor (9px) e labelLimit maior
+        # (os nomes ficaram mais longos, autoexplicativos: "2026 Inicial (Est. início ano)" etc.)
+        # pra caber sem cortar o texto.
+        x=alt.X("ano:N", sort=None, title=None,
+                axis=alt.Axis(labelAngle=0, labelOverlap=False, labelFontSize=9, labelLimit=240)),
         y=alt.Y("valor:Q", title=None),
     )
     barras = base.mark_bar()

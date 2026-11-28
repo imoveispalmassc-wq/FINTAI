@@ -1706,6 +1706,24 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
      mesma mudança do item 2 (`labelAngle=0`), agora em `components/retorno_chart.py`. Testado ao
      vivo com BBAS3 em "1 ano" e "5 anos" (2 colunas, BBAS3/Ibovespa) - "BBAS3"/"Ibov" ficam
      horizontais sem sobrepor nos 2 períodos.
+  5. **Último ajuste no gráfico de LPA (28/11/2026)**: o Vega-Lite estava ESCONDENDO sozinho alguns
+     rótulos do eixo X quando achava que não cabiam todos lado a lado (comportamento padrão de
+     "remover por sobreposição") - sumiam justamente os do meio (2024, "2026 Inicial", "2026
+     Atual"). `axis=alt.Axis(labelOverlap=False, labelFontSize=9, labelLimit=240)` força o
+     Vega-Lite a desenhar TODOS os rótulos sempre (fonte menor + limite de largura maior, pros
+     nomes mais longos não cortarem) - nenhuma conta de proporção/altura mudou, só a exibição do
+     eixo. Rótulos renomeados pra se explicarem sozinhos (pedido do usuário, "cada barra tem que se
+     explicar sozinha"): "2023"/"2024"/"2025" (sem mudança) → "{ano} Inicial (Est. início ano)" →
+     "{ano} Atual (TTM Realizado)" → "{ano}E (Guidance)" ou "(Projeção)" sem guidance oficial - os 2
+     captions que existiam embaixo do gráfico ("2026 Inicial (jan): Estimativa..."/"2026 Atual
+     (TTM): Já realizado...") foram removidos de vez (`app._pontos_lpa_grafico` não passa mais
+     `detalhe` pra esses 2 pontos) - o nome da própria barra já diz tudo, a legenda ficava repetindo.
+     Espaço entre o card "Lucro por ação" e o título "Lucro por ação - Evolução" reduzido com
+     `st.container(key="lpa_evolucao_bloco")` + `.st-key-lpa_evolucao_bloco { margin-top: -1.75rem }`
+     no CSS global do app - forma suportada pelo Streamlit (1.3x+) de dar uma classe CSS estável a
+     um container específico sem afetar outros blocos da página. Testado ao vivo com BBAS3: as 6
+     barras aparecem com rótulo completo (nenhuma sumiu), sem nenhum caption embaixo do gráfico, e
+     o `margin-top: -28px` computado confirmado via `getComputedStyle` no navegador.
 
 ## Textos
 

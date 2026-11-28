@@ -91,6 +91,9 @@ CSS = """
 .marca img { height:2.8rem; width:2.8rem; border-radius:22%; }
 .marca span { color:#8c99b0; font-size:.95rem; }
 .rodape { color:#8c99b0; font-size:.76rem; margin-top:1.5rem; text-align:center; }
+/* puxa o bloco "Lucro por ação - Evolução" um pouco pra cima, encostando mais perto do card
+   "Lucro por ação" logo acima (fim do 1º componente da tela) - pedido do usuário, 27/11/2026. */
+.st-key-lpa_evolucao_bloco { margin-top: -1.75rem; }
 </style>
 """
 
@@ -569,7 +572,6 @@ def _pontos_lpa_grafico(dados: dict) -> list[dict]:
     anos/guidance que o card de texto "Lucro por ação" (dentro de `tela_detalhe`) já mostra, sem
     recalcular nada: só lê o que `tela.dados.montar()` já colocou em `dados`. Vale pra qualquer
     ticker, B3 ou EUA - nenhuma lógica específica de um ativo aqui."""
-    moeda = dados.get("moeda") or ""
     lpa_anos = dados.get("lpaAnos") or []
     pontos = [{"ano": str(a["ano"]), "valor": a["lpa"]} for a in lpa_anos if a.get("lpa") is not None]
 
@@ -577,22 +579,17 @@ def _pontos_lpa_grafico(dados: dict) -> list[dict]:
     ano_proj = (guia or {}).get("periodo") or (str(int(lpa_anos[-1]["ano"]) + 1) if lpa_anos else None)
     lpa_ttm = dados.get("lpa")
     lpa_ini = (dados.get("guidanceInicial") or {}).get("lpa")
-    # 2 barras SEPARADAS (nunca uma só empilhada) pra estimativa do início do ano x TTM já realizado
-    # - pedido do usuário (27/11/2026, follow-up): queria dar pra DIFERENCIAR visualmente os 2
-    # valores, não só ler a diferença numa legenda embaixo do gráfico.
+    # 2 barras SEPARADAS (nunca uma só empilhada) pra estimativa do início do ano x TTM já realizado.
+    # Nome da barra autoexplicativo (27/11/2026, follow-up) - sem caption embaixo do gráfico, que o
+    # usuário pediu pra tirar: o próprio rótulo já diz o que cada uma é.
     if ano_proj and lpa_ini is not None and lpa_ini > 0:
-        pontos.append({"ano": f"{ano_proj} Inicial (jan)", "valor": lpa_ini,
-                       "detalhe": f"Estimativa do início do ano - {moeda} {utils.formato.num(lpa_ini)}."})
+        pontos.append({"ano": f"{ano_proj} Inicial (Est. início ano)", "valor": lpa_ini})
     if ano_proj and lpa_ttm is not None:
-        perdido = lpa_ini - lpa_ttm if lpa_ini is not None and lpa_ini > lpa_ttm else None
-        detalhe_ttm = (f"Já realizado nos últimos 12 meses - {moeda} {utils.formato.num(perdido)} "
-                       f"a menos que a estimativa do início do ano." if perdido is not None
-                       else "Já realizado nos últimos 12 meses.")
-        pontos.append({"ano": f"{ano_proj} Atual (TTM)", "valor": lpa_ttm, "detalhe": detalhe_ttm})
+        pontos.append({"ano": f"{ano_proj} Atual (TTM Realizado)", "valor": lpa_ttm})
 
     proj = ((dados.get("lynch") or {}).get("futuro") or {}).get("lpaEsteAno")
     if ano_proj and proj is not None:
-        pontos.append({"ano": f"{ano_proj}E {'Guidance' if guia else 'Projeção'}", "valor": proj})
+        pontos.append({"ano": f"{ano_proj}E ({'Guidance' if guia else 'Projeção'})", "valor": proj})
 
     return pontos
 
@@ -746,8 +743,12 @@ def painel(ticker: str):
     # aceito no projeto pro card de guidance trimestral, que também aparece nos 3 modos.
     pontos_lpa = _pontos_lpa_grafico(dados)
     if pontos_lpa:
-        st.subheader("Lucro por ação - Evolução")
-        components.lpa_chart.render_lpa_chart(pontos_lpa)
+        # container com key (.st-key-lpa_evolucao_bloco no CSS acima) pra puxar o bloco um pouco
+        # pra cima, diminuindo o espaço vazio entre o card "Lucro por ação" (fim do 1º componente)
+        # e este título - pedido do usuário, 27/11/2026.
+        with st.container(key="lpa_evolucao_bloco"):
+            st.subheader("Lucro por ação - Evolução")
+            components.lpa_chart.render_lpa_chart(pontos_lpa)
     tela_detalhe_fundo(data={"dados": dados}, key=f"tela_fundo_{ticker}")
     # Retorno acumulado (components/retorno_chart.py) - saiu daqui de dentro pelo mesmo motivo do
     # gráfico de LPA (27/11/2026): mesma regra, gráfico nativo, nenhuma barra em div/CSS.
