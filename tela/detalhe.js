@@ -995,12 +995,25 @@ function montar(root, d) {
       // de vez, a pedido do usuário - sem dado, as linhas de média 5/10 anos simplesmente somem
       // (linhasLongas fica vazio), sem nenhuma frase explicando a ausência.
       const avisoAnualHtml = d.avisoGuidanceAnual ? `<div class="aviso" style="margin-bottom:10px">${d.avisoGuidanceAnual}</div>` : '';
+      // Últimos 4 trimestres do TTM (28/11/2026, pedido do usuário após a confusão do GOOGL
+      // 19,16 x 19,03): mostra DE ONDE vem o TTM, mesmo estilo/posição do card "Lucro por ação"
+      // logo abaixo - d.ultimosTrimestres já vem pronto de app._pontos_trimestres_ttm (nenhuma
+      // conta aqui, só leitura) e é null quando não há trimestre utilizável (card não aparece).
+      const UT = d.ultimosTrimestres;
+      const ultimosTrimestresHtml = UT && UT.linhas && UT.linhas.length ? `<div class="card" style="margin-bottom:10px">
+        <div class="destaque">Últimos 4 trimestres (TTM)</div>
+        <div class="lista-v num" style="margin-top:10px">
+          ${UT.linhas.map(l => `<div>${l.label}<b>${din(l.valor)}</b></div>`).join('')}
+          <div style="border-top:1px solid var(--borda); margin-top:4px; padding-top:8px; font-weight:600; color:var(--texto)">Total TTM<b>${din(UT.total)}</b></div>
+        </div>
+      </div>` : '';
       // texto completo da projeção (consenso/variação/base recalculada/dividendo) - usado só quando
       // NÃO há guidance oficial (consenso do Yahoo, caso `!G`, ver #g-nota-proj); com guidance
       // oficial, o resumoGuidance (2 linhas) já basta - sem botão nem conta por extenso (ver acima).
       const textoProjecaoCompleto = anoProj ? `${tem(proj) ? `Projeção ${anoProj}: ${consenso}${tem(varProj) ? `; ${sinal(varProj, 0)} sobre ${anos.length ? anos[anos.length - 1].ano : ''}${G && G.porLpa ? ' (o guidance é LPA ajustado; o ano anterior é o LPA contábil do Yahoo, bases diferentes)' : ''}` : ''}.${divG}${baseG} Não entra na média.${G ? ' O guidance oficial substitui o consenso dos analistas do Yahoo.' : ''}` : `Sem estimativa no Yahoo para ${anoProj}.`}` : '';
       el.innerHTML = `<h2>Lucro por ação <small>últimos 3 anos${anoProj ? ` + projeção ${anoProj}` : ''}</small></h2>
         ${avisoAnualHtml}
+        ${ultimosTrimestresHtml}
         <div class="card">${G ? `<div style="margin-bottom:10px">
           <span class="selo ok">GUIDANCE OFICIAL · ${G.data}</span>
           ${resumoGuidance.length ? `<div class="nota num" style="margin-top:6px">${resumoGuidance.join('<br>')}</div>` : ''}

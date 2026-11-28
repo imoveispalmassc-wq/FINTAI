@@ -8,18 +8,19 @@ from pathlib import Path
 APP = Path(__file__).parent.parent / "app.py"
 
 
-def _carregar_pontos_lpa_grafico():
+def _carregar_funcao(nome: str):
     arvore = ast.parse(APP.read_text(encoding="utf-8"))
     for no in arvore.body:
-        if isinstance(no, ast.FunctionDef) and no.name == "_pontos_lpa_grafico":
+        if isinstance(no, ast.FunctionDef) and no.name == nome:
             modulo = ast.Module(body=[no], type_ignores=[])
             ns = {}
             exec(compile(modulo, str(APP), "exec"), ns)
-            return ns["_pontos_lpa_grafico"]
-    raise AssertionError("não achei _pontos_lpa_grafico em app.py")
+            return ns[nome]
+    raise AssertionError(f"não achei {nome} em app.py")
 
 
-_pontos_lpa_grafico = _carregar_pontos_lpa_grafico()
+_pontos_lpa_grafico = _carregar_funcao("_pontos_lpa_grafico")
+_pontos_trimestres_ttm = _carregar_funcao("_pontos_trimestres_ttm")
 
 
 def _dados(**over):
@@ -95,3 +96,64 @@ def test_pontos_lpa_grafico_valor_negativo_real_nao_e_escondido():
     pontos = _pontos_lpa_grafico(_dados(guidanceInicial={"lpa": -1.5}))
     por_ano = {p["ano"]: p["valor"] for p in pontos}
     assert por_ano["2026\nInicial"] == -1.5
+
+
+# ---------------- card "Últimos 4 trimestres (TTM)" (28/11/2026, pedido do usuário após o caso GOOGL) ----------------
+
+def _googl_trimestres():
+    """Os 4 trimestres reais do GOOGL já conferidos pelo usuário (CLAUDE.md, REGRA 7) - fonte EUA
+    (contabil_sec.json): cada trimestre já tem "lpa" direto, nunca "lucro"."""
+    return {"status": "ok", "acoes": None, "trimestres": [
+        {"fim": "31/12/2025", "lpa": 2.82},
+        {"fim": "31/03/2026", "lpa": 5.11},
+        {"fim": "30/06/2026", "lpa": 9.11},
+        {"fim": "30/09/2026", "lpa": 2.12},
+    ]}
+
+
+def test_pontos_trimestres_ttm_googl_soma_19_16():
+    """Trava o caso real que gerou a confusão 19,16 x 19,03 (CLAUDE.md, REGRA 7): a soma exata dos
+    4 trimestres GAAP diluídos do GOOGL é 19,16, não 19,03."""
+    ut = _pontos_trimestres_ttm({"lpaSec": _googl_trimestres()})
+    assert ut["total"] == 19.16
+    assert ut["linhas"] == [
+        {"label": "Q4 2025", "valor": 2.82},
+        {"label": "Q1 2026", "valor": 5.11},
+        {"label": "Q2 2026", "valor": 9.11},
+        {"label": "Q3 2026", "valor": 2.12},
+    ]
+
+
+def test_pontos_trimestres_ttm_b3_calcula_lpa_por_lucro_sobre_acoes():
+    """B3 (contabil_br.json): o trimestre só tem "lucro" (total da empresa) - o LPA é lucro ÷ acoes,
+    o MESMO `acoes` do registro que já produz o lpa_12m total (REGRA 1 do TTM) - nunca um número novo."""
+    sec = {"status": "ok", "acoes": 1_000_000_000.0, "trimestres": [
+        {"fim": "31/12/2025", "lucro": 500_000_000.0},
+        {"fim": "31/03/2026", "lucro": 300_000_000.0},
+    ]}
+    ut = _pontos_trimestres_ttm({"lpaSec": sec})
+    assert ut["linhas"] == [
+        {"label": "Q4 2025", "valor": 0.5},
+        {"label": "Q1 2026", "valor": 0.3},
+    ]
+    assert ut["total"] == 0.8
+
+
+def test_pontos_trimestres_ttm_trimestre_ausente_mostra_so_os_que_existem():
+    """Um trimestre sem "fim" nem dado suficiente (nem "lpa", nem "lucro"+"acoes") nunca é
+    completado/estimado - simplesmente não entra na lista; os outros continuam aparecendo."""
+    sec = {"status": "ok", "acoes": None, "trimestres": [
+        {"fim": "31/12/2025", "lpa": 2.82},
+        {"fim": "31/03/2026"},          # sem "lpa" e sem "acoes" pra calcular via "lucro" - ausente
+        {"fim": "30/06/2026", "lpa": 9.11},
+    ]}
+    ut = _pontos_trimestres_ttm({"lpaSec": sec})
+    assert [l["label"] for l in ut["linhas"]] == ["Q4 2025", "Q2 2026"]
+    assert ut["total"] == 2.82 + 9.11
+
+
+def test_pontos_trimestres_ttm_sem_nenhum_trimestre_nao_mostra_o_bloco():
+    assert _pontos_trimestres_ttm({"lpaSec": {"status": "ok", "trimestres": []}}) is None
+    assert _pontos_trimestres_ttm({"lpaSec": None}) is None
+    assert _pontos_trimestres_ttm({"lpaSec": {"status": "incompleto"}}) is None
+    assert _pontos_trimestres_ttm({}) is None

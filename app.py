@@ -470,6 +470,7 @@ def pacote(ticker: str, versao: str = "") -> dict:
                 "taxaCambioData": ao_vivo.get("taxa_cambio_data") or "",
                 "atualizacao": tela.dados.atualizacao_contabil(ao_vivo),
                 "proximoAnuncio": tela.dados.proximo_anuncio_info(d["info"]) or ao_vivo.get("proximo_anuncio") or ""}}
+    dados = {**dados, "ultimosTrimestres": _pontos_trimestres_ttm(dados)}
     return dados
 
 
@@ -565,6 +566,51 @@ def barra_de_acoes(ticker: str):
                                url="https://wa.me/?text=" + quote(f"{curto(ticker)} no FINTAI: {link}"))
             else:
                 st.caption(f"Copie o endereço desta página e acrescente ?t={curto(ticker)} ao final.")
+
+
+def _pontos_trimestres_ttm(dados: dict) -> dict | None:
+    """Últimos 4 trimestres que compõem o LPA contábil TTM (card "Últimos 4 trimestres (TTM)",
+    `tela/detalhe.js`, logo acima do card "Lucro por ação"/"Média de X anos") - pedido do usuário
+    (28/11/2026) depois da confusão do GOOGL (19,16 x 19,03): mostrar DE ONDE vem o TTM, não só o
+    total. Usa SOMENTE o que o robô já gravou em `utils/contabil_sec.json` (EUA) ou
+    `utils/contabil_br.json` (B3) - mesmo registro já exposto em `d.lpaSec`, sem nenhuma busca nova.
+
+    EUA (`contabil_sec.json`): cada trimestre já tem "lpa" direto. B3 (`contabil_br.json`): o
+    trimestre só tem "lucro" (total da empresa) - o LPA do trimestre é `lucro / acoes`, usando o
+    MESMO `acoes` do registro que já produz o `lpa_12m` total (REGRA 1 do TTM) - não é um número
+    novo, é a mesma divisão já feita pro total, só que trimestre a trimestre.
+
+    Rótulo do trimestre ("Q4 2025", "Q1 2026"...) vem só da data `fim` de cada trimestre (quarter
+    civil, mesma conta já usada em `carimbo_atualizacao`/`trimestre_do_documento` do projeto) -
+    nunca inventado. Trimestre sem "fim", sem "lpa" E sem ("lucro" + `acoes`) simplesmente não entra
+    na lista (nunca um valor 0/estimado no lugar). Sem `lpaSec`, sem status "ok", ou sem nenhum
+    trimestre utilizável: None (o card inteiro não aparece). O "Total TTM" mostrado é sempre a soma
+    exata dos trimestres exibidos - nunca o `lpa_12m` do registro (que pode usar trimestres que
+    faltaram aqui, ex. sem "acoes" pra converter B3)."""
+    sec = dados.get("lpaSec")
+    if not sec or sec.get("status") != "ok":
+        return None
+    acoes = sec.get("acoes")
+    linhas = []
+    for t in sec.get("trimestres") or []:
+        fim = t.get("fim")
+        if not fim:
+            continue
+        lpa = t.get("lpa")
+        if lpa is None:
+            lucro = t.get("lucro")
+            if lucro is None or not acoes:
+                continue
+            lpa = lucro / acoes
+        try:
+            dia, mes, ano = fim.split("/")
+            trimestre = (int(mes) - 1) // 3 + 1
+        except (ValueError, AttributeError):
+            continue
+        linhas.append({"label": f"Q{trimestre} {ano}", "valor": round(lpa, 4)})
+    if not linhas:
+        return None
+    return {"linhas": linhas, "total": round(sum(l["valor"] for l in linhas), 4)}
 
 
 def _pontos_lpa_grafico(dados: dict) -> list[dict]:
