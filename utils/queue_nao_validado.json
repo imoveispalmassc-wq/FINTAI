@@ -63,6 +63,10 @@
     "motivo": "CNPJ não encontrado no cadastro da CVM",
     "data": "26/11/2026"
   },
+  "MGLU3": {
+    "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
+    "data": "28/11/2026"
+  },
   "MU": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes)",
     "data": "20/11/2026"
