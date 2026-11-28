@@ -332,6 +332,86 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   do ramo `ttm/contabil-revisar`. `python -m pytest` roda antes. Corpo do PR (`tools/resumo_ttm_pr.py`): no topo as
   divergências (GAAP x ajustado, contínuas x total, 4º tri, cotação não verificada), depois ativos alterados, fonte e
   LPA antes -> depois. Merge publica; fechar descarta.
+- **REGRA 7 - TRAVA DE SEGURANÇA DO AUTOMÁTICO (pedida pelo usuário, 28/11/2026, vale pra TODOS os PRs do
+  Automático de agora em diante: `ttm/revisar`, `ttm/contabil-revisar`, `ttm/robo-claude-*`,
+  `biblioteca/revisar`, `divergencia/revisar-*`)**: antes de mergear qualquer PR desses, rodar as 4 travas de
+  `utils/revisao_pr.py` (`revisar(antes, depois)`, testado em `tests/test_revisao_pr.py`) comparando o `base`
+  (main) com o `head` (PR) de cada arquivo tocado:
+  1. **TRAVA 1 - nenhum ticker apagado**: todo ticker do `base` continua no `head`. Some 1 = bug do robô
+     (sobrescreveu em vez de atualizar), nunca uma remoção intencional.
+  2. **TRAVA 2 - nenhum valor aprovado regredido**: ticker com o MESMO período (mesma `trimestre_ref`/
+     `periodo`/janela de trimestres) não pode virar um número diferente - isso é reescrever um valor já
+     publicado, não uma atualização legítima (que é sempre um PERÍODO NOVO). ATENÇÃO - FALSO POSITIVO
+     CONHECIDO: uma correção pela REGRA 3 (4º tri do release substituindo o calculado por "ano − 9 meses")
+     É uma mudança no MESMO período que PASSA por cima de um valor já salvo - a trava mecânica acusa
+     regressão, mas é uma correção legítima quando a nova PR cita a fonte oficial do release + bate com um
+     teste já travado (ex.: PR #80, TGT 10,76 → 10,77, `q4_release.json` com o link do release da Target,
+     confirmado por `test_obrigatorio_tgt_sai_10_77_gaap_e_nao_10_91`) - julgar pelo conteúdo, não só pelo
+     resultado mecânico da trava nesse caso específico.
+  3. **TRAVA 3 - revisão contra o documento oficial**: toda entrada nova/alterada tem link de fonte oficial
+     rastreável (RI, SEC EDGAR, CVM/RAD - `fonte_oficial_rastreavel`); a CONFIRMAÇÃO de verdade (ticker/
+     período/valor/página batendo com o texto do documento) é feita à parte, manual ou via Perplexity/API do
+     Claude (infra já existente em `utils/biblioteca.py`/`utils/fetch_guidance.py`) - sem link nenhum, falha
+     direto. LIMITAÇÃO HONESTA (achada revisando as PRs #72/#73/#80/#82 em 28/11/2026): esta sandbox não bate
+     em `sec.gov`/`data.sec.gov` sem um `SEC_CONTACT_EMAIL` de verdade (a SEC exige User-Agent com e-mail de
+     contato declarado - nunca o e-mail pessoal do usuário, por regra de privacidade desta sessão) nem em
+     domínios de RI de terceiros fora do allowlist de rede (ex.: `mziq.com`) - perguntado ao usuário (28/11),
+     ele preferiu NÃO informar um e-mail de contato pra esta sessão usar, então a verificação de ponta a ponta
+     contra o documento, quando a trava mecânica (link presente) não basta, depende hoje só de (a) confiar no
+     pipeline que já gerou a entrada (Perplexity + confirmação da API do Claude, que já exige link+página - ver
+     "Biblioteca própria"), ou (b) o próprio usuário confirmar/corrigir o número (ele já conhece a fonte
+     oficial, como no caso real do GOOGL abaixo). CUIDADO - UM NÚMERO "IMPLAUSÍVEL" PODE SER REAL: uma
+     1ª tentativa de diagnóstico nesta trava supôs que um LPA trimestral bem acima da média (ex.: GOOGL 5,11/
+     9,11 vs. ~2-3 histórico) seria sempre sintoma de pegar um fato XBRL ACUMULADO (6/9 meses) por engano -
+     mas, no caso real do GOOGL (28/11/2026), a diferença entre o valor errado (19,16) e o correto (19,03,
+     segundo o usuário) era de só 0,13 (~0,7%), não o salto grande que uma confusão de 6/9 meses causaria -
+     a hipótese foi corrigida/retirada publicamente no comentário da PR depois de perceber isso. A Alphabet
+     também tem GAAP historicamente volátil entre trimestres por ganhos/perdas não realizados em títulos de
+     participação societária (marcação a mercado) - um trimestre bem acima da média não é necessariamente bug.
+     Conclusão: "número parece estranho" é motivo pra TRAVAR e pedir confirmação, nunca pra publicar uma causa
+     raiz sem ter certeza.
+  4. **TRAVA 4 - nenhuma troca de ticker**: 2 tickers diferentes nunca compartilham o MESMO link + MESMO
+     valor (`tickers_trocados`) - sinal de copiar o resultado de um ticker pro outro por engano. 2 tickers
+     com o MESMO valor mas fontes/links DIFERENTES não é troca, é coincidência numérica (ex.: GOOGL e MSFT
+     batendo em 19,16 na PR #73 - não compartilhavam link, não é troca; mas o valor da GOOGL ainda estava
+     ERRADO por outro motivo, ver a trava 3 acima).
+  Falhou em qualquer uma: PR vira DRAFT (nunca fechada sozinha) + comentário dizendo qual trava falhou e por
+  quê; decisão de mergear ou fechar fica com o humano depois. Passou nas 4 (com o julgamento da trava 2 pra
+  correções legítimas da REGRA 3): pode mergear.
+  **PEDIDO EXPLÍCITO DO USUÁRIO (28/11/2026) - não deixar travado parado**: falhou 1 trava, a 1ª reação NÃO é
+  só comentar e virar DRAFT - é CORRIGIR o erro de verdade (push novo no mesmo branch) e rodar as 4 travas de
+  novo, até 2 tentativas de correção. Só depois de 2 tentativas sem sucesso é que fica em DRAFT de vez,
+  chamando o usuário fora da PR (não só um comentário) pra decidir. "Corrigir" pode ser: (a) um bug de
+  verdade no DADO do branch (ex.: branch desatualizado em relação a uma correção já mergeada em outro PR -
+  resolve com merge do `main` + ajuste do registro específico, sem precisar de nenhuma fonte nova) ou (b) um
+  bug que precisaria de dado novo da fonte oficial pra confirmar - aí as 2 tentativas são, por exemplo, pedir
+  o acesso que falta (trava 3 acima) e, se recusado/bloqueado, tentar reduzir o problema ao mínimo possível
+  (ex.: calcular exatamente QUANTO e ONDE está a diferença) antes de chamar o usuário - nunca uma 2ª tentativa
+  que só repete a 1ª sem aprender nada novo.
+  **Primeira aplicação real (28/11/2026)**, nas 4 PRs abertas naquele momento:
+  - **PR #80 mergeada**: TGT 10,76 → 10,77 (REGRA 3, release oficial da Target, bate com teste travado) -
+    trava 2 "falhou" mecanicamente, mas o conteúdo confirma correção legítima.
+  - **PR #82 mergeada**: biblioteca própria, B3SA3/TSLA/WEGE3 novos, só adições, todas com link oficial - 4
+    travas passaram sem ressalva.
+  - **PR #72: DRAFT -> CORRIGIDA -> MERGEADA (mesmo dia, 1ª tentativa)**: `ttm_diario.json` mantinha TGT em
+    10,76 (branch aberto antes da correção da PR #80). Corrigido de verdade (não só comentado): branch local
+    clonado, `git merge` do `main` (que já trazia a correção) + 1 registro novo resincronizando o último
+    estado do TGT pro valor correto (`origem_ttm: CORRECAO_REGRA_3_RESYNC_PR72`), `python -m pytest` rodado
+    (536 testes), as 4 travas checadas de novo contra o `main` (todas OK), push no mesmo branch, PR tirada do
+    DRAFT e mergeada. `ttm_diario.json` é só um log interno do robô (`utils/ttm_auto.py`/
+    `tools/resumo_ttm_pr.py`/`utils/divergencia.py` - nunca lido por `tela/dados.py`/`app.py`), então o bug
+    nunca chegou a aparecer pro usuário final; ainda assim foi corrigido, pra não confundir o catch-up do
+    robô nem o corpo de PRs futuras.
+  - **PR #73 - GOOGL mantido em 19,16, fechada sem mergear**: 19,03 (hipótese inicial de trabalho desta
+    revisão, usada pra ilustrar a TRAVA 4) foi descartado depois de conferência: Q4 2025 = 2,82 + Q1 2026 =
+    5,11 + Q2 2026 = 9,11 + Q3 2026 = 2,12 = 19,16 GAAP diluído GOOGL - bate exatamente com o que já estava
+    em `utils/contabil_sec.json` (que, aliás, nem tinha mudado nesta PR - já era 19,16 no `main` antes dela).
+    Não trocar 19,16 por 19,03. O caminho até aqui seguiu a regra "2 tentativas, depois chama o usuário":
+    1ª tentativa (fato XBRL acumulado 6/9 meses) e 2ª tentativa (recalcular o tamanho real da diferença, só
+    0,13 - demais pequeno pra aquela hipótese) não resolveram sozinhas; uma 3ª tentativa de fetch direto em
+    `data.sec.gov` sem UA declarado foi BLOQUEADA pelo classificador de permissões da sessão - correto, dado
+    que o usuário já tinha recusado informar um e-mail de contato. Chamado o usuário fora da PR, que
+    conferiu os 4 trimestres fora desta sessão e confirmou 19,16 como o valor certo.
 
 ## Regras de cálculo (valem para todos os ativos)
 
@@ -1748,6 +1828,24 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
      - Nenhuma conta de altura/proporção das barras mudou em nenhum dos 2 ajustes - só exibição do
        eixo (texto/estilo) e espaçamento do bloco. Testado ao vivo com BBAS3: as 6 barras com
        rótulo em 2 linhas, sem sobrepor, e o gap visivelmente menor que antes.
+  7. **REGRA TRAVADA (28/11/2026) - barra sem dado nunca aparece vazia/zero**: `app._pontos_lpa_grafico`
+     só acrescenta cada uma das 3 barras do ano em curso ("Inicial", "Atual", "E"/Guidance-Projeção)
+     quando o dado por trás dela existe de verdade (`is not None`) - ativo sem Previsão Anual não
+     mostra "Inicial"; sem Guidance oficial nem consenso do Yahoo não mostra "E"; sem nenhum dos 2
+     mostra só o histórico (+ "Atual" se tiver TTM). Nunca um valor 0/traço no lugar do dado ausente -
+     a barra simplesmente não entra na lista. CORRIGIDO na mesma revisão: a barra "Inicial" tinha um
+     filtro `lpa_ini > 0` (sobra da versão empilhada anterior, que precisava de um valor positivo pro
+     segmento "Perdido" não ficar negativo) - um guidance inicial de PREJUÍZO (valor real, só que
+     negativo) ficava escondido por engano, como se fosse um dado ausente. Trocado por só `is not
+     None` (nenhum filtro de sinal): dado real aparece sempre, só dado ausente (`None`) não gera
+     barra. Testado ao vivo com MU (sem Previsão Anual, sem Guidance oficial - só guidance
+     TRIMESTRAL, que é outro card, e consenso do Yahoo pro ano): o gráfico mostra só 2024/2025/2026/
+     "2027 Atual"/"2027E Projeção" - sem nenhuma barra "Inicial" e sem nenhuma barra vazia no lugar.
+     `tests/test_app.py` (novo arquivo - `app.py` não pode ser importado direto num teste porque roda
+     código de script no nível do módulo, mesmo motivo de `tests/test_app_reload.py`; a função é
+     extraída do texto do arquivo via `ast` e executada isolada) trava os 8 cenários: com os 3 dados,
+     sem Previsão Anual, sem Guidance/consenso, sem os 2, sem TTM, sem nenhum dado do ano, Guidance
+     ausente mas com consenso (rótulo "Projeção", não "Guidance"), e valor negativo real não escondido.
 
 ## Textos
 
