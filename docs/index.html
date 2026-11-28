@@ -1393,8 +1393,8 @@ function montar(root, d) {
       const ultimosTrimestresHtml = UT && UT.linhas && UT.linhas.length ? `<div class="card" style="margin-bottom:10px">
         <div class="destaque">Últimos 4 trimestres (TTM)</div>
         <div class="lista-v num" style="margin-top:10px">
-          ${UT.linhas.map(l => `<div>${l.label}<b>${din(l.valor)}</b></div>`).join('')}
-          <div style="border-top:1px solid var(--borda); margin-top:4px; padding-top:8px"><strong style="display:flex; justify-content:space-between; width:100%; font-weight:800 !important; color:var(--texto)"><span>Total TTM</span><span>${din(UT.total)}</span></strong></div>
+          ${UT.linhas.map(l => `<div style="opacity:.7">${l.label}<b>${din(l.valor)}</b></div>`).join('')}
+          <div style="border-top:1px solid var(--borda); margin-top:4px; padding-top:8px"><strong style="display:flex; justify-content:space-between; width:100%; font-weight:900 !important; font-size:17px; color:#fff !important">Total TTM<span>${din(UT.total)}</span></strong></div>
         </div>
       </div>` : '';
       // texto completo da projeção (consenso/variação/base recalculada/dividendo) - usado só quando
