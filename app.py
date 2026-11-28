@@ -93,7 +93,7 @@ CSS = """
 .rodape { color:#8c99b0; font-size:.76rem; margin-top:1.5rem; text-align:center; }
 /* puxa o bloco "Lucro por ação - Evolução" um pouco pra cima, encostando mais perto do card
    "Lucro por ação" logo acima (fim do 1º componente da tela) - pedido do usuário, 27/11/2026. */
-.st-key-lpa_evolucao_bloco { margin-top: -1.75rem; }
+.st-key-lpa_evolucao_bloco { margin-top: -4.4rem; }
 </style>
 """
 
@@ -580,16 +580,16 @@ def _pontos_lpa_grafico(dados: dict) -> list[dict]:
     lpa_ttm = dados.get("lpa")
     lpa_ini = (dados.get("guidanceInicial") or {}).get("lpa")
     # 2 barras SEPARADAS (nunca uma só empilhada) pra estimativa do início do ano x TTM já realizado.
-    # Nome da barra autoexplicativo (27/11/2026, follow-up) - sem caption embaixo do gráfico, que o
-    # usuário pediu pra tirar: o próprio rótulo já diz o que cada uma é.
+    # Rótulo curto em 2 linhas (28/11/2026, follow-up) - "\n" vira quebra de linha de verdade no
+    # eixo do Vega-Lite (nativo, sem HTML/CSS próprio) - nunca mais frase longa embaixo do gráfico.
     if ano_proj and lpa_ini is not None and lpa_ini > 0:
-        pontos.append({"ano": f"{ano_proj} Inicial (Est. início ano)", "valor": lpa_ini})
+        pontos.append({"ano": f"{ano_proj}\nInicial", "valor": lpa_ini})
     if ano_proj and lpa_ttm is not None:
-        pontos.append({"ano": f"{ano_proj} Atual (TTM Realizado)", "valor": lpa_ttm})
+        pontos.append({"ano": f"{ano_proj}\nAtual", "valor": lpa_ttm})
 
     proj = ((dados.get("lynch") or {}).get("futuro") or {}).get("lpaEsteAno")
     if ano_proj and proj is not None:
-        pontos.append({"ano": f"{ano_proj}E ({'Guidance' if guia else 'Projeção'})", "valor": proj})
+        pontos.append({"ano": f"{ano_proj}E\n{'Guidance' if guia else 'Projeção'}", "valor": proj})
 
     return pontos
 

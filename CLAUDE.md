@@ -1724,6 +1724,30 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
      um container específico sem afetar outros blocos da página. Testado ao vivo com BBAS3: as 6
      barras aparecem com rótulo completo (nenhuma sumiu), sem nenhum caption embaixo do gráfico, e
      o `margin-top: -28px` computado confirmado via `getComputedStyle` no navegador.
+  6. **Follow-up no mesmo dia (28/11/2026) - rótulos curtos em 2 linhas + gap ainda menor**:
+     - **Rótulos em 2 linhas de verdade** (pedido: "2026 / Inicial" em vez da frase longa em 1
+       linha): 2 tentativas reais que NÃO funcionaram, documentadas no código pra não repetir -
+       (1) só colocar `"\n"` dentro do texto do rótulo (`f"{ano_proj}\nInicial"`) não quebra linha
+       sozinho no Vega-Lite - ele virava um espaço; (2) `lineBreak`/`encode` passados direto em
+       `alt.Axis(...)` dão `SchemaValidationError` - nenhum dos dois é parâmetro desse objeto
+       nessa versão do Altair/Vega-Lite (confirmado testando ao vivo, 2 erros reais). O que
+       FUNCIONA: `lineBreak` é propriedade do mark de texto que desenha o rótulo do eixo, e esse
+       mark usa por padrão o estilo `"guide-label"` do Vega-Lite - setado via
+       `chart.configure(style={"guide-label": {"lineBreak": "\n", "limit": 0}})` (o `config.style`
+       do Vega-Lite aceita propriedades de mark mais livremente que o schema de `Axis`, e por aí
+       sim o "\n" quebra linha de verdade). Rótulos ficaram só com a palavra-chave em cada linha:
+       "2023"/"2024"/"2025" sem mudança, depois "{ano}\nInicial" / "{ano}\nAtual" /
+       "{ano}E\nGuidance" (ou "Projeção" sem guidance oficial) - bem mais curtos que a versão
+       anterior ("2026 Inicial (Est. início ano)" etc.), sem precisar mais de `labelLimit` alto nem
+       fonte tão pequena (voltou a 10px).
+     - **Gap ainda menor**: o usuário pediu no máximo metade do espaço visto num print anterior.
+       Medido ao vivo (Playwright, `getBoundingClientRect` no fim do card "Lucro por ação" e no
+       topo do título "Evolução"): gap real de 84px com `margin-top: -1,75rem` (-28px) - trocado
+       pra `margin-top: -4.4rem` (-70,4px), medido de novo e confirmado em ~42px (exatamente
+       metade), sem sobrepor o card acima.
+     - Nenhuma conta de altura/proporção das barras mudou em nenhum dos 2 ajustes - só exibição do
+       eixo (texto/estilo) e espaçamento do bloco. Testado ao vivo com BBAS3: as 6 barras com
+       rótulo em 2 linhas, sem sobrepor, e o gap visivelmente menor que antes.
 
 ## Textos
 

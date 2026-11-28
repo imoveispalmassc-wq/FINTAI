@@ -31,16 +31,25 @@ def render_lpa_chart(dados):
     base = alt.Chart(df).encode(
         # labelOverlap=False força o Vega-Lite a mostrar TODOS os rótulos do eixo, mesmo quando ele
         # "acharia" melhor esconder alguns por falta de espaço (comportamento padrão que escondia
-        # barras no meio, ex. 2024/2026 Inicial/2026 Atual) - fonte menor (9px) e labelLimit maior
-        # (os nomes ficaram mais longos, autoexplicativos: "2026 Inicial (Est. início ano)" etc.)
-        # pra caber sem cortar o texto.
+        # barras no meio, ex. 2024/2026 Inicial/2026 Atual). Rótulo curto com "\n" (28/11/2026,
+        # follow-up: "2026\nInicial" em vez de "2026 Inicial (Est. início ano)") - 2 tentativas
+        # reais que NÃO funcionaram, documentadas pra não repetir: (1) só o "\n" no texto - o
+        # Vega-Lite não quebra linha sozinho, vira espaço; (2) `lineBreak`/`encode` direto em
+        # `alt.Axis(...)` - nenhum dos dois é parâmetro válido desse objeto (SchemaValidationError,
+        # testado ao vivo nas 2 tentativas). O jeito que FUNCIONA: `lineBreak` é propriedade do mark
+        # de texto que desenha o rótulo do eixo, e esse mark usa o estilo "guide-label" por padrão -
+        # setar via `configure(style=...)` no gráfico (schema mais permissivo que o de `Axis`)
+        # chega nesse mark sem passar pela validação restrita de `Axis`.
         x=alt.X("ano:N", sort=None, title=None,
-                axis=alt.Axis(labelAngle=0, labelOverlap=False, labelFontSize=9, labelLimit=240)),
+                axis=alt.Axis(labelAngle=0, labelOverlap=False, labelFontSize=10, labelLimit=120,
+                              labelLineHeight=12)),
         y=alt.Y("valor:Q", title=None),
     )
     barras = base.mark_bar()
     texto = base.mark_text(dy=-8, color="white").encode(text="rotulo:N")
-    st.altair_chart((barras + texto).properties(height=ALTURA_PX), use_container_width=True)
+    chart = (barras + texto).properties(height=ALTURA_PX).configure(
+        style={"guide-label": {"lineBreak": "\n", "limit": 0}})
+    st.altair_chart(chart, use_container_width=True)
     for d in dados:
         if d.get("detalhe"):
             st.caption(f"{d['ano']}: {d['detalhe']}")
