@@ -710,15 +710,15 @@ function montar(root, d) {
       // cada um na SUA PRÓPRIA linha, mas em ALTURAS diferentes - nunca na mesma posição:
       // - "Faixa superior acima de X" fica na linha de zCara (é literalmente onde a zona superior
       //   começa - um valor único, igual a qualquer outra linha do gráfico).
-      // - "Faixa neutra X a Y" (o INTERVALO inteiro, não só o teto) fica no MEIO da própria zona
-      //   neutra (ponto médio entre zOport e zCara) - ela não tem uma única "linha" de fronteira
-      //   própria (é delimitada por duas linhas que já existem: "Faixa inferior 1" embaixo e "Faixa
-      //   superior" em cima), então o texto fica solto no meio da faixa, não grudado numa fronteira -
-      //   isso também evita a confusão de antes (Faixa neutra aparecendo colada, ou implicando estar
+      // - "Neutra X" (28/11/2026, pedido do usuário: 1 linha própria, não mais o intervalo inteiro)
+      //   fica no PONTO MÉDIO da zona neutra, (zOport + zCara) / 2 - ela não tem uma única "linha"
+      //   de fronteira própria (é delimitada por duas linhas que já existem: "Faixa inferior 1"
+      //   embaixo e "Faixa superior" em cima), então fica solto no meio da faixa, não grudado numa
+      //   fronteira - evita a confusão de antes (Faixa neutra aparecendo colada, ou implicando estar
       //   só "acima" da Média 200d quando a MM200 está dentro da própria faixa neutra).
       const linhas = [
         { y: Y(zCara), t: 'Faixa superior acima de', v: f(zCara), c: '#f06a6a' },
-        { y: Y((zOport + zCara) / 2), t: 'Faixa neutra', v: `${f(zOport)} a ${f(zCara)}`, c: '#aab4c6' },
+        { y: Y((zOport + zCara) / 2), t: 'Neutra', v: f((zOport + zCara) / 2), c: '#aab4c6' },
         ...(LPg ? [{ y: Y(LPg.bemAbaixoAte), t: 'Bem abaixo de', v: f(LPg.bemAbaixoAte), c: '#7aa2f7' }] : []),
         ...(tem(mm200Ref) ? [{ y: Y(mm200Ref), t: 'Média 200d', v: f(mm200Ref), c: '#f2994a' }] : []),
         { y: Y(zOport), t: 'Faixa inferior 1', v: f(zOport), c: '#2fbf8a' },
