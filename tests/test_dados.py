@@ -583,3 +583,14 @@ def test_fundamentos_selo_eua_usa_lpa_direto_do_trimestre():
     lpa_sec = {"status": "ok", "trimestres": trimestres}
     s = _fundamentos_selo(lpa_sec, None)
     assert s is not None and s["nivel"] == 1 and s["titulo"] == "Observar: Lucro em queda"
+    # 28/11/2026 (bug achado com AAPL real): EUA é LPA por ação, não lucro total - a prova precisa
+    # saber disso pra não formatar como bilhões nem mostrar fonte CVM (empresa dos EUA = SEC)
+    assert s["prova"]["lucroPorAcao"] is True
+
+
+def test_fundamentos_selo_bbas3_prova_lucro_nao_e_por_acao():
+    lpa_sec = _lpa_sec_br([4_972_000_000.0, 3_090_000_000.0, 3_175_000_000.0, 1_216_000_000.0])
+    dados_fixos = {"trimestres": [{"tri": "4T25", "dividendo": 0.26}, {"tri": "1T26", "dividendo": 0.15},
+                                  {"tri": "2T26", "dividendo": 0.16}, {"tri": "3T26", "dividendo": 0.04}]}
+    s = _fundamentos_selo(lpa_sec, dados_fixos)
+    assert s["prova"]["lucroPorAcao"] is False

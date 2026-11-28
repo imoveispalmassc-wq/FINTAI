@@ -1,4 +1,37 @@
 {
+  "AAPL": {
+    "acoes_total": 14532182000.0,
+    "tipo_acao": "comum",
+    "fator_adr": 1,
+    "moeda_resultado": "USD",
+    "fonte_oficial": "SEC EDGAR, XBRL companyfacts (10-Q/10-K)",
+    "data_ultimo_balanco": "26/09/2026",
+    "lucro_12m": 132175000000.0,
+    "dividendo_12m": 1.06,
+    "dividendo_motivo": null,
+    "trimestres": [
+      {
+        "fim": "27/12/2025",
+        "valor": 42097000000.0,
+        "form": "10-Q"
+      },
+      {
+        "fim": "28/03/2026",
+        "valor": 29578000000.0,
+        "form": "10-Q"
+      },
+      {
+        "fim": "27/06/2026",
+        "valor": 29789000000.0,
+        "form": "10-Q"
+      },
+      {
+        "fim": "26/09/2026",
+        "valor": 30711000000.0,
+        "form": "10-K"
+      }
+    ]
+  },
   "BBAS3": {
     "acoes_total": 5708922664.0,
     "acoes_detalhe": "mesmo total usado no LPA contábil",

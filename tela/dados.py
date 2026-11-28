@@ -559,12 +559,17 @@ def _fundamentos_selo(lpa_sec: dict | None, dados_fixos: dict | None) -> dict | 
     `selo["prova"]` (28/11/2026, follow-up - "Por que está em alerta?"): os mesmos pontos/somas
     usados pra decidir, pra provar visualmente cada motivo (não só pedir pra acreditar no texto) -
     `{"lucro": _tendencia_detalhe, "roe": {...roe, "atual": roe_atual}, "dividendo":
-    _tendencia_detalhe}`, cada um `None` quando aquele fundamento não tem dado suficiente (nunca
-    mostra uma prova inventada).
+    _tendencia_detalhe, "lucroPorAcao": bool}`, cada detalhe `None` quando aquele fundamento não tem
+    dado suficiente (nunca mostra uma prova inventada). `lucroPorAcao` (28/11/2026, 2º follow-up -
+    bug achado testando AAPL): diz se os pontos de "lucro" são LPA por ação (EUA, `contabil_sec.json`
+    campo "lpa") ou lucro total em R$ (B3, `contabil_br.json` campo "lucro") - detectado pela
+    PRÓPRIA FORMA do dado (nunca por ticker/bolsa travado no código), pra `tela/detalhe.js` escolher
+    a formatação certa (bilhões x 2 casas decimais) e o texto de fonte certo (CVM x SEC EDGAR).
     """
     if not lpa_sec or lpa_sec.get("status") != "ok":
         return None
     trimestres = lpa_sec.get("trimestres") or []
+    lucro_por_acao = any(t.get("lpa") is not None for t in trimestres)
     lucro_pontos = [{"label": t.get("tri") or t.get("fim"), "valor": t.get("lpa", t.get("lucro"))}
                    for t in trimestres if t.get("lpa") is not None or t.get("lucro") is not None]
     lucro_detalhe = _tendencia_detalhe(lucro_pontos)
@@ -588,6 +593,7 @@ def _fundamentos_selo(lpa_sec: dict | None, dados_fixos: dict | None) -> dict | 
         "lucro": lucro_detalhe,
         "roe": {**roe_detalhe, "atual": roe_atual} if roe_detalhe else None,
         "dividendo": dividendo_detalhe,
+        "lucroPorAcao": lucro_por_acao,
     }
     return selo
 

@@ -123,8 +123,16 @@ function montar(root, d) {
   const provaFundamentosHtml = () => {
     const P = d.seloFundamentos && d.seloFundamentos.prova;
     if (!P) return '';
+    // lucroPorAcao (28/11/2026, bug achado testando AAPL): vem pronto do Python, detectado pela
+    // FORMA do dado (campo "lpa" de contabil_sec.json x "lucro" de contabil_br.json) - nunca por
+    // ticker/bolsa travado aqui. EUA = LPA por ação (precisa de 2 casas, nunca bi/mi) + fonte SEC
+    // EDGAR; B3 = lucro total em R$ (continua em bi/mi) + fonte CVM.
+    const eua = !!P.lucroPorAcao;
+    const lucroFmt = eua ? v => `${d.moeda} ${f(v, 2)}` : v => `${d.moeda} ${qtd(v)}`;
+    const fonte = eua ? `Fonte: SEC EDGAR / ${d.ticker}. Lucro Contábil.`
+                      : `Fonte: CVM / Análise do Desempenho ${d.ticker}. Lucro Contábil.`;
     const partes = [
-      provaFundamentoHtml('Lucro', P.lucro, v => `${d.moeda} ${qtd(v)}`, 'Lucro Líquido Contábil caindo: empresa lucrando menos que antes.'),
+      provaFundamentoHtml('Lucro', P.lucro, lucroFmt, 'Lucro Líquido Contábil caindo: empresa lucrando menos que antes.'),
       provaFundamentoHtml('ROE', P.roe, v => `${f(v * 100, 1)}%`, 'ROE caindo: gerando menos lucro pra cada R$ de patrimônio.'),
       provaFundamentoHtml('Dividendo', P.dividendo, v => din(v, 4), 'Dividendo reduzido: pagando menos que antes.'),
     ].filter(Boolean);
@@ -132,7 +140,7 @@ function montar(root, d) {
     return `<div class="card pf-card" style="margin-top:10px">
       <div class="destaque">Por que está em alerta?</div>
       ${partes.join('')}
-      <div class="pf-fonte">Fonte: CVM / Análise do Desempenho ${d.ticker}. Lucro Contábil.</div>
+      <div class="pf-fonte">${fonte}</div>
     </div>`;
   };
   // faixa de preço do período escolhido no gráfico: 52 semanas (padrão), 5 anos ou todo o histórico

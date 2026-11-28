@@ -1236,6 +1236,25 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   selo nenhum (ex. PETR4), o bloco inteiro não aparece. Sem lib nova - só div/CSS, como o resto da
   tela. Testado ao vivo: BBAS3 mostra os 3 (Lucro 8,06 bi → 4,39 bi; ROE 4,2% → 2,3%, atual 6,6%;
   Dividendo R$0,41 → R$0,20); PETR4 sem selo nem bloco.
+  **AUDITORIA "vale pra todos" (28/11/2026, 4º follow-up)**: confirmado que nada do selo/bloco está
+  travado em BBAS3 - `grep -rn "BBAS3" tela/dados.py utils/signals.py tela/detalhe.js` só acha
+  comentários de histórico, nenhum `if ticker ==`. Rodando `_fundamentos_selo` pra todos os tickers
+  de `contabil_br.json`/`contabil_sec.json`: **AAPL, ACM, META, PANW** também mostram o selo hoje
+  (Nível 1, só Lucro - EUA ainda sem ROE/Dividendo wired). Testado ao vivo com AAPL - achados 2
+  BUGS REAIS, corrigidos na mesma rodada:
+  1. **Fonte errada pra EUA**: o rodapé mostrava "Fonte: CVM / Análise do Desempenho AAPL." - mas
+     empresa dos EUA reporta à SEC, não à CVM. `selo["prova"]["lucroPorAcao"]` (novo campo,
+     `tela.dados._fundamentos_selo`) detecta EUA x B3 pela PRÓPRIA FORMA do dado (campo "lpa" de
+     `contabil_sec.json` x "lucro" de `contabil_br.json`), nunca por ticker/bolsa travado no código
+     - `tela/detalhe.js` escolhe "Fonte: SEC EDGAR / {ticker}." (EUA) ou "Fonte: CVM / Análise do
+     Desempenho {ticker}." (B3) com esse flag.
+  2. **LPA sem precisão pra EUA**: a barra "Lucro" da AAPL mostrava "US$ 2" (arredondado a 0 casas,
+     `qtd()` formata em bi/mi/tri - certo pra lucro total da B3, errado pra LPA por ação dos EUA).
+     Mesmo flag `lucroPorAcao` escolhe `f(v, 2)` (2 casas, ex. "US$ 2,84") em vez de `qtd(v)`.
+  Testado ao vivo: AAPL corrigida mostra "US$ 2,84"/"US$ 2,01"/"US$ 2,02"/"US$ 2,10" e "Fonte: SEC
+  EDGAR / AAPL."; BBAS3 continua igual (bilhões + "Fonte: CVM"). Testes travados em
+  `tests/test_dados.py` (`test_fundamentos_selo_eua_usa_lpa_direto_do_trimestre` ganhou a asserção
+  `lucroPorAcao is True`; `test_fundamentos_selo_bbas3_prova_lucro_nao_e_por_acao` novo, `is False`).
 - **Item 12 e 14 - Bloco único "Lucro e Preço vs Lucro"**: os antigos cards "Preço vs Lucro (P/L)" e
   "Crescimento de Lucro (LPA)" (que podiam se contradizer - ex. lucro caindo -66% com selo
   "Favorável" de P/L) viraram 1 card só, sem o selo "Favorável"/"Desfavorável"/"Neutro" de nenhum
