@@ -142,6 +142,7 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
 .pf-soma, .pf-atual { font-size: 12px; color: var(--suave); margin-top: 6px; }
 .pf-atual b { color: var(--texto); }
 .pf-frase { font-size: 12.5px; margin-top: 4px; }
+.pf-fonte { font-size: 11px; color: var(--suave); margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--borda); }
 .selo-fund-1 { background: #2a2a1f; color: #e3d9a0; }
 .selo-fund-2 { background: #40280f; color: #ffbf7a; }
 .selo-fund-3 { background: #3a1414; color: #ff9b9b; }
@@ -546,7 +547,7 @@ function montar(root, d) {
     const P = d.seloFundamentos && d.seloFundamentos.prova;
     if (!P) return '';
     const partes = [
-      provaFundamentoHtml('Lucro', P.lucro, v => `${d.moeda} ${qtd(v)}`, 'Lucro caindo: empresa lucrando menos que antes.'),
+      provaFundamentoHtml('Lucro', P.lucro, v => `${d.moeda} ${qtd(v)}`, 'Lucro Líquido Contábil caindo: empresa lucrando menos que antes.'),
       provaFundamentoHtml('ROE', P.roe, v => `${f(v * 100, 1)}%`, 'ROE caindo: gerando menos lucro pra cada R$ de patrimônio.'),
       provaFundamentoHtml('Dividendo', P.dividendo, v => din(v, 4), 'Dividendo reduzido: pagando menos que antes.'),
     ].filter(Boolean);
@@ -554,6 +555,7 @@ function montar(root, d) {
     return `<div class="card pf-card" style="margin-top:10px">
       <div class="destaque">Por que está em alerta?</div>
       ${partes.join('')}
+      <div class="pf-fonte">Fonte: CVM / Análise do Desempenho ${d.ticker}. Lucro Contábil.</div>
     </div>`;
   };
   // faixa de preço do período escolhido no gráfico: 52 semanas (padrão), 5 anos ou todo o histórico

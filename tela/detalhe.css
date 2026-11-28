@@ -120,6 +120,7 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
 .pf-soma, .pf-atual { font-size: 12px; color: var(--suave); margin-top: 6px; }
 .pf-atual b { color: var(--texto); }
 .pf-frase { font-size: 12.5px; margin-top: 4px; }
+.pf-fonte { font-size: 11px; color: var(--suave); margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--borda); }
 .selo-fund-1 { background: #2a2a1f; color: #e3d9a0; }
 .selo-fund-2 { background: #40280f; color: #ffbf7a; }
 .selo-fund-3 { background: #3a1414; color: #ff9b9b; }
