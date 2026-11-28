@@ -98,6 +98,42 @@ function montar(root, d) {
     const ICONE = S.nivel === 3 ? '⛔' : '⚠';
     return `<div class="selo-fund-topo ${CLASSE}"><b>${ICONE} ${S.titulo}</b>${seloMotivosHtml(S)}<span class="sub">${S.subtexto}</span></div>`;
   };
+  // "Por que está em alerta?" (28/11/2026, follow-up do item 11): prova visual de cada motivo do
+  // selo, com os MESMOS números que já decidiram o selo (d.seloFundamentos.prova, pronto do
+  // Python - nenhuma conta nova aqui, só desenha). Fica embaixo do selo de baixo, só quando há
+  // selo; cada fundamento (lucro/ROE/dividendo) só aparece se tiver prova (nunca inventa).
+  const provaFundamentoHtml = (titulo, prova, unidade, fraseCaindo) => {
+    if (!prova || !prova.caindo) return '';   // só mostra prova do fundamento que REALMENTE está ruim
+    const vals = prova.pontos.map(p => p.valor);
+    const maxAbs = Math.max(...vals.map(Math.abs), 1e-9);
+    const cols = prova.pontos.map((p, i) => {
+      const altura = Math.max(3, Math.round(Math.abs(vals[i]) / maxAbs * 36));
+      return `<div class="pf-col"><div class="pf-barra-wrap"><div class="pf-barra" style="height:${altura}px"></div></div>
+        <div class="pf-rot">${p.label}</div><div class="pf-val">${unidade(p.valor)}</div></div>`;
+    }).join('');
+    const atualHtml = tem(prova.atual) ? `<div class="pf-atual">ROE atual (12 meses): <b>${unidade(prova.atual)}</b></div>` : '';
+    return `<div class="pf-item">
+      <div class="pf-titulo">${titulo}</div>
+      <div class="pf-barras">${cols}</div>
+      <div class="pf-soma">${unidade(prova.somaAntes)} (2 primeiros) → ${unidade(prova.somaDepois)} (2 últimos)</div>
+      ${atualHtml}
+      <div class="pf-frase">${fraseCaindo}</div>
+    </div>`;
+  };
+  const provaFundamentosHtml = () => {
+    const P = d.seloFundamentos && d.seloFundamentos.prova;
+    if (!P) return '';
+    const partes = [
+      provaFundamentoHtml('Lucro', P.lucro, v => `${d.moeda} ${qtd(v)}`, 'Lucro caindo: empresa lucrando menos que antes.'),
+      provaFundamentoHtml('ROE', P.roe, v => `${f(v * 100, 1)}%`, 'ROE caindo: gerando menos lucro pra cada R$ de patrimônio.'),
+      provaFundamentoHtml('Dividendo', P.dividendo, v => din(v, 4), 'Dividendo reduzido: pagando menos que antes.'),
+    ].filter(Boolean);
+    if (!partes.length) return '';
+    return `<div class="card pf-card" style="margin-top:10px">
+      <div class="destaque">Por que está em alerta?</div>
+      ${partes.join('')}
+    </div>`;
+  };
   // faixa de preço do período escolhido no gráfico: 52 semanas (padrão), 5 anos ou todo o histórico
   const FAIXA_PADRAO = { min: d.min52, max: d.max52, zOport: d.zOport, zCara: d.zCara, decisao: d.decisao,
     rotulo: 'Últimas 52 semanas', curto: '52 semanas', testada: true };
@@ -687,7 +723,8 @@ function montar(root, d) {
           </div>
           <div class="marca-baixo num"><span class="aqui-rot" style="${ancora(p)}"><b>${f(d.preco)}</b>Você está aqui</span></div>
         </div>
-      </div>`;
+      </div>
+      ${provaFundamentosHtml()}`;
   }
   renderFaixa();
 

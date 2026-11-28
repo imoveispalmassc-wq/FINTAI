@@ -222,6 +222,43 @@ def test_buscar_fixos_br_grava_patrimonio_liquido_do_balanco_mais_recente():
     assert "patrimônio líquido" in r["fonte_oficial"]
 
 
+def test_buscar_fixos_br_patrimonio_trimestres_junta_os_4_quando_cada_release_tem_o_seu():
+    """Item 11 (28/11/2026): cada release trimestral normalmente reporta o PRÓPRIO balanço do seu
+    trimestre - se os 4 releases (um por trimestre) tiverem essa tabela, patrimonio_trimestres junta
+    os 4, não só o mais recente (continua em patrimonio_liquido, sem mudar o Issue #35)."""
+    docs_resultado = [_doc("2026-11-10"), _doc("2026-08-06"), _doc("2026-05-11"), _doc("2026-02-12")]
+    textos = {
+        "2026-11-10": f"{CAPA_ACOES}\nNo 3T26, o lucro líquido foi de R$ 39,75 bilhões.\n"
+                      "PASSIVO - R$ milhões 30.09.2026 30.06.2026 Patrimônio Líquido 505.631 480.000\n",
+        "2026-08-06": "No 2T26, o lucro líquido foi de R$ 52,45 bilhões.\n"
+                      "PASSIVO - R$ milhões 30.06.2026 31.03.2026 Patrimônio Líquido 480.000 460.000\n",
+        "2026-05-11": "No 1T26, o lucro líquido foi de R$ 32,71 bilhões.\n"
+                      "PASSIVO - R$ milhões 31.03.2026 31.12.2025 Patrimônio Líquido 460.000 417.587\n",
+        "2026-02-12": "No 4T25, o lucro líquido foi de R$ 28,00 bilhões.\n"
+                      "PASSIVO - R$ milhões 31.12.2025 30.09.2025 Patrimônio Líquido 417.587 400.000\n",
+    }
+
+    def busca_cnpj(ticker, hoje):
+        return ("33.000.167/0001-01", "PETROBRAS")
+
+    def busca_docs(cnpj, hoje):
+        return docs_resultado
+
+    def busca_docs_dividendo(cnpj, hoje):
+        return []
+
+    def ler_pdf(link):
+        return b"", textos[link.rsplit("/", 1)[1]]
+
+    r = df.buscar_fixos_br("PETR4", dt.date(2026, 11, 22), buscar_cnpj=busca_cnpj, buscar_docs=busca_docs,
+                          ler_pdf=ler_pdf, buscar_docs_dividendo=busca_docs_dividendo, contabil_cfg={})
+    assert r["status"] == "ok"
+    assert r["patrimonio_liquido"] == pytest.approx(505.631e9)  # Issue #35 continua igual
+    assert [p["trimestre"] for p in r["patrimonio_trimestres"]] == ["4T25", "1T26", "2T26", "3T26"]
+    assert [p["valor"] for p in r["patrimonio_trimestres"]] == pytest.approx(
+        [417.587e9, 460.0e9, 480.0e9, 505.631e9])
+
+
 def test_buscar_fixos_br_sem_patrimonio_em_nenhum_documento_fica_sem_dado():
     docs_resultado = [_doc("2026-11-10"), _doc("2026-08-06"), _doc("2026-05-11"), _doc("2026-02-12")]
     textos = {

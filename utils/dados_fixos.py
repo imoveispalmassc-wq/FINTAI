@@ -421,7 +421,10 @@ def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, b
                 patrimonios[tri], fontes_patrimonio[tri] = valor_pl, fonte_pl
         ordem = sorted(lidos, key=fim_do_trimestre)
         completo_lucro = acoes and len(ordem) >= 4 and all(tri_anterior(b) == a for a, b in zip(ordem[-4:], ordem[-3:]))
-        if completo_lucro and set(ordem[-4:]) <= set(dividendos) and ordem[-1] in patrimonios:
+        # Item 11 (28/11/2026): só para de ler documentos quando os 4 trimestres de patrimônio
+        # líquido também estiverem completos (não só o mais recente) - precisa do histórico pra
+        # calcular ROE trimestral (lucro/patrimônio) e a tendência dele, igual já faz pro lucro.
+        if completo_lucro and set(ordem[-4:]) <= set(dividendos) and set(ordem[-4:]) <= set(patrimonios):
             break
     if not acoes:
         return {"status": "nao_encontrado", "motivo": "número de ações (ON/PN/Units) não encontrado nos documentos da CVM"}
@@ -457,6 +460,13 @@ def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, b
     else:
         patrimonio_motivo = f"Patrimônio Líquido não encontrado no documento mais recente ({tri_recente})"
         fonte_patrimonio = None
+    # Item 11 (28/11/2026): histórico de patrimônio líquido por trimestre, pros MESMOS 4 trimestres
+    # de lucro (`tris_ult`) - usado só pra calcular ROE trimestral/tendência (utils.signals via
+    # tela.dados._fundamentos_selo); `patrimonio_liquido` acima (só o mais recente) continua sendo
+    # o valor usado em VPA/P/VP/ROE do card "Indicadores" (Issue #35), sem mudar nada lá. Trimestre
+    # sem patrimônio encontrado simplesmente não entra na lista (nunca estima/soma).
+    patrimonio_trimestres = [{"trimestre": t, "fim": next(x["fim"] for x in ult if x["tri"] == t),
+                              "valor": patrimonios[t]} for t in tris_ult if t in patrimonios]
     if contabil:
         tipo_acao = "Total (contabil_br.json)"
     elif " + " in acoes_detalhe:
@@ -475,6 +485,7 @@ def buscar_fixos_br(ticker: str, hoje: dt.date, *, buscar_cnpj=cnpj_do_ticker, b
         "data_ultimo_balanco": ult[-1]["fim"], "lucro_12m": sum(x["lucro"] for x in ult),
         "dividendo_12m": dividendo_12m, "dividendo_motivo": dividendo_motivo,
         "patrimonio_liquido": patrimonio_liquido, "patrimonio_motivo": patrimonio_motivo,
+        "patrimonio_trimestres": patrimonio_trimestres,
         "trimestres": ult,
     }
 

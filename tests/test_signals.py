@@ -207,6 +207,13 @@ def test_selo_fundamentos_motivos_dizem_qual_fundamento_acionou():
     assert s3["motivos"] == ["Lucro em queda", "ROE em queda", "Dividendo cortado"]
 
 
+def test_selo_fundamentos_roe_disponivel_e_estavel_aparece_na_lista():
+    # ROE disponível (28/11/2026) e NÃO caindo - ainda aparece como "ROE estável", nunca omitido
+    # (antes sumia por completo quando não era ruim, dando a entender que faltava o dado)
+    s = avaliar_fundamentos(lucro_caindo=True, roe_disponivel=True, roe_caindo=False, dividendo_cortado=True)
+    assert "ROE estável" in s["motivos"]
+
+
 def test_selo_fundamentos_sem_roe_disponivel_usa_so_lucro_e_dividendo():
     # caso real BBAS3 (28/11/2026): ROE sem série trimestral (roe_disponivel=False), mas lucro E
     # dividendo caindo pelos 4 trimestres já salvos - 2 ruins = nivel 2, mesmo sem ROE

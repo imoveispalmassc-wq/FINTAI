@@ -12,6 +12,28 @@
     "dividendo_motivo": null,
     "patrimonio_liquido": 190121000000.0,
     "patrimonio_motivo": null,
+    "patrimonio_trimestres": [
+      {
+        "trimestre": "4T25",
+        "fim": "31/12/2025",
+        "valor": 192105000000.0
+      },
+      {
+        "trimestre": "1T26",
+        "fim": "31/03/2026",
+        "valor": 194940000000.0
+      },
+      {
+        "trimestre": "2T26",
+        "fim": "30/06/2026",
+        "valor": 189211000000.0
+      },
+      {
+        "trimestre": "3T26",
+        "fim": "30/09/2026",
+        "valor": 190121000000.0
+      }
+    ],
     "trimestres": [
       {
         "tri": "4T25",

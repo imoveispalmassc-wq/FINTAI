@@ -1211,6 +1211,31 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   nenhuma lógica duplicada. Testado ao vivo, BBAS3 real: "Lucro em queda" / "ROE: sem dado" /
   "Dividendo reduzido" aparecem nos 2 lugares; PETR4 continua sem selo. Testes travados em
   `tests/test_signals.py::test_selo_fundamentos_motivos_dizem_qual_fundamento_acionou`.
+  **STATUS (28/11/2026, 3º follow-up) - ROE ligado com dado real pra B3 + bloco "Por que está em
+  alerta?"**: `utils.dados_fixos.buscar_fixos_br` não para mais de ler documentos da CVM assim que
+  acha o patrimônio líquido só do trimestre mais recente - continua até achar os 4 (ou esgotar os
+  documentos), gravando todos em `patrimonio_trimestres` (novo campo, `utils/dados_fixos.json`) -
+  `patrimonio_liquido` (Issue #35, P/VP/ROE do card Indicadores) continua igual, só o mais recente.
+  `tela.dados._roe_trimestral` pareia lucro de cada trimestre (`contabil_br.json`, campo "tri") com
+  `patrimonio_trimestres` (mesmo campo, "trimestre") e calcula ROE = lucro÷patrimônio por trimestre
+  - 2 últimos vs 2 anteriores, igual lucro/dividendo. `utils.signals.avaliar_fundamentos` sempre
+  mostra uma linha de ROE quando disponível (mesmo estável, antes sumia); o texto genérico é
+  substituído pelo valor real (`tela.dados._roe_texto`) - "ROE em queda (X%)"/"ROE estável (X%)"/
+  "ROE atual X% - sem histórico" quando só o valor atual (TTM) é conhecido, sem o histórico.
+  Testado ao vivo contra a CVM (sem simular nada): BBAS3 tem os 4 trimestres de patrimônio líquido
+  (192,105/194,940/189,211/190,121 bi) - ROE caiu de ~4,17% (4T25+1T26) pra ~2,32% (2T26+3T26),
+  atual (TTM) 6,6% (mesma fórmula do card Indicadores). EUA ainda não tem `patrimonio_trimestres`
+  (só B3, via `_contabil_br_configurado`) - fica pra outra mudança, se pedido.
+  **Bloco "Por que está em alerta?"** (`tela/detalhe.js`/`.css`, card novo embaixo do selo de
+  baixo): prova visual de cada motivo, com os MESMOS números que decidiram o selo
+  (`d.seloFundamentos.prova`, calculado em `tela.dados._fundamentos_selo` - nenhuma conta nova no
+  JS, só desenha) - mini barras (position:relative/absolute só na barra, rótulo/valor em fluxo
+  normal abaixo dela, mesma técnica que já resolveu os bugs de alinhamento do gráfico de LPA) +
+  soma "2 primeiros → 2 últimos" + 1 frase de fato por fundamento (Lucro/ROE/Dividendo). Só mostra
+  o fundamento que REALMENTE está ruim (nunca uma prova de algo que não contribuiu pro alerta); sem
+  selo nenhum (ex. PETR4), o bloco inteiro não aparece. Sem lib nova - só div/CSS, como o resto da
+  tela. Testado ao vivo: BBAS3 mostra os 3 (Lucro 8,06 bi → 4,39 bi; ROE 4,2% → 2,3%, atual 6,6%;
+  Dividendo R$0,41 → R$0,20); PETR4 sem selo nem bloco.
 - **Item 12 e 14 - Bloco único "Lucro e Preço vs Lucro"**: os antigos cards "Preço vs Lucro (P/L)" e
   "Crescimento de Lucro (LPA)" (que podiam se contradizer - ex. lucro caindo -66% com selo
   "Favorável" de P/L) viraram 1 card só, sem o selo "Favorável"/"Desfavorável"/"Neutro" de nenhum

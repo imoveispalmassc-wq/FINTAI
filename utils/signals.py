@@ -304,7 +304,9 @@ def avaliar_fundamentos(*, lucro_caindo: bool | None, lucro_trimestres_seguidos:
                 "subtexto": "1 fundamento em alerta. Verifique antes de decidir."}
     dividendo_palavra = "Dividendo cortado" if estrutural else "Dividendo reduzido"
     motivos = ["Lucro em queda" if lucro_caindo else None]
-    motivos.append(("ROE em queda" if roe_caindo else None) if roe_disponivel else "ROE: sem dado")
+    # 28/11/2026: com ROE disponível, sempre mostra uma linha pra ele (mesmo estável) - antes só
+    # aparecia quando estava caindo, dando a entender (errado) que não tínhamos o dado.
+    motivos.append(("ROE em queda" if roe_caindo else "ROE estável") if roe_disponivel else "ROE: sem dado")
     if paga_dividendo:
         motivos.append(dividendo_palavra if dividendo_cortado else None)
     motivos = [m for m in motivos if m]

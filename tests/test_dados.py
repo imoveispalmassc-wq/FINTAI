@@ -488,7 +488,8 @@ def test_dados_fixos_tela_calcula_com_a_cotacao_do_dia():
 def _lpa_sec_br(valores):
     """Trimestres no formato real de contabil_br.json (campo "lucro")."""
     fins = ["31/12/2025", "31/03/2026", "30/06/2026", "30/09/2026"]
-    return {"status": "ok", "trimestres": [{"fim": f, "lucro": v} for f, v in zip(fins, valores)]}
+    tris = ["4T25", "1T26", "2T26", "3T26"]
+    return {"status": "ok", "trimestres": [{"tri": t, "fim": f, "lucro": v} for t, f, v in zip(tris, fins, valores)]}
 
 
 def test_fundamentos_selo_bbas3_real_lucro_e_dividendo_caindo_vira_alerta():
@@ -500,6 +501,62 @@ def test_fundamentos_selo_bbas3_real_lucro_e_dividendo_caindo_vira_alerta():
     dados_fixos = {"trimestres": [{"dividendo": 0.26}, {"dividendo": 0.15}, {"dividendo": 0.16}, {"dividendo": 0.04}]}
     s = _fundamentos_selo(lpa_sec, dados_fixos)
     assert s is not None and s["nivel"] == 2 and s["titulo"] == "Fundamentos em alerta"
+
+
+def test_fundamentos_selo_bbas3_com_patrimonio_trimestral_mostra_roe_real():
+    """Item 11 (28/11/2026, follow-up): com utils/dados_fixos.patrimonio_trimestres preenchido
+    (ver utils/dados_fixos.buscar_fixos_br), o ROE deixa de ser "sem dado" - mostra a tendência
+    real (lucro/patrimônio por trimestre) e o valor atual (lucro_12m/patrimonio_liquido, MESMA
+    fórmula do card Indicadores)."""
+    lpa_sec = _lpa_sec_br([4_972_000_000.0, 3_090_000_000.0, 3_175_000_000.0, 1_216_000_000.0])
+    dados_fixos = {
+        "trimestres": [{"tri": "4T25", "dividendo": 0.26}, {"tri": "1T26", "dividendo": 0.15},
+                      {"tri": "2T26", "dividendo": 0.16}, {"tri": "3T26", "dividendo": 0.04}],
+        "lucro_12m": 12_453_000_000.0, "patrimonio_liquido": 190_121_000_000.0,
+        "patrimonio_trimestres": [
+            {"trimestre": "4T25", "valor": 180_000_000_000.0},
+            {"trimestre": "1T26", "valor": 183_000_000_000.0},
+            {"trimestre": "2T26", "valor": 186_000_000_000.0},
+            {"trimestre": "3T26", "valor": 190_121_000_000.0},
+        ],
+    }
+    s = _fundamentos_selo(lpa_sec, dados_fixos)
+    # nível 3 exige dívida subindo (não wired por _fundamentos_selo ainda) - fica nível 2, mas com
+    # os 3 motivos (lucro + ROE + dividendo), ROE com o valor real, não mais "sem dado"
+    assert s["nivel"] == 2
+    assert "ROE em queda (6,6%)" in s["motivos"]
+    # prova visual ("Por que está em alerta?") - os mesmos pontos/somas usados pra decidir
+    prova = s["prova"]
+    assert [p["label"] for p in prova["lucro"]["pontos"]] == ["4T25", "1T26", "2T26", "3T26"]
+    assert prova["lucro"]["somaAntes"] == pytest.approx(4_972_000_000.0 + 3_090_000_000.0)
+    assert prova["lucro"]["somaDepois"] == pytest.approx(3_175_000_000.0 + 1_216_000_000.0)
+    assert prova["lucro"]["caindo"] is True
+    assert [p["label"] for p in prova["roe"]["pontos"]] == ["4T25", "1T26", "2T26", "3T26"]
+    assert prova["roe"]["atual"] == pytest.approx(12_453_000_000.0 / 190_121_000_000.0)
+    assert prova["roe"]["caindo"] is True
+    assert [p["label"] for p in prova["dividendo"]["pontos"]] == ["4T25", "1T26", "2T26", "3T26"]
+    assert prova["dividendo"]["somaAntes"] == pytest.approx(0.26 + 0.15)
+    assert prova["dividendo"]["somaDepois"] == pytest.approx(0.16 + 0.04)
+    assert prova["dividendo"]["caindo"] is True
+
+
+def test_fundamentos_selo_roe_estavel_mostra_valor_mesmo_sem_cair():
+    """ROE disponível mas estável (não caindo) - ainda mostra o valor real, nunca "sem dado".
+    Patrimônio encolhe na MESMA proporção do lucro (8,8,2,2 / 80,80,20,20) pra manter o ROE
+    trimestral constante em 10% apesar do lucro estar caindo (fundamento "Lucro" fica ruim
+    independente - o que se testa aqui é só o ROE, que é uma conta separada)."""
+    lpa_sec_caindo = _lpa_sec_br([8.0, 8.0, 2.0, 2.0])
+    dados_fixos = {
+        "trimestres": [{"dividendo": 0.26}, {"dividendo": 0.15}, {"dividendo": 0.16}, {"dividendo": 0.04}],
+        "lucro_12m": 4.0, "patrimonio_liquido": 100.0,   # só pro texto "ROE atual" (4,0%), independente da tendência
+        "patrimonio_trimestres": [
+            {"trimestre": "4T25", "valor": 80.0}, {"trimestre": "1T26", "valor": 80.0},
+            {"trimestre": "2T26", "valor": 20.0}, {"trimestre": "3T26", "valor": 20.0},
+        ],
+    }
+    s = _fundamentos_selo(lpa_sec_caindo, dados_fixos)
+    assert s is not None
+    assert any(m.startswith("ROE estável (4,0%)") for m in s["motivos"])
 
 
 def test_fundamentos_selo_petr4_real_lucro_subindo_sem_dados_fixos_fica_sem_selo():

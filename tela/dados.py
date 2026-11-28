@@ -492,14 +492,50 @@ def dados_fixos_tela(fixos: dict | None, cotacao: float | None) -> dict | None:
             "contas": ind["contas"]}
 
 
-def _tendencia_ruim(valores: list[float]) -> bool | None:
-    """Últimos 2 valores somados vs. os 2 anteriores - o máximo que dá pra comparar com só 4
-    trimestres guardados (sem 5-8 trimestres, não dá pra fazer "mesmo trimestre do ano anterior").
-    Menos rigoroso que isso, mas real: só soma números que já estão salvos, nunca inventa nem busca
-    de novo. Precisa de pelo menos 4 valores consecutivos; com menos, devolve None (sem dado)."""
-    if len(valores) < 4:
+def _tendencia_detalhe(pontos: list[dict]) -> dict | None:
+    """pontos: [{"label": str, "valor": float}, ...], do trimestre mais antigo pro mais novo, já
+    alinhados/filtrados por quem chama. Últimos 2 somados vs. os 2 anteriores - o máximo que dá pra
+    comparar com só 4 trimestres guardados (sem 5-8, não dá pra fazer "mesmo trimestre do ano
+    anterior"). Menos rigoroso que isso, mas real: só soma números que já estão salvos, nunca
+    inventa nem busca de novo. Precisa de pelo menos 4; usa só os 4 últimos. Com menos de 4,
+    devolve None (sem dado) - também serve de base pra prova visual do selo (Item 11, 28/11/2026:
+    os mesmos 4 pontos + as 2 somas aparecem na tela, não só o veredito "caindo"/"não caindo")."""
+    if len(pontos) < 4:
         return None
-    return sum(valores[-2:]) < sum(valores[-4:-2])
+    p = pontos[-4:]
+    soma_antes, soma_depois = p[0]["valor"] + p[1]["valor"], p[2]["valor"] + p[3]["valor"]
+    return {"pontos": p, "somaAntes": soma_antes, "somaDepois": soma_depois, "caindo": soma_depois < soma_antes}
+
+
+def _roe_trimestral(lpa_sec: dict | None, dados_fixos: dict | None) -> tuple[dict | None, float | None]:
+    """ROE trimestral (lucro do trimestre ÷ patrimônio líquido DO MESMO trimestre - Item 11,
+    28/11/2026) - pareia pelo campo "tri" (ex. "4T25") dos trimestres de lucro
+    (`utils/contabil_br.json`) com `dados_fixos.patrimonio_trimestres` (mesmo campo "trimestre").
+    Devolve o detalhe de `_tendencia_detalhe` (ou None, sem os 4 pares lucro+patrimônio - nunca
+    estima) e o ROE "atual" (TTM): lucro_12m/patrimonio_liquido (MESMA fórmula de
+    `utils.dados_fixos.calcular_indicadores`, pra bater com o que "Indicadores" já mostra) - só
+    pra texto, não entra na comparação de tendência. Hoje só a B3 tem patrimonio_trimestres (ver
+    `utils.dados_fixos.buscar_fixos_br`) - EUA ainda não (SEC, outra issue)."""
+    pats = {p["trimestre"]: p["valor"] for p in (dados_fixos or {}).get("patrimonio_trimestres") or [] if p.get("valor")}
+    roe_atual = None
+    lucro_12m, patrimonio_liquido = (dados_fixos or {}).get("lucro_12m"), (dados_fixos or {}).get("patrimonio_liquido")
+    if lucro_12m is not None and patrimonio_liquido:
+        roe_atual = lucro_12m / patrimonio_liquido
+    pontos = [{"label": t["tri"], "valor": t["lucro"] / pats[t["tri"]]} for t in (lpa_sec or {}).get("trimestres") or []
+             if t.get("tri") in pats and t.get("lucro") is not None]
+    return _tendencia_detalhe(pontos), roe_atual
+
+
+def _roe_texto(roe_caindo: bool | None, roe_atual: float | None) -> str | None:
+    """Texto real pra substituir "ROE em queda"/"ROE: sem dado" genéricos no selo, com o valor -
+    pedido do usuário (28/11/2026): nunca só "sem dado" quando já se sabe o ROE atual (Indicadores
+    já mostra esse número), mesmo sem o histórico pra dizer se está caindo ou não."""
+    if roe_atual is None:
+        return None
+    pct = f"{roe_atual * 100:.1f}".replace(".", ",") + "%"
+    if roe_caindo is None:
+        return f"ROE atual {pct} - sem histórico"
+    return f"ROE em queda ({pct})" if roe_caindo else f"ROE estável ({pct})"
 
 
 def _fundamentos_selo(lpa_sec: dict | None, dados_fixos: dict | None) -> dict | None:
@@ -513,22 +549,47 @@ def _fundamentos_selo(lpa_sec: dict | None, dados_fixos: dict | None) -> dict | 
     tickers com dados_fixos cadastrado, ex. BBAS3) - sem esse campo, o dividendo fica de fora do
     cálculo (equivalente a `paga_dividendo=False`, mas por falta de DADO, não porque a empresa não
     pague - documentado aqui pra não confundir os dois motivos).
-    ROE: SEM série trimestral em nenhuma fonte do projeto (`patrimonio_liquido` em
-    dados_fixos.json é só o balanço mais recente) - sempre `roe_disponivel=False`. Por isso o
-    Nível 3 (que exige ROE) nunca dispara ainda; Níveis 1 e 2 (só lucro + dividendo) já podem.
+    ROE (28/11/2026, ligado com dado real pra B3 - ver `_roe_trimestral`): mesmos 4 trimestres de
+    lucro pareados com `dados_fixos.patrimonio_trimestres` (novo, `utils.dados_fixos.
+    buscar_fixos_br`) - sem os 4 (ticker sem dados_fixos, ou patrimônio não encontrado em algum
+    trimestre), `roe_disponivel=False` como antes (Nível 3 não dispara). O texto genérico do motivo
+    ("ROE em queda"/"ROE estável"/"ROE: sem dado") é substituído pelo texto com o valor real
+    (`_roe_texto`) sempre que o ROE atual (TTM) é conhecido, mesmo sem o histórico completo.
+
+    `selo["prova"]` (28/11/2026, follow-up - "Por que está em alerta?"): os mesmos pontos/somas
+    usados pra decidir, pra provar visualmente cada motivo (não só pedir pra acreditar no texto) -
+    `{"lucro": _tendencia_detalhe, "roe": {...roe, "atual": roe_atual}, "dividendo":
+    _tendencia_detalhe}`, cada um `None` quando aquele fundamento não tem dado suficiente (nunca
+    mostra uma prova inventada).
     """
     if not lpa_sec or lpa_sec.get("status") != "ok":
         return None
     trimestres = lpa_sec.get("trimestres") or []
-    lucro_vals = [t.get("lpa", t.get("lucro")) for t in trimestres if t.get("lpa") is not None or t.get("lucro") is not None]
-    lucro_caindo = _tendencia_ruim(lucro_vals)
-    if lucro_caindo is None:
+    lucro_pontos = [{"label": t.get("tri") or t.get("fim"), "valor": t.get("lpa", t.get("lucro"))}
+                   for t in trimestres if t.get("lpa") is not None or t.get("lucro") is not None]
+    lucro_detalhe = _tendencia_detalhe(lucro_pontos)
+    if lucro_detalhe is None:
         return None
     div_trimestres = (dados_fixos or {}).get("trimestres") or []
-    div_vals = [t.get("dividendo") for t in div_trimestres if t.get("dividendo") is not None]
-    dividendo_cortado = _tendencia_ruim(div_vals)
-    return avaliar_fundamentos(lucro_caindo=lucro_caindo, roe_disponivel=False,
-                               paga_dividendo=dividendo_cortado is not None, dividendo_cortado=dividendo_cortado)
+    div_pontos = [{"label": t.get("tri") or t.get("fim"), "valor": t.get("dividendo")}
+                 for t in div_trimestres if t.get("dividendo") is not None]
+    dividendo_detalhe = _tendencia_detalhe(div_pontos)
+    roe_detalhe, roe_atual = _roe_trimestral(lpa_sec, dados_fixos)
+    roe_caindo = roe_detalhe["caindo"] if roe_detalhe else None
+    selo = avaliar_fundamentos(lucro_caindo=lucro_detalhe["caindo"], roe_disponivel=roe_caindo is not None,
+                               roe_caindo=roe_caindo, paga_dividendo=dividendo_detalhe is not None,
+                               dividendo_cortado=dividendo_detalhe["caindo"] if dividendo_detalhe else None)
+    if not selo:
+        return None
+    roe_texto = _roe_texto(roe_caindo, roe_atual)
+    if roe_texto and selo.get("motivos"):
+        selo = {**selo, "motivos": [roe_texto if m.startswith("ROE") else m for m in selo["motivos"]]}
+    selo["prova"] = {
+        "lucro": lucro_detalhe,
+        "roe": {**roe_detalhe, "atual": roe_atual} if roe_detalhe else None,
+        "dividendo": dividendo_detalhe,
+    }
+    return selo
 
 
 def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str, dados_fixos: dict | None = None,
