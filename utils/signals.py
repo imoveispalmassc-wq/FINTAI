@@ -288,9 +288,9 @@ def avaliar_fundamentos(*, lucro_caindo: bool | None, lucro_trimestres_seguidos:
     if n_ruins >= 2:
         return {"nivel": 2, "titulo": "Fundamentos em alerta",
                 "subtexto": "Preço baixo não significa barato. Verifique os fundamentos antes de decidir."}
-    nomes = {0: "Lucro", 1: "ROE"}
+    nomes = {0: "Lucro em queda", 1: "ROE em queda"}
     if paga_dividendo:
-        nomes[2] = "Dividendo"
+        nomes[2] = "Dividendo reduzido"
     idx_ruim = ruins.index(True)
     return {"nivel": 1, "titulo": f"Observar: {nomes[idx_ruim]}",
             "subtexto": "1 fundamento em alerta. Verifique antes de decidir."}

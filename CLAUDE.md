@@ -1155,6 +1155,19 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   "nunca invente comparação" - ver regra geral do projeto). Para o selo aparecer de verdade, uma
   issue futura precisa: (a) o robô de contábil (B3 e EUA) guardar 5+ trimestres em vez de 4; (b)
   calcular e guardar ROE trimestral (lucro ÷ patrimônio líquido), hoje inexistente no projeto.
+  **STATUS (28/11/2026): visual pronto, aguardando infraestrutura de dados** - esta mesma sessão
+  corrigiu o texto do Nível 1 (`utils/signals.py`: "Observar: Lucro em queda" / "Observar: ROE em
+  queda" / "Observar: Dividendo reduzido" - antes só "Observar: Lucro"/"ROE"/"Dividendo", sem o
+  verbo) e acrescentou uma 2ª exibição do MESMO selo (mesma função, mesmo `d.seloFundamentos`,
+  nenhuma lógica nova), compacta em 1 linha, logo acima das abas CONSERVADOR/CRESCIMENTO/
+  QUANTITATIVO (`#selo-fund-topo` em `tela/detalhe.html`/`.css`/`.js`) - pedido do usuário pra dar
+  mais visibilidade, sem duplicar a lógica de decisão. Os 4 cenários (sem selo, nível 1, nível 2,
+  nível 2 sem virar nível 3) foram provados com um harness local que roda `tela/detalhe.js`/`.html`/
+  `.css` de verdade injetando `d.seloFundamentos` manualmente - nunca com um ticker real, porque a
+  limitação acima (sem 8+ trimestres de LPA, sem série trimestral de ROE, sem série trimestral de
+  dividendo) continua existindo e não foi tocada nesta mudança. O item NÃO está concluído: falta a
+  infraestrutura de dados pra `lucro_caindo`/`roe_caindo`/`dividendo_cortado` deixarem de ser sempre
+  `None` pra qualquer ticker real.
 - **Item 12 e 14 - Bloco único "Lucro e Preço vs Lucro"**: os antigos cards "Preço vs Lucro (P/L)" e
   "Crescimento de Lucro (LPA)" (que podiam se contradizer - ex. lucro caindo -66% com selo
   "Favorável" de P/L) viraram 1 card só, sem o selo "Favorável"/"Desfavorável"/"Neutro" de nenhum

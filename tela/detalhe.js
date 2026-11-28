@@ -85,6 +85,15 @@ function montar(root, d) {
     const CLASSE = { 1: 'selo-fund-1', 2: 'selo-fund-2', 3: 'selo-fund-3' }[S.nivel] || 'selo-fund-1';
     return `<div class="selo-fund ${CLASSE}"><b>${S.titulo}</b><span>${S.subtexto}</span></div>`;
   };
+  // Mesmo selo, versão compacta (1 linha) pra cima da tela, antes das abas de modo - MESMO
+  // d.seloFundamentos, nenhuma lógica/fonte nova (pedido do usuário, follow-up do item 11).
+  const seloFundamentosTopoHtml = () => {
+    const S = d.seloFundamentos;
+    if (!S || !S.nivel) return '';
+    const CLASSE = { 1: 'selo-fund-1', 2: 'selo-fund-2', 3: 'selo-fund-3' }[S.nivel] || 'selo-fund-1';
+    const ICONE = S.nivel === 3 ? '⛔' : '⚠';
+    return `<div class="selo-fund-topo ${CLASSE}"><span class="ico">${ICONE}</span><b>${S.titulo}</b><span class="sub">${S.subtexto}</span></div>`;
+  };
   // faixa de preço do período escolhido no gráfico: 52 semanas (padrão), 5 anos ou todo o histórico
   const FAIXA_PADRAO = { min: d.min52, max: d.max52, zOport: d.zOport, zCara: d.zCara, decisao: d.decisao,
     rotulo: 'Últimas 52 semanas', curto: '52 semanas', testada: true };
@@ -115,6 +124,7 @@ function montar(root, d) {
   };
 
   /* ---------------- topo e decisão */
+  $('selo-fund-topo').innerHTML = seloFundamentosTopoHtml();
   $('t-nome').textContent = d.nome;
   $('t-bolsa').textContent = d.bolsa ? `${d.bolsa} (${d.ticker})` : d.ticker;
   // cabeçalho fixo (sticky, CSS): nome completo + bolsa + preço no topo da página. Ao rolar (classe

@@ -104,6 +104,16 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
 .selo-fund-1 { background: #2a2a1f; color: #e3d9a0; }
 .selo-fund-2 { background: #40280f; color: #ffbf7a; }
 .selo-fund-3 { background: #3a1414; color: #ff9b9b; }
+
+/* Versão compacta do mesmo selo (item 11, follow-up): 1 linha, logo acima das abas de modo - mesmo
+   dado (d.seloFundamentos), nunca uma 2ª lógica. Ellipsis garante 1 linha só, nunca empurra o
+   gráfico nem quebra em celular, mesmo com o subtexto completo (nível 3 é o mais longo). */
+#selo-fund-topo:empty { display: none; }
+.selo-fund-topo { display: flex; align-items: center; gap: 7px; margin: 2px 0 10px; padding: 6px 10px;
+  border-radius: 8px; font-size: 12px; overflow: hidden; }
+.selo-fund-topo .ico { flex: 0 0 auto; font-size: 12px; }
+.selo-fund-topo b { flex: 0 0 auto; font-size: 12px; white-space: nowrap; }
+.selo-fund-topo .sub { flex: 1 1 auto; min-width: 0; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .duas { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .duas .dir { font-size: 17px; font-weight: 700; text-align: right; white-space: nowrap; }
 .duas .esq small { display: block; color: var(--suave); font-size: 12px; margin-top: 2px; }

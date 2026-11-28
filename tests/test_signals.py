@@ -173,7 +173,11 @@ def test_selo_fundamentos_sem_nenhum_ruim():
 
 def test_selo_fundamentos_nivel_1_observar():
     s = avaliar_fundamentos(lucro_caindo=True, roe_caindo=False, dividendo_cortado=False)
-    assert s["nivel"] == 1 and s["titulo"] == "Observar: Lucro"
+    assert s["nivel"] == 1 and s["titulo"] == "Observar: Lucro em queda"
+    s2 = avaliar_fundamentos(lucro_caindo=False, roe_caindo=True, dividendo_cortado=False)
+    assert s2["titulo"] == "Observar: ROE em queda"
+    s3 = avaliar_fundamentos(lucro_caindo=False, roe_caindo=False, dividendo_cortado=True)
+    assert s3["titulo"] == "Observar: Dividendo reduzido"
 
 
 def test_selo_fundamentos_nivel_2_alerta():
