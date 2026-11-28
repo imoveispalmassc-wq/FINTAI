@@ -787,14 +787,15 @@ function montar(root, d) {
       }
       ctx.restore();
 
-      // linha e etiqueta do preço atual
+      // linha e etiqueta do preço atual - azul sólida (28/11/2026: antes era tracejada branca,
+      // ficava confundindo com a linha cinza tracejada "Neutra" quando os dois valores ficam perto)
       if (yPreco > yTop - 6 && yPreco < yPlot) {
-        ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(x0, yPreco); ctx.lineTo(x1, yPreco); ctx.stroke(); ctx.setLineDash([]);
+        ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.moveTo(x0, yPreco); ctx.lineTo(x1, yPreco); ctx.stroke();
         const etq = f(d.preco); ctx.font = '600 11px Inter, system-ui, sans-serif';
         const ew = ctx.measureText(etq).width + 12;
-        ctx.fillStyle = css('--claro'); ctx.beginPath(); ctx.roundRect(x1 + 2, yPreco - 10, ew, 20, 7); ctx.fill();
-        ctx.fillStyle = css('--tinta'); ctx.textAlign = 'left'; ctx.fillText(etq, x1 + 8, yPreco + 0.5);
+        ctx.fillStyle = '#3b82f6'; ctx.beginPath(); ctx.roundRect(x1 + 2, yPreco - 10, ew, 20, 7); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.fillText(etq, x1 + 8, yPreco + 0.5);
       }
 
       // eixo X: 4 rótulos curtos, sem sobrepor
