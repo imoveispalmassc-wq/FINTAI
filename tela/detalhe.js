@@ -1004,7 +1004,7 @@ function montar(root, d) {
         <div class="destaque">Últimos 4 trimestres (TTM)</div>
         <div class="lista-v num" style="margin-top:10px">
           ${UT.linhas.map(l => `<div>${l.label}<b>${din(l.valor)}</b></div>`).join('')}
-          <div style="border-top:1px solid var(--borda); margin-top:4px; padding-top:8px; font-weight:600; color:var(--texto)">Total TTM<b>${din(UT.total)}</b></div>
+          <div style="border-top:1px solid var(--borda); margin-top:4px; padding-top:8px; font-weight:700; color:var(--texto)">Total TTM<b>${din(UT.total)}</b></div>
         </div>
       </div>` : '';
       // texto completo da projeção (consenso/variação/base recalculada/dividendo) - usado só quando
