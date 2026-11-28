@@ -293,11 +293,23 @@ def avaliar_fundamentos(*, lucro_caindo: bool | None, lucro_trimestres_seguidos:
         and bool(divida_subindo)
         and (not paga_dividendo or (dividendo_cortes_seguidos is not None and dividendo_cortes_seguidos >= 2))
     )
+    # Motivos (28/11/2026, pedido do usuário): lista pra mostrar embaixo do título QUAIS
+    # fundamentos acionaram o selo - sem isso, "Fundamentos em alerta" não dizia nada sobre qual
+    # dos 3. Nível 1 mostra só o único motivo que disparou; Nível 2/3 mostram os 3 critérios
+    # avaliados, inclusive "ROE: sem dado" quando `roe_disponivel=False` (nunca "ROE em queda" sem
+    # dado de verdade - regra "nunca inventa"). Dividendo usa "cortado" só no Nível 3 (estrutural,
+    # 2x seguidas) e "reduzido" no 1/2 (1 só já ruim).
+    if n_ruins == 1:
+        return {"nivel": 1, "titulo": f"Observar: {ruins[0]}", "motivos": [ruins[0]],
+                "subtexto": "1 fundamento em alerta. Verifique antes de decidir."}
+    dividendo_palavra = "Dividendo cortado" if estrutural else "Dividendo reduzido"
+    motivos = ["Lucro em queda" if lucro_caindo else None]
+    motivos.append(("ROE em queda" if roe_caindo else None) if roe_disponivel else "ROE: sem dado")
+    if paga_dividendo:
+        motivos.append(dividendo_palavra if dividendo_cortado else None)
+    motivos = [m for m in motivos if m]
     if estrutural:
-        return {"nivel": 3, "titulo": "Fundamentos deteriorados",
+        return {"nivel": 3, "titulo": "Fundamentos deteriorados", "motivos": motivos,
                 "subtexto": "Lucro, ROE e dividendo piorando juntos há mais de 2 trimestres. Preço baixo aqui não é desconto, é reflexo do fundamento."}
-    if n_ruins >= 2:
-        return {"nivel": 2, "titulo": "Fundamentos em alerta",
-                "subtexto": "Preço baixo não significa barato. Verifique os fundamentos antes de decidir."}
-    return {"nivel": 1, "titulo": f"Observar: {ruins[0]}",
-            "subtexto": "1 fundamento em alerta. Verifique antes de decidir."}
+    return {"nivel": 2, "titulo": "Fundamentos em alerta", "motivos": motivos,
+            "subtexto": "Preço baixo não significa barato."}

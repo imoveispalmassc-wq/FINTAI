@@ -1200,6 +1200,17 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   hoje; pra ligar de verdade, falta um campo tipo `patrimonio_trimestres` em
   `utils/dados_fixos.json` (hoje só guarda o balanço mais recente) - isso é trabalho de robô novo
   (coletar e persistir patrimônio líquido por trimestre), não dado já salvo esperando ser lido.
+  **STATUS (28/11/2026, 2º follow-up) - selo mostra QUAL fundamento disparou**: "Fundamentos em
+  alerta" sozinho não dizia qual dos 3 critérios estava ruim - `avaliar_fundamentos` ganhou o campo
+  `motivos` (lista de strings prontas pra exibir). Nível 1 mostra só o único motivo que disparou
+  (`["Lucro em queda"]`); Nível 2/3 mostram os 3 critérios avaliados, inclusive "ROE: sem dado"
+  quando `roe_disponivel=False` (nunca "ROE em queda" sem dado de verdade). Dividendo usa "cortado"
+  só no Nível 3 (estrutural), "reduzido" no 1/2. Subtexto do Nível 2 encurtado pra "Preço baixo não
+  significa barato." (sem "Verifique os fundamentos antes de decidir." - os motivos já dizem isso).
+  `tela/detalhe.js` ganhou `seloMotivosHtml()`, reusado nos 2 selos (topo + baixo) - mesma lista,
+  nenhuma lógica duplicada. Testado ao vivo, BBAS3 real: "Lucro em queda" / "ROE: sem dado" /
+  "Dividendo reduzido" aparecem nos 2 lugares; PETR4 continua sem selo. Testes travados em
+  `tests/test_signals.py::test_selo_fundamentos_motivos_dizem_qual_fundamento_acionou`.
 - **Item 12 e 14 - Bloco único "Lucro e Preço vs Lucro"**: os antigos cards "Preço vs Lucro (P/L)" e
   "Crescimento de Lucro (LPA)" (que podiam se contradizer - ex. lucro caindo -66% com selo
   "Favorável" de P/L) viraram 1 card só, sem o selo "Favorável"/"Desfavorável"/"Neutro" de nenhum

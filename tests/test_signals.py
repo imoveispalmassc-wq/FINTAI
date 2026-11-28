@@ -192,6 +192,21 @@ def test_selo_fundamentos_nivel_3_deteriorados():
     assert s["nivel"] == 3 and s["titulo"] == "Fundamentos deteriorados"
 
 
+def test_selo_fundamentos_motivos_dizem_qual_fundamento_acionou():
+    # BBAS3 real: lucro + dividendo ruins, ROE sem dado - os 3 aparecem, ROE como "sem dado"
+    s = avaliar_fundamentos(lucro_caindo=True, roe_disponivel=False, dividendo_cortado=True)
+    assert s["motivos"] == ["Lucro em queda", "ROE: sem dado", "Dividendo reduzido"]
+    assert s["subtexto"] == "Preço baixo não significa barato."
+    # nível 1: só o único motivo que disparou, sem listar os outros
+    s1 = avaliar_fundamentos(lucro_caindo=True, roe_caindo=False, dividendo_cortado=False)
+    assert s1["motivos"] == ["Lucro em queda"]
+    # nível 3: os 3 ruins, dividendo vira "cortado" (não "reduzido")
+    s3 = avaliar_fundamentos(lucro_caindo=True, lucro_trimestres_seguidos=3, roe_caindo=True,
+                             roe_abaixo_10=True, roe_trimestres_seguidos=2, dividendo_cortado=True,
+                             dividendo_cortes_seguidos=2, divida_subindo=True)
+    assert s3["motivos"] == ["Lucro em queda", "ROE em queda", "Dividendo cortado"]
+
+
 def test_selo_fundamentos_sem_roe_disponivel_usa_so_lucro_e_dividendo():
     # caso real BBAS3 (28/11/2026): ROE sem série trimestral (roe_disponivel=False), mas lucro E
     # dividendo caindo pelos 4 trimestres já salvos - 2 ruins = nivel 2, mesmo sem ROE
