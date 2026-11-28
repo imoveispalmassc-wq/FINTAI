@@ -237,48 +237,59 @@ def backtest_percentil(hist: pd.DataFrame, anos: float | None = 5) -> dict:
 
 # ------------------------------------------------------------ selo de fundamentos (issue #47, item 11)
 def avaliar_fundamentos(*, lucro_caindo: bool | None, lucro_trimestres_seguidos: int | None = None,
-                        prejuizo: bool = False, roe_caindo: bool | None, roe_abaixo_10: bool | None = None,
-                        roe_trimestres_seguidos: int | None = None, paga_dividendo: bool = True,
+                        prejuizo: bool = False, roe_caindo: bool | None = None, roe_abaixo_10: bool | None = None,
+                        roe_trimestres_seguidos: int | None = None, roe_disponivel: bool = True,
+                        paga_dividendo: bool = True,
                         dividendo_cortado: bool | None = None, dividendo_cortes_seguidos: int | None = None,
                         divida_subindo: bool | None = None) -> dict | None:
     """Selo de Fundamentos: só um FATO de fundamento, nunca uma recomendação de compra/venda.
 
-    REGRA TRAVADA: lucro é SEMPRE o LPA CONTÁBIL (nunca ajustado) - se o contábil caiu, conta
-    contra a empresa mesmo que o ajustado esteja bonito.
+    REGRA TRAVADA: lucro é SEMPRE o LPA/lucro CONTÁBIL (nunca ajustado) - se o contábil caiu,
+    conta contra a empresa mesmo que o ajustado esteja bonito.
 
-    Os 3 fundamentos avaliados: (1) lucro contábil caindo contra o mesmo trimestre do ano
-    anterior (já no 1º trimestre em que isso acontece); (2) ROE caindo contra 12 meses atrás;
-    (3) dividendo cortado/reduzido contra 12 meses atrás (ignorado para quem não paga dividendo,
-    ex. MU - usa só lucro + ROE).
+    Os 3 fundamentos avaliados: (1) lucro contábil caindo; (2) ROE caindo; (3) dividendo
+    cortado/reduzido (ignorado para quem não paga dividendo, ex. MU, OU quando não há dado de
+    dividendo disponível - `paga_dividendo=False` nos dois casos, decidido por quem chama).
 
-    Esta função é pura: quem chama decide se há histórico trimestral suficiente para preencher
-    cada argumento. SEM histórico suficiente para lucro OU ROE (os dois fundamentos universais -
-    ver `paga_dividendo`), devolve None e o selo não aparece: nunca inventamos a comparação.
+    Esta função é pura: quem chama decide se há dado suficiente para preencher cada argumento.
+    `lucro_caindo` é o único fundamento OBRIGATÓRIO (sem ele, devolve None - nunca inventamos a
+    comparação). ROE é OPCIONAL (28/11/2026, pedido do usuário): `roe_disponivel=False` ignora o
+    ROE no cálculo (mesma ideia de `paga_dividendo=False` pro dividendo) - usado quando não existe
+    série trimestral de ROE pra aquele ticker (hoje, nenhum ticker tem). Com `roe_disponivel=True`
+    (padrão, compatível com o uso anterior) e `roe_caindo=None`, ainda devolve None.
 
-    LIMITAÇÃO CONHECIDA (ver CLAUDE.md): hoje o projeto não guarda histórico trimestral de ROE
-    nem trimestres suficientes (5+) de LPA contábil para a comparação "mesmo trimestre do ano
-    anterior" em nenhuma fonte (utils/contabil_br.json e utils/contabil_sec.json guardam só os
-    últimos 4 trimestres). Por isso, hoje em dia esta função é sempre chamada com
-    lucro_caindo=None e roe_caindo=None, e o selo nunca aparece na tela - está implementada e
-    testada, pronta para ligar quando esse histórico existir.
+    LIMITAÇÃO CONHECIDA (ver CLAUDE.md): o projeto não guarda série trimestral de ROE em nenhuma
+    fonte (`patrimonio_liquido` em `utils/dados_fixos.json` é só o balanço mais recente, nunca uma
+    série) - por isso quem chama hoje sempre passa `roe_disponivel=False`, e o selo nível 3 (que
+    exige ROE caindo e abaixo de 10% por 2+ trimestres) nunca dispara enquanto isso não existir.
+    Lucro e dividendo já usam dado real (últimos 4 trimestres de `utils/contabil_br.json` /
+    `utils/contabil_sec.json` e `utils/dados_fixos.json` - ver `tela.dados._fundamentos_selo`),
+    comparando os 2 trimestres mais recentes contra os 2 anteriores (o máximo que os 4 trimestres
+    guardados permitem) - mais simples que "mesmo trimestre do ano anterior", mas real, não None.
     """
-    if lucro_caindo is None or roe_caindo is None:
+    if lucro_caindo is None:
         return None
-    ruins = [bool(lucro_caindo), bool(roe_caindo)]
+    itens = [(bool(lucro_caindo), "Lucro em queda")]
+    if roe_disponivel:
+        if roe_caindo is None:
+            return None
+        itens.append((bool(roe_caindo), "ROE em queda"))
     if paga_dividendo:
         if dividendo_cortado is None:
             return None
-        ruins.append(bool(dividendo_cortado))
-    n_ruins = sum(ruins)
+        itens.append((bool(dividendo_cortado), "Dividendo reduzido"))
+    ruins = [nome for ok, nome in itens if ok]
+    n_ruins = len(ruins)
     if n_ruins == 0:
         return None
 
     # Nível 3 (estrutural, 2+ trimestres seguidos): lucro caindo 3-4 trimestres seguidos OU
     # prejuízo; e ROE caindo e abaixo de 10% por 2+ trimestres seguidos; e (se paga dividendo)
-    # dividendo cortado 2x seguidas; e dívida subindo.
+    # dividendo cortado 2x seguidas; e dívida subindo. Sem ROE disponível, nunca dispara (roe_caindo
+    # fica None/falsy) - não é um bug, é a trava "nunca inventa" fazendo o trabalho dela.
     estrutural = (
         (prejuizo or (lucro_trimestres_seguidos is not None and lucro_trimestres_seguidos >= 3))
-        and roe_caindo and bool(roe_abaixo_10) and (roe_trimestres_seguidos is not None and roe_trimestres_seguidos >= 2)
+        and bool(roe_caindo) and bool(roe_abaixo_10) and (roe_trimestres_seguidos is not None and roe_trimestres_seguidos >= 2)
         and bool(divida_subindo)
         and (not paga_dividendo or (dividendo_cortes_seguidos is not None and dividendo_cortes_seguidos >= 2))
     )
@@ -288,9 +299,5 @@ def avaliar_fundamentos(*, lucro_caindo: bool | None, lucro_trimestres_seguidos:
     if n_ruins >= 2:
         return {"nivel": 2, "titulo": "Fundamentos em alerta",
                 "subtexto": "Preço baixo não significa barato. Verifique os fundamentos antes de decidir."}
-    nomes = {0: "Lucro em queda", 1: "ROE em queda"}
-    if paga_dividendo:
-        nomes[2] = "Dividendo reduzido"
-    idx_ruim = ruins.index(True)
-    return {"nivel": 1, "titulo": f"Observar: {nomes[idx_ruim]}",
+    return {"nivel": 1, "titulo": f"Observar: {ruins[0]}",
             "subtexto": "1 fundamento em alerta. Verifique antes de decidir."}

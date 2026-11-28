@@ -192,6 +192,22 @@ def test_selo_fundamentos_nivel_3_deteriorados():
     assert s["nivel"] == 3 and s["titulo"] == "Fundamentos deteriorados"
 
 
+def test_selo_fundamentos_sem_roe_disponivel_usa_so_lucro_e_dividendo():
+    # caso real BBAS3 (28/11/2026): ROE sem série trimestral (roe_disponivel=False), mas lucro E
+    # dividendo caindo pelos 4 trimestres já salvos - 2 ruins = nivel 2, mesmo sem ROE
+    s = avaliar_fundamentos(lucro_caindo=True, roe_disponivel=False, dividendo_cortado=True)
+    assert s["nivel"] == 2 and s["titulo"] == "Fundamentos em alerta"
+    # só lucro ruim, sem ROE nem dividendo disponíveis - nivel 1
+    s2 = avaliar_fundamentos(lucro_caindo=True, roe_disponivel=False, paga_dividendo=False)
+    assert s2["nivel"] == 1 and s2["titulo"] == "Observar: Lucro em queda"
+    # nenhum ruim, sem ROE disponível - sem selo (nunca força um nível só por faltar ROE)
+    assert avaliar_fundamentos(lucro_caindo=False, roe_disponivel=False, paga_dividendo=False) is None
+    # nivel 3 nunca dispara sem ROE disponível, mesmo com lucro/dividendo estruturalmente ruins
+    s3 = avaliar_fundamentos(lucro_caindo=True, lucro_trimestres_seguidos=4, roe_disponivel=False,
+                             dividendo_cortado=True, dividendo_cortes_seguidos=2, divida_subindo=True)
+    assert s3["nivel"] == 2
+
+
 def test_selo_fundamentos_empresa_sem_dividendo_ignora_esse_criterio():
     # ex. MU: não paga dividendo - usa só lucro + ROE, sem exigir o dado de dividendo
     s = avaliar_fundamentos(lucro_caindo=True, roe_caindo=True, paga_dividendo=False)

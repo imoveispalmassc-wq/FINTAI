@@ -92,7 +92,7 @@ function montar(root, d) {
     if (!S || !S.nivel) return '';
     const CLASSE = { 1: 'selo-fund-1', 2: 'selo-fund-2', 3: 'selo-fund-3' }[S.nivel] || 'selo-fund-1';
     const ICONE = S.nivel === 3 ? '⛔' : '⚠';
-    return `<div class="selo-fund-topo ${CLASSE}"><span class="ico">${ICONE}</span><b>${S.titulo}</b><span class="sub">${S.subtexto}</span></div>`;
+    return `<div class="selo-fund-topo ${CLASSE}"><b>${ICONE} ${S.titulo}</b><span class="sub">${S.subtexto}</span></div>`;
   };
   // faixa de preço do período escolhido no gráfico: 52 semanas (padrão), 5 anos ou todo o histórico
   const FAIXA_PADRAO = { min: d.min52, max: d.max52, zOport: d.zOport, zCara: d.zCara, decisao: d.decisao,

@@ -127,15 +127,17 @@ svg.i { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-widt
 .selo-fund-2 { background: #40280f; color: #ffbf7a; }
 .selo-fund-3 { background: #3a1414; color: #ff9b9b; }
 
-/* Versão compacta do mesmo selo (item 11, follow-up): 1 linha, logo acima das abas de modo - mesmo
-   dado (d.seloFundamentos), nunca uma 2ª lógica. Ellipsis garante 1 linha só, nunca empurra o
-   gráfico nem quebra em celular, mesmo com o subtexto completo (nível 3 é o mais longo). */
+/* Versão compacta do mesmo selo (item 11, follow-up): logo acima das abas de modo - mesmo dado
+   (d.seloFundamentos), nunca uma 2ª lógica. MESMA caixa do .selo-fund de baixo (coluna, título +
+   subtexto, quebra de linha normal) só com padding/fonte menores - nunca 1 linha forçada: dentro
+   de .modo-linha (flex coluna, align-items:center) um filho sem width:100% fica do tamanho do seu
+   CONTEÚDO, e texto em white-space:nowrap/ellipsis não tem como encolher - isso vazava pra fora da
+   tela (bug real, 28/11/2026, achado pelo usuário com BBAS3). width:100%+box-sizing corrige. */
 #selo-fund-topo:empty { display: none; }
-.selo-fund-topo { display: flex; align-items: center; gap: 7px; margin: 2px 0 10px; padding: 6px 10px;
-  border-radius: 8px; font-size: 12px; overflow: hidden; }
-.selo-fund-topo .ico { flex: 0 0 auto; font-size: 12px; }
-.selo-fund-topo b { flex: 0 0 auto; font-size: 12px; white-space: nowrap; }
-.selo-fund-topo .sub { flex: 1 1 auto; min-width: 0; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selo-fund-topo { width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px;
+  margin: 2px 0 10px; padding: 7px 10px; border-radius: 8px; }
+.selo-fund-topo b { font-size: 12px; }
+.selo-fund-topo .sub { font-size: 11px; opacity: .9; }
 .duas { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .duas .dir { font-size: 17px; font-weight: 700; text-align: right; white-space: nowrap; }
 .duas .esq small { display: block; color: var(--suave); font-size: 12px; margin-top: 2px; }
@@ -493,7 +495,7 @@ function montar(root, d) {
     if (!S || !S.nivel) return '';
     const CLASSE = { 1: 'selo-fund-1', 2: 'selo-fund-2', 3: 'selo-fund-3' }[S.nivel] || 'selo-fund-1';
     const ICONE = S.nivel === 3 ? '⛔' : '⚠';
-    return `<div class="selo-fund-topo ${CLASSE}"><span class="ico">${ICONE}</span><b>${S.titulo}</b><span class="sub">${S.subtexto}</span></div>`;
+    return `<div class="selo-fund-topo ${CLASSE}"><b>${ICONE} ${S.titulo}</b><span class="sub">${S.subtexto}</span></div>`;
   };
   // faixa de preço do período escolhido no gráfico: 52 semanas (padrão), 5 anos ou todo o histórico
   const FAIXA_PADRAO = { min: d.min52, max: d.max52, zOport: d.zOport, zCara: d.zCara, decisao: d.decisao,

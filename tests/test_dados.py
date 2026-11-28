@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 
 from calculos import calcular
-from tela.dados import series_do_grafico
+from tela.dados import _fundamentos_selo, series_do_grafico
 
 
 def _hist():
@@ -481,3 +481,48 @@ def test_dados_fixos_tela_calcula_com_a_cotacao_do_dia():
     assert r["status"] == "ok" and round(r["lpa"], 2) == 10.89 and round(r["pl"], 2) == 3.92
     assert r["fonteOficial"] == "PDF RI (CVM/IPE)" and r["dataUltimoBalanco"] == "30/09/2026"
     assert "LPA:" in r["contas"]["lpa"]
+
+
+# ---------------- Selo de Fundamentos com dado real, sem fetch novo (28/11/2026) ----------------
+
+def _lpa_sec_br(valores):
+    """Trimestres no formato real de contabil_br.json (campo "lucro")."""
+    fins = ["31/12/2025", "31/03/2026", "30/06/2026", "30/09/2026"]
+    return {"status": "ok", "trimestres": [{"fim": f, "lucro": v} for f, v in zip(fins, valores)]}
+
+
+def test_fundamentos_selo_bbas3_real_lucro_e_dividendo_caindo_vira_alerta():
+    """Valores reais do BBAS3 (utils/contabil_br.json e utils/dados_fixos.json, 28/11/2026):
+    lucro 4T25=4.972bi 1T26=3.090bi 2T26=3.175bi 3T26=1.216bi (últimos 2 bem abaixo dos 2
+    anteriores) e dividendo por trimestre 0.26/0.15/0.16/0.04 (mesma queda) - nivel 2, sem precisar
+    de nenhum dado inventado ou de ROE."""
+    lpa_sec = _lpa_sec_br([4_972_000_000.0, 3_090_000_000.0, 3_175_000_000.0, 1_216_000_000.0])
+    dados_fixos = {"trimestres": [{"dividendo": 0.26}, {"dividendo": 0.15}, {"dividendo": 0.16}, {"dividendo": 0.04}]}
+    s = _fundamentos_selo(lpa_sec, dados_fixos)
+    assert s is not None and s["nivel"] == 2 and s["titulo"] == "Fundamentos em alerta"
+
+
+def test_fundamentos_selo_petr4_real_lucro_subindo_sem_dados_fixos_fica_sem_selo():
+    """Valores reais do PETR4 (utils/contabil_br.json, 28/11/2026): lucro 4T25=15.563bi
+    1T26=32.663bi 2T26=52.445bi 3T26=39.750bi (últimos 2 bem ACIMA dos 2 anteriores - lucro
+    melhorando). PETR4 não está em dados_fixos.json (sem dividendo por trimestre) - sem nenhum
+    fundamento ruim, sem selo."""
+    lpa_sec = _lpa_sec_br([15_563_000_000.0, 32_663_000_000.0, 52_445_000_000.0, 39_750_000_000.0])
+    assert _fundamentos_selo(lpa_sec, None) is None
+
+
+def test_fundamentos_selo_sem_4_trimestres_de_lucro_nao_aparece():
+    lpa_sec = {"status": "ok", "trimestres": [{"fim": "30/09/2026", "lucro": 1.0}]}
+    assert _fundamentos_selo(lpa_sec, None) is None
+    assert _fundamentos_selo(None, None) is None
+    assert _fundamentos_selo({"status": "incompleto"}, None) is None
+
+
+def test_fundamentos_selo_eua_usa_lpa_direto_do_trimestre():
+    """contabil_sec.json (EUA) guarda "lpa" por trimestre, não "lucro" - mesma conta, campo
+    diferente."""
+    trimestres = [{"fim": f, "lpa": v} for f, v in zip(
+        ["30/09/2025", "31/12/2025", "31/03/2026", "30/06/2026"], [3.0, 2.8, 1.5, 1.2])]
+    lpa_sec = {"status": "ok", "trimestres": trimestres}
+    s = _fundamentos_selo(lpa_sec, None)
+    assert s is not None and s["nivel"] == 1 and s["titulo"] == "Observar: Lucro em queda"

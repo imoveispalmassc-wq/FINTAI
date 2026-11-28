@@ -492,6 +492,45 @@ def dados_fixos_tela(fixos: dict | None, cotacao: float | None) -> dict | None:
             "contas": ind["contas"]}
 
 
+def _tendencia_ruim(valores: list[float]) -> bool | None:
+    """Últimos 2 valores somados vs. os 2 anteriores - o máximo que dá pra comparar com só 4
+    trimestres guardados (sem 5-8 trimestres, não dá pra fazer "mesmo trimestre do ano anterior").
+    Menos rigoroso que isso, mas real: só soma números que já estão salvos, nunca inventa nem busca
+    de novo. Precisa de pelo menos 4 valores consecutivos; com menos, devolve None (sem dado)."""
+    if len(valores) < 4:
+        return None
+    return sum(valores[-2:]) < sum(valores[-4:-2])
+
+
+def _fundamentos_selo(lpa_sec: dict | None, dados_fixos: dict | None) -> dict | None:
+    """Selo de Fundamentos (issue #47, item 11) com dado REAL, sem fetch novo - reusa os mesmos 4
+    trimestres que `utils/contabil_br.json`/`utils/contabil_sec.json` (via `lpa_sec`, já buscado
+    pra tela de qualquer jeito) e `utils/dados_fixos.json` (via `dados_fixos`) já guardam.
+
+    Lucro: compara os 2 trimestres mais recentes contra os 2 anteriores - BR usa o campo "lucro"
+    de cada trimestre (contabil_br.json), EUA usa "lpa" direto (contabil_sec.json, já por ação).
+    Dividendo: mesma conta, campo "dividendo" por trimestre em dados_fixos.json (só existe pra
+    tickers com dados_fixos cadastrado, ex. BBAS3) - sem esse campo, o dividendo fica de fora do
+    cálculo (equivalente a `paga_dividendo=False`, mas por falta de DADO, não porque a empresa não
+    pague - documentado aqui pra não confundir os dois motivos).
+    ROE: SEM série trimestral em nenhuma fonte do projeto (`patrimonio_liquido` em
+    dados_fixos.json é só o balanço mais recente) - sempre `roe_disponivel=False`. Por isso o
+    Nível 3 (que exige ROE) nunca dispara ainda; Níveis 1 e 2 (só lucro + dividendo) já podem.
+    """
+    if not lpa_sec or lpa_sec.get("status") != "ok":
+        return None
+    trimestres = lpa_sec.get("trimestres") or []
+    lucro_vals = [t.get("lpa", t.get("lucro")) for t in trimestres if t.get("lpa") is not None or t.get("lucro") is not None]
+    lucro_caindo = _tendencia_ruim(lucro_vals)
+    if lucro_caindo is None:
+        return None
+    div_trimestres = (dados_fixos or {}).get("trimestres") or []
+    div_vals = [t.get("dividendo") for t in div_trimestres if t.get("dividendo") is not None]
+    dividendo_cortado = _tendencia_ruim(div_vals)
+    return avaliar_fundamentos(lucro_caindo=lucro_caindo, roe_disponivel=False,
+                               paga_dividendo=dividendo_cortado is not None, dividendo_cortado=dividendo_cortado)
+
+
 def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str, dados_fixos: dict | None = None,
           renda_fixa: dict | None = None) -> dict:
     """Pacote completo da tela para um ticker."""
@@ -627,11 +666,12 @@ def montar(ticker: str, d: dict, r: Resultado, comparadores: dict, padrao: str, 
         "data1AnoAtras": f"{pd.Timestamp(um_ano['t'][0], unit='ms'):%d/%m/%Y}" if um_ano else None,
         "dadosFixos": dados_fixos_tela(dados_fixos, r.preco_atual),
         "comparadores": comparadores, "comparadorPadrao": padrao, "rendaFixa": renda_fixa or {},
-        # Selo de Fundamentos (issue #47, item 11): hoje o projeto não guarda histórico trimestral
-        # de ROE nem trimestres suficientes de LPA contábil para a comparação "mesmo trimestre do
-        # ano anterior" - por isso lucro_caindo/roe_caindo entram None e o selo nunca aparece
-        # (avaliar_fundamentos devolve None nesse caso). Ver limitação no CLAUDE.md.
-        "seloFundamentos": avaliar_fundamentos(lucro_caindo=None, roe_caindo=None),
+        # Selo de Fundamentos (issue #47, item 11; ligado com dado real em 28/11/2026, ver
+        # _fundamentos_selo): lucro e dividendo vêm dos 4 trimestres já salvos (contabil_br.json/
+        # contabil_sec.json + dados_fixos.json) - sem ROE (sem série trimestral em nenhuma fonte),
+        # o selo fica limitado a Níveis 1/2; sem 4 trimestres de lucro pro ticker, devolve None e o
+        # selo não aparece (nunca inventa). Ver limitação de ROE/Nível 3 no CLAUDE.md.
+        "seloFundamentos": _fundamentos_selo(f["lpa_sec"], dados_fixos),
         "backtest": {"5a": bt5, "max": btmax},
         "decisao": {"codigo": estado.codigo, "rotulo": estado.rotulo, "texto": estado.texto, "zona": estado.zona,
                     "validado": estado.validado, "alerta": estado.alerta},

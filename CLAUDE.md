@@ -1162,12 +1162,44 @@ VALE3...), EUA (MU, AAPL...) e demais bolsas. Leia antes de mudar qualquer núme
   nenhuma lógica nova), compacta em 1 linha, logo acima das abas CONSERVADOR/CRESCIMENTO/
   QUANTITATIVO (`#selo-fund-topo` em `tela/detalhe.html`/`.css`/`.js`) - pedido do usuário pra dar
   mais visibilidade, sem duplicar a lógica de decisão. Os 4 cenários (sem selo, nível 1, nível 2,
-  nível 2 sem virar nível 3) foram provados com um harness local que roda `tela/detalhe.js`/`.html`/
-  `.css` de verdade injetando `d.seloFundamentos` manualmente - nunca com um ticker real, porque a
-  limitação acima (sem 8+ trimestres de LPA, sem série trimestral de ROE, sem série trimestral de
-  dividendo) continua existindo e não foi tocada nesta mudança. O item NÃO está concluído: falta a
-  infraestrutura de dados pra `lucro_caindo`/`roe_caindo`/`dividendo_cortado` deixarem de ser sempre
-  `None` pra qualquer ticker real.
+  nível 2 sem virar nível 3) foram provados primeiro com um harness local (dado injetado), só pra
+  testar o visual.
+  **STATUS (28/11/2026, follow-up no mesmo dia): LUCRO e DIVIDENDO ligados com dado REAL, ROE
+  continua pendente.** O usuário apontou (com print do BBAS3 real, sem selo nenhum) que "infra de
+  8 trimestres" era uma resposta genérica demais - o projeto já tinha dado suficiente pra uma
+  conta mais simples, só não estava ligado. `tela.dados._fundamentos_selo` (nova função) e
+  `tela.dados._tendencia_ruim` leem os MESMOS dados que a tela já carrega, sem fetch novo:
+  - **Lucro**: os 4 trimestres de `utils/contabil_br.json`/`utils/contabil_sec.json` (via
+    `f["lpa_sec"]`, campo "lucro" na B3, "lpa" direto nos EUA) - soma dos 2 trimestres mais
+    recentes vs. os 2 anteriores. Menos rigoroso que "mesmo trimestre do ano anterior" (precisaria
+    de 5-8 trimestres, que ainda não existem), mas real.
+  - **Dividendo**: `utils/dados_fixos.json`, campo `trimestres[].dividendo` (só existe pra ticker
+    com dados fixos cadastrado, ex. BBAS3) - mesma conta de 2 vs 2. Sem esse campo (ex. PETR4, que
+    não está em dados_fixos.json), o dividendo fica de fora do cálculo (não trava o lucro).
+  - **ROE**: continua SEM dado real em nenhuma fonte (`patrimonio_liquido` em `dados_fixos.json` é
+    só o balanço mais recente, nunca uma série) - `utils.signals.avaliar_fundamentos` ganhou o
+    parâmetro `roe_disponivel` (padrão `True`, compatível com o uso anterior) pra rodar só com
+    Lucro+Dividendo quando `roe_disponivel=False` (sempre o caso hoje); Nível 3 (que exige ROE)
+    nunca dispara enquanto isso não existir - "sem dado trava, nunca inventa" continua valendo.
+  Testado ao vivo (Playwright, app rodando de verdade, sem nenhum dado injetado): **BBAS3 mostra
+  "Fundamentos em alerta" (nível 2) no topo e embaixo** (lucro 4T25→3T26 caindo de ~8,06bi pra
+  ~4,39bi nos últimos 2 trimestres somados; dividendo por trimestre caindo de R$0,41 pra R$0,20
+  no mesmo período); **PETR4 continua sem selo** (lucro subindo nos últimos 2 trimestres). Testes
+  reais travados em `tests/test_dados.py` (`test_fundamentos_selo_bbas3_real_...`,
+  `test_fundamentos_selo_petr4_real_...`) com os valores exatos dos JSONs, e em
+  `tests/test_signals.py` (`test_selo_fundamentos_sem_roe_disponivel_usa_so_lucro_e_dividendo`).
+  **BUG CORRIGIDO na mesma rodada**: a 1ª versão do selo do topo (`#selo-fund-topo`) usava
+  `display:flex` em LINHA (ícone+título+subtexto lado a lado) com `white-space:nowrap` no
+  subtexto - dentro de `.modo-linha` (`flex-direction:column; align-items:center`), um filho sem
+  `width:100%` fica do tamanho do próprio conteúdo, e texto sem quebra não tem como encolher -
+  vazava pra fora da tela em celular (achado pelo usuário com BBAS3 real, 360px). Corrigido pra
+  reusar a MESMA estrutura em coluna do `.selo-fund` de baixo (título + subtexto, quebra normal),
+  só mais compacta (`width:100%; box-sizing:border-box`), sem `position:absolute/fixed` nem
+  `overflow:hidden`.
+  **Ainda pendente, documentado com honestidade**: Nível 3 (estrutural, exige ROE) nunca aparece
+  hoje; pra ligar de verdade, falta um campo tipo `patrimonio_trimestres` em
+  `utils/dados_fixos.json` (hoje só guarda o balanço mais recente) - isso é trabalho de robô novo
+  (coletar e persistir patrimônio líquido por trimestre), não dado já salvo esperando ser lido.
 - **Item 12 e 14 - Bloco único "Lucro e Preço vs Lucro"**: os antigos cards "Preço vs Lucro (P/L)" e
   "Crescimento de Lucro (LPA)" (que podiam se contradizer - ex. lucro caindo -66% com selo
   "Favorável" de P/L) viraram 1 card só, sem o selo "Favorável"/"Desfavorável"/"Neutro" de nenhum
