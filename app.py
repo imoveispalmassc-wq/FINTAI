@@ -107,17 +107,32 @@ CSS = """
 # detalhe_fundo.html/.js, novo). As 2 metades compartilham o mesmo CSS (detalhe.css).
 _PASTA = Path(__file__).parent / "tela"
 _CSS_DETALHE = (_PASTA / "detalhe.css").read_text(encoding="utf-8")
+
+
+def _js_com_marca_de_build(caminho: Path) -> str:
+    """Prefixa o JS do componente com um marcador do commit em execução
+    (window.FINTAI_BUILD) - prova objetiva, inspecionável no console do navegador
+    (F12 -> digitar `window.FINTAI_BUILD`), de qual deploy gerou o JS que a página
+    está executando AGORA, sem depender só do rodapé "Versão:" (que é outra leitura
+    separada, no fim da página) - os dois precisam bater. Não "força" o Streamlit
+    Cloud a reconstruir nada por si só: é só um jeito objetivo de provar, dentro do
+    próprio componente renderizado, se o JS que está no ar é mesmo o do commit
+    esperado - se este marcador mostrar um commit antigo, o problema é a implantação
+    (reboot não pegou o main novo / aba antiga sem refresh), não o código."""
+    return f"window.FINTAI_BUILD = {VERSAO_DEPLOY!r};\n" + caminho.read_text(encoding="utf-8")
+
+
 tela_detalhe = st.components.v2.component(
     "fintai_detalhe",
     html=(_PASTA / "detalhe.html").read_text(encoding="utf-8"),
     css=_CSS_DETALHE,
-    js=(_PASTA / "detalhe.js").read_text(encoding="utf-8"),
+    js=_js_com_marca_de_build(_PASTA / "detalhe.js"),
 )
 tela_detalhe_fundo = st.components.v2.component(
     "fintai_detalhe_fundo",
     html=(_PASTA / "detalhe_fundo.html").read_text(encoding="utf-8"),
     css=_CSS_DETALHE,
-    js=(_PASTA / "detalhe_fundo.js").read_text(encoding="utf-8"),
+    js=_js_com_marca_de_build(_PASTA / "detalhe_fundo.js"),
 )
 
 
