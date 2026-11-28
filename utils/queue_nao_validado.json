@@ -83,6 +83,10 @@
     "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
     "data": "26/11/2026"
   },
+  "RAIZ55": {
+    "motivo": "CNPJ não encontrado no cadastro da CVM",
+    "data": "28/11/2026"
+  },
   "SUZB3": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos documentos recentes); mantido o anterior",
     "data": "26/11/2026"
