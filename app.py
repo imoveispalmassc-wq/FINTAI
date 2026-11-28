@@ -571,7 +571,20 @@ def _pontos_lpa_grafico(dados: dict) -> list[dict]:
     """Pontos pro gráfico nativo "Lucro por ação - Evolução" (components/lpa_chart.py) - mesmos
     anos/guidance que o card de texto "Lucro por ação" (dentro de `tela_detalhe`) já mostra, sem
     recalcular nada: só lê o que `tela.dados.montar()` já colocou em `dados`. Vale pra qualquer
-    ticker, B3 ou EUA - nenhuma lógica específica de um ativo aqui."""
+    ticker, B3 ou EUA - nenhuma lógica específica de um ativo aqui.
+
+    REGRA TRAVADA (28/11/2026, a pedido do usuário): cada barra só entra na lista se o dado que ela
+    representa existir de verdade (`is not None`) - NUNCA um valor 0/vazio no lugar de um dado
+    ausente. "Inicial" só aparece com Previsão Anual do início do ano (`guidanceInicial.lpa`);
+    "Atual" só com TTM contábil (`d.lpa`); "E" (Guidance oficial ou, na falta dele, Projeção/
+    consenso do Yahoo) só com `lynch.futuro.lpaEsteAno`. Ativo sem nenhuma das 3: o gráfico mostra
+    só os anos históricos que existirem (`lpaAnos`) - nunca uma barra fantasma. Valor NEGATIVO
+    (ex.: guidance de prejuízo) continua um dado real e aparece normalmente - só valor ausente
+    (`None`) é que não gera barra; por isso o teste aqui é sempre `is not None`, nunca também
+    `> 0` (uma barra positiva "> 0" já tinha sido usada no passado e escondia um dado real
+    negativo por engano - corrigido nesta revisão).
+    `tests/test_app.py::test_pontos_lpa_grafico_omite_barra_sem_dado` trava os 4 cenários:
+    com os 3 dados, sem Previsão Anual, sem Guidance/Projeção, e sem nenhum dos 2 (só histórico)."""
     lpa_anos = dados.get("lpaAnos") or []
     pontos = [{"ano": str(a["ano"]), "valor": a["lpa"]} for a in lpa_anos if a.get("lpa") is not None]
 
@@ -582,7 +595,7 @@ def _pontos_lpa_grafico(dados: dict) -> list[dict]:
     # 2 barras SEPARADAS (nunca uma só empilhada) pra estimativa do início do ano x TTM já realizado.
     # Rótulo curto em 2 linhas (28/11/2026, follow-up) - "\n" vira quebra de linha de verdade no
     # eixo do Vega-Lite (nativo, sem HTML/CSS próprio) - nunca mais frase longa embaixo do gráfico.
-    if ano_proj and lpa_ini is not None and lpa_ini > 0:
+    if ano_proj and lpa_ini is not None:
         pontos.append({"ano": f"{ano_proj}\nInicial", "valor": lpa_ini})
     if ano_proj and lpa_ttm is not None:
         pontos.append({"ano": f"{ano_proj}\nAtual", "valor": lpa_ttm})
