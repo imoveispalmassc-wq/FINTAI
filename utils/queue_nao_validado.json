@@ -51,6 +51,10 @@
     "motivo": "TRAVADO - Número em 2 lugares: a faixa aparece 1 vez(es) no documento; precisa de 2 (texto + tabela); Variação até 20%: sem guidance anterior no app para comparar; API do Claude",
     "data": "21/11/2026"
   },
+  "INTC": {
+    "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior",
+    "data": "28/11/2026"
+  },
   "ITUB": {
     "motivo": "sem guidance (regex e API do Claude não acharam nos comunicados recentes); mantido o anterior",
     "data": "21/11/2026"
